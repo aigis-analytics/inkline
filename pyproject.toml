@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inkline"
+version = "0.1.0"
+description = "Branded document generation toolkit — HTML, PDF, and Google Slides"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Aaditya Chintalapati" },
+]
+
+dependencies = [
+    "markdown>=3.5",
+]
+
+[project.optional-dependencies]
+pdf = ["weasyprint>=60.0"]
+slides = [
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.1.0",
+]
+all = ["inkline[pdf,slides]"]
+
+[project.scripts]
+inkline-html = "inkline.html:_cli"
+inkline-pdf = "inkline.pdf:_cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inkline"]
