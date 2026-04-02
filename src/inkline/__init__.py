@@ -14,6 +14,7 @@ Usage::
 from inkline.brands import get_brand, BaseBrand
 from inkline.html import export_html
 from inkline.pdf import export_pdf
+from inkline.slides import SlideBuilder
 
 __version__ = "0.1.0"
-__all__ = ["get_brand", "BaseBrand", "export_html", "export_pdf"]
+__all__ = ["get_brand", "BaseBrand", "export_html", "export_pdf", "SlideBuilder"]

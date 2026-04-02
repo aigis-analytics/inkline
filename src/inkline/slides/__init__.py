@@ -1,14 +1,12 @@
 """Inkline Slides — Google Slides generation with brand support.
 
-Scaffold for Phase 3 implementation. The SlideBuilder fluent API
-will be implemented here.
-
-Usage (planned)::
+Usage::
 
     from inkline.slides import SlideBuilder
 
     deck = (
         SlideBuilder(title="Project Report", brand="aigis")
+        .authenticate(refresh_token="...", client_id="...", client_secret="...")
         .slide()
             .title("Executive Summary")
             .bullet_list(["Point 1", "Point 2"])
@@ -18,22 +16,19 @@ Usage (planned)::
         .build()
     )
     print(deck.url)
+
+Templates::
+
+    deck = (
+        SlideBuilder(title="Q1 Report", brand="aigis", template="newspaper")
+        .authenticate(...)
+        .slide().title("Breaking News").text("...")
+        .build()
+    )
+
+Available templates: newspaper, minimalism, executive
 """
 
-from __future__ import annotations
+from inkline.slides.builder import SlideBuilder, DeckResult
 
-
-class SlideBuilder:
-    """Fluent API for constructing Google Slides presentations.
-
-    Phase 3 implementation — currently a stub that documents the planned API.
-    """
-
-    def __init__(self, title: str = "Untitled", brand: str = "aigis"):
-        self._title = title
-        self._brand_name = brand
-        self._slides: list[dict] = []
-        raise NotImplementedError(
-            "SlideBuilder is planned for Phase 3. "
-            "Use inkline.export_html() or inkline.export_pdf() for now."
-        )
+__all__ = ["SlideBuilder", "DeckResult"]
