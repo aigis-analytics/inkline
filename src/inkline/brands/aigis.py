@@ -25,7 +25,7 @@ AigisBrand = BaseBrand(
 
     # Assets
     logo_dark_path="aigis_logo_dark.png",     # White text, for navy bg
-    logo_light_path="aigis_logo_light.png",   # Navy text, for white bg
+    logo_light_path="aigis_logo_white.png",   # Navy text on pure white bg
     font_files=["SourceSans3-VariableFont_wght.ttf"],
 
     # Metadata
