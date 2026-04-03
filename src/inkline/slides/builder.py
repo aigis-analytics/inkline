@@ -326,10 +326,14 @@ class SlideBuilder:
         slide_ids: list[str] = []
         temp_spreadsheets: list[str] = []
 
-        # Apply template if specified
+        # Apply template (defaults to DEFAULT_TEMPLATE if none specified)
         template_func = None
-        if self._template_name:
-            template_func = _get_template(self._template_name)
+        effective_template = self._template_name
+        if effective_template is None:
+            from inkline.slides.templates import DEFAULT_TEMPLATE
+            effective_template = DEFAULT_TEMPLATE
+        if effective_template:
+            template_func = _get_template(effective_template)
 
         for idx, slide_ctx in enumerate(self._slides):
             slide_id, create_req = el.create_slide(insertion_index=idx)
@@ -373,8 +377,9 @@ class SlideBuilder:
                 slide_requests.extend(reqs)
                 temp_spreadsheets.extend(temp_ids)
 
-            # Add branded logo to every slide
-            logo_reqs = self._add_logo(slide_id)
+            # Add branded logo to every slide — pick variant based on actual slide bg
+            slide_bg = self._extract_slide_bg(slide_requests)
+            logo_reqs = self._add_logo(slide_id, bg_color=slide_bg)
             slide_requests.extend(logo_reqs)
 
             if slide_requests:
@@ -508,10 +513,30 @@ class SlideBuilder:
 
         return requests, temp_sheets
 
-    def _add_logo(self, slide_id: str) -> list[dict]:
+    @staticmethod
+    def _extract_slide_bg(requests: list[dict]) -> str | None:
+        """Extract the background color hex from batchUpdate requests, if set."""
+        for req in requests:
+            page_props = req.get("updatePageProperties", {})
+            bg_fill = (
+                page_props
+                .get("pageProperties", {})
+                .get("pageBackgroundFill", {})
+                .get("solidFill", {})
+                .get("color", {})
+                .get("rgbColor")
+            )
+            if bg_fill:
+                r = int(bg_fill.get("red", 0) * 255)
+                g = int(bg_fill.get("green", 0) * 255)
+                b = int(bg_fill.get("blue", 0) * 255)
+                return f"#{r:02x}{g:02x}{b:02x}"
+        return None
+
+    def _add_logo(self, slide_id: str, *, bg_color: str | None = None) -> list[dict]:
         """Add brand logo to a slide (if available)."""
         brand = self._brand
-        logo_path = brand.logo_for_bg(brand.background)
+        logo_path = brand.logo_for_bg(bg_color or brand.background)
         if not logo_path or not logo_path.is_file():
             return []
 
