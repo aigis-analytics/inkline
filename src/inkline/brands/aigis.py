@@ -16,10 +16,10 @@ AigisBrand = BaseBrand(
     light_bg="#F4F6F8",       # Light grey alternating rows
     border="#D1D5DB",         # Light border
 
-    # Typography
-    heading_font="Inter",
-    body_font="Inter",
-    mono_font="Roboto Mono",
+    # Typography — Source Sans 3 matches investor pitch branding
+    heading_font="Source Sans 3",
+    body_font="Source Sans 3",
+    mono_font="Consolas",
     heading_size=28,
     body_size=14,
 
@@ -32,6 +32,9 @@ AigisBrand = BaseBrand(
     confidentiality="Private & Confidential",
     footer_text="Aigis Analytics Pty Ltd",
     tagline="Domain Intelligence, Deal Certainty",
+
+    # Header — clean document style (logo on white, border separator)
+    header_style="document",
 
     # Slide logo position (x, y, w, h in inches)
     logo_position=(8.5, 0.3, 1.2, 0.4),

@@ -9,31 +9,32 @@ from __future__ import annotations
 from inkline.brands import BaseBrand
 
 
-def build_css(brand: BaseBrand) -> str:
-    """Return the complete embedded CSS for a branded HTML report."""
+def _font_face_css(brand: BaseBrand) -> str:
+    """Generate @font-face rule if brand has embedded font files."""
+    if not brand.font_files:
+        return ""
+    from inkline.utils import b64_data_uri
+    font_path = brand.font_path(0)
+    if not font_path.exists():
+        return ""
+    font_uri = b64_data_uri(font_path)
+    if not font_uri:
+        return ""
+    font_name = brand.body_font
     return f"""
-/* ── Reset ─────────────────────────────────────────────────────────── */
-*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
-/* ── Page layout ────────────────────────────────────────────────────── */
-html {{
-  font-family: {brand.body_font}, -apple-system, BlinkMacSystemFont, "Segoe UI",
-               "Noto Sans", Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  color: {brand.text};
-  background: {brand.background};
-  scroll-behavior: smooth;
+@font-face {{
+  font-family: '{font_name}';
+  src: url({font_uri}) format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
 }}
+"""
 
-body {{
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  margin: 0;
-  background: {brand.background};
-}}
 
-/* ── Sticky header ────────────────────────────────────────────────────── */
+def _header_bar_css(brand: BaseBrand) -> str:
+    """Dark sticky header bar (default style)."""
+    return f"""
+/* ── Sticky header (bar style) ─────────────────────────────────────── */
 .ink-header {{
   position: sticky;
   top: 0;
@@ -69,6 +70,118 @@ body {{
   font-size: 12px;
   white-space: nowrap;
 }}
+"""
+
+
+def _header_document_css(brand: BaseBrand) -> str:
+    """Clean inline document header (white background, border separator)."""
+    return f"""
+/* ── Document header (clean inline style) ──────────────────────────── */
+.ink-header {{
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 48px 14px;
+  border-bottom: 3px solid {brand.surface};
+  margin-bottom: 0;
+  background: {brand.background};
+  flex-shrink: 0;
+}}
+.ink-logo {{
+  height: 56px;
+  width: auto;
+  display: block;
+}}
+.ink-logo-fallback {{
+  color: {brand.surface};
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}}
+.ink-header-right {{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}}
+.ink-header-meta {{
+  color: {brand.muted};
+  font-size: 12px;
+  white-space: nowrap;
+}}
+.ink-header-tagline {{
+  font-size: 11pt;
+  color: {brand.surface};
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}}
+"""
+
+
+def build_css(brand: BaseBrand) -> str:
+    """Return the complete embedded CSS for a branded HTML report."""
+    font_face = _font_face_css(brand)
+    header_style = getattr(brand, "header_style", "bar")
+    header_css = _header_document_css(brand) if header_style == "document" else _header_bar_css(brand)
+    is_document = header_style == "document"
+
+    # Footer style depends on header style
+    if is_document:
+        footer_css = f"""
+/* ── Footer (document style) ───────────────────────────────────────── */
+.ink-footer {{
+  margin-top: 36px;
+  padding: 12px 48px;
+  border-top: 2px solid {brand.surface};
+  font-size: 11px;
+  color: {brand.muted};
+  text-align: center;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}}
+"""
+    else:
+        footer_css = f"""
+/* ── Footer (bar style) ────────────────────────────────────────────── */
+.ink-footer {{
+  background: {brand.surface};
+  color: rgba(255,255,255,0.45);
+  font-size: 11px;
+  text-align: center;
+  padding: 14px 32px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}}
+"""
+
+    # Print adjustments
+    if is_document:
+        print_header = f".ink-header {{ border-bottom-color: {brand.surface}; }}"
+    else:
+        print_header = f".ink-header {{ position: static; print-color-adjust: exact; -webkit-print-color-adjust: exact; }}"
+
+    return f"""{font_face}
+/* ── Reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+/* ── Page layout ────────────────────────────────────────────────────── */
+html {{
+  font-family: '{brand.body_font}', -apple-system, BlinkMacSystemFont, "Segoe UI",
+               "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  color: {brand.text};
+  background: {brand.background};
+  scroll-behavior: smooth;
+}}
+
+body {{
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+  background: {brand.background};
+}}
+{header_css}
 
 /* ── Content area ───────────────────────────────────────────────────── */
 .ink-content-wrap {{
@@ -320,21 +433,10 @@ body {{
   display: block;
   max-width: 100%;
 }}
-
-/* ── Footer ─────────────────────────────────────────────────────────── */
-.ink-footer {{
-  background: {brand.surface};
-  color: rgba(255,255,255,0.45);
-  font-size: 11px;
-  text-align: center;
-  padding: 14px 32px;
-  letter-spacing: 0.3px;
-  flex-shrink: 0;
-}}
-
+{footer_css}
 /* ── Print ──────────────────────────────────────────────────────────── */
 @media print {{
-  .ink-header {{ position: static; print-color-adjust: exact; -webkit-print-color-adjust: exact; }}
+  {print_header}
   .ink-toc    {{ display: none !important; }}
   .markdown-body {{ max-width: none; padding: 24px 40px; }}
   .markdown-body h1, .markdown-body h2, .markdown-body h3 {{ page-break-after: avoid; }}

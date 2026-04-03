@@ -48,6 +48,9 @@ class BaseBrand:
     # ── Slide-specific ───────────────────────────────────────────────
     logo_position: tuple[float, float, float, float] = (8.5, 0.3, 1.2, 0.4)
 
+    # ── Header style ───────────────────────────────────────────────────
+    header_style: str = "bar"   # "bar" = dark sticky header, "document" = clean inline on white
+
     # ── Chart colors ─────────────────────────────────────────────────
     chart_colors: list[str] = field(default_factory=lambda: [
         "#3fb950", "#58a6ff", "#f0883e", "#d2a8ff", "#e6c069", "#79c0ff",

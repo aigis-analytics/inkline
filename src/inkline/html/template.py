@@ -78,8 +78,16 @@ def build_html_page(
 ) -> str:
     """Assemble the full self-contained HTML document."""
 
-    logo_uri = b64_data_uri(brand.logo_for_bg(brand.surface))
+    header_style = getattr(brand, "header_style", "bar")
+    is_document = header_style == "document"
     display_name = brand.display_name
+
+    # For document style, use light logo (dark/navy on white bg)
+    # For bar style, use dark logo (white on dark bg)
+    if is_document:
+        logo_uri = b64_data_uri(brand.logo_light) if brand.logo_light.exists() else ""
+    else:
+        logo_uri = b64_data_uri(brand.logo_for_bg(brand.surface))
 
     logo_tag = (
         f'<img src="{logo_uri}" alt="{display_name}" class="ink-logo"/>'
@@ -121,6 +129,22 @@ def build_html_page(
 
     toc_script = f"<script>\n{_TOC_JS}\n</script>" if enable_toc else ""
 
+    # Build header right content based on style
+    tagline = getattr(brand, "tagline", "")
+    if is_document and tagline:
+        header_right = (
+            f'<div class="ink-header-right">\n'
+            f'      <span class="ink-header-tagline">{tagline}</span>\n'
+            f'      <span class="ink-header-meta">{header_meta}</span>\n'
+            f'    </div>'
+        )
+    else:
+        header_right = (
+            f'<div class="ink-header-right">\n'
+            f'      <span class="ink-header-meta">{header_meta}</span>\n'
+            f'    </div>'
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -135,9 +159,7 @@ def build_html_page(
 
   <header class="ink-header">
     {logo_tag}
-    <div class="ink-header-right">
-      <span class="ink-header-meta">{header_meta}</span>
-    </div>
+    {header_right}
   </header>
 
   <div class="ink-content-wrap">
