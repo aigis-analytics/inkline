@@ -88,8 +88,8 @@ class PptxBuilder:
         else:
             self.colors = self._resolve_colors(brand)
 
-        # Logo path
-        self._logo_path = self._find_logo(brand)
+        # Logo paths (light + dark variants)
+        self._logos = self._find_logo(brand)
 
         # Slide count
         self._slide_count = 0
@@ -103,16 +103,32 @@ class PptxBuilder:
         else:
             return ColorScheme.aigis_light()  # default
 
-    def _find_logo(self, brand: str) -> Path | None:
-        """Find logo file for brand."""
-        candidates = [
-            Path(__file__).resolve().parent.parent / "assets" / f"{brand}_logo_light.png",
-            Path(__file__).resolve().parent.parent / "assets" / f"{brand}_logo_dark.png",
-        ]
-        for p in candidates:
+    def _find_logo(self, brand: str) -> dict:
+        """Find logo files for brand (both light and dark variants).
+
+        Returns dict with 'light' (for dark bg) and 'dark' (for light bg) paths.
+        """
+        base = Path(__file__).resolve().parent.parent / "assets"
+        logos = {}
+        # Light logo = white/light text, for dark backgrounds
+        for name in [f"{brand}_logo_light.png", f"{brand}_logo_dark.png"]:
+            p = base / name
             if p.exists():
-                return p
-        return None
+                if "light" in name:
+                    logos["for_dark_bg"] = p   # white logo → dark backgrounds
+                else:
+                    logos["for_light_bg"] = p  # dark logo → light backgrounds
+        return logos
+
+    def _get_logo_for_bg(self, bg_color: str) -> Path | None:
+        """Pick the right logo based on background colour brightness."""
+        r, g, b = hex_to_rgb(bg_color)
+        brightness = (r * 299 + g * 587 + b * 114) / 1000
+        # Dark background → use light/white logo; light background → use dark logo
+        if brightness < 128:
+            return self._logos.get("for_dark_bg") or self._logos.get("for_light_bg")
+        else:
+            return self._logos.get("for_light_bg") or self._logos.get("for_dark_bg")
 
     def _add_slide(self) -> Any:
         """Add a blank slide."""
@@ -174,11 +190,13 @@ class PptxBuilder:
         shape.line.fill.background()
         return shape
 
-    def _add_logo(self, slide: Any, x: float = 0.4, y: float = 0.2, height: float = 0.4) -> None:
-        """Add logo to slide if available."""
-        if self._logo_path and self._logo_path.exists():
+    def _add_logo(self, slide: Any, x: float = 0.4, y: float = 0.2, height: float = 0.4, bg_color: str = "") -> None:
+        """Add logo to slide, picking the right variant for the background."""
+        bg = bg_color or self.colors.background
+        logo_path = self._get_logo_for_bg(bg)
+        if logo_path and logo_path.exists():
             slide.shapes.add_picture(
-                str(self._logo_path),
+                str(logo_path),
                 Inches(x), Inches(y),
                 height=Inches(height),
             )
@@ -207,7 +225,7 @@ class PptxBuilder:
         self._add_shape(slide, Zone(0, 0, 10, 0.08), self.colors.accent)
 
         # Logo (use dark bg version)
-        self._add_logo(slide, x=0.4, y=0.5, height=0.6)
+        self._add_logo(slide, x=0.4, y=0.5, height=0.6, bg_color=self.colors.secondary)
 
         # Title
         self._add_text(slide, title,
@@ -486,7 +504,7 @@ class PptxBuilder:
         self._add_shape(slide, Zone(0, 7.42, 10, 0.08), self.colors.accent)
 
         # Logo
-        self._add_logo(slide, x=3.5, y=0.8, height=0.8)
+        self._add_logo(slide, x=3.5, y=0.8, height=0.8, bg_color=self.colors.secondary)
 
         # Contact items
         y_start = 0.35

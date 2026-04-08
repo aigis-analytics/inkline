@@ -106,10 +106,10 @@ def list_templates() -> list[str]:
 
 # ── Built-in Templates ───────────────────────────────────────────────────────
 
-# Aigis default (matches Aigis brand)
+# Aigis Light — white background, for documents/reports/print
 register_template("aigis", DeckTemplate(
     name="aigis",
-    description="Aigis Analytics — teal accent, navy headers, professional",
+    description="Aigis Analytics light — white bg, teal accent, print-ready",
     primary="#1A7FA0",
     secondary="#1B283B",
     accent="#39D3BB",
@@ -128,6 +128,43 @@ register_template("aigis", DeckTemplate(
         title_color="#1A1A1A",
         accent_color="#1A7FA0",
         decorations=[Decoration(shape="RECTANGLE", x=0.4, y=0.92, w=9.2, h=0.02, fill_color="#1A7FA0")],
+    ),
+))
+
+# Aigis Dark — dark navy background, for presentations/pitches (matches Gamma theme)
+register_template("aigis_dark", DeckTemplate(
+    name="aigis_dark",
+    description="Aigis Analytics dark — navy bg, teal accent, pitch-ready",
+    primary="#39D3BB",
+    secondary="#0d1928",
+    accent="#1A7FA0",
+    background="#0d1928",
+    surface="#1B283B",
+    text="#c9d1d9",
+    muted="#7A92AD",
+    border="#2E4463",
+    title_slide=SlideStyle(
+        background="#0d1928",
+        title_color="#FFFFFF",
+        accent_color="#39D3BB",
+        decorations=[Decoration(shape="RECTANGLE", x=0, y=0, w=10, h=0.06, fill_color="#39D3BB")],
+    ),
+    section_slide=SlideStyle(
+        background="#0d1928",
+        title_color="#39D3BB",
+        body_color="#c9d1d9",
+    ),
+    content_slide=SlideStyle(
+        background="#0d1928",
+        title_color="#FFFFFF",
+        body_color="#c9d1d9",
+        accent_color="#39D3BB",
+        muted_color="#7A92AD",
+        decorations=[Decoration(shape="RECTANGLE", x=0.4, y=0.92, w=9.2, h=0.015, fill_color="#2E4463")],
+    ),
+    closing_slide=SlideStyle(
+        background="#0d1928",
+        title_color="#39D3BB",
     ),
 ))
 
