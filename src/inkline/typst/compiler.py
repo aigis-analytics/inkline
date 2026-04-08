@@ -70,6 +70,12 @@ def _compile_python(
     so we write the source to a temp file first. When root is provided,
     the source file must be inside that root directory.
     """
+    # Re-import typst to avoid state corruption from prior compilations
+    # (known issue in typst-py Rust binding with many sequential compiles)
+    import importlib
+    import typst as _fresh_typst
+    importlib.reload(_fresh_typst)
+
     # If root is provided, write source file inside it so Typst can find images
     if root:
         root_path = Path(root)
@@ -97,7 +103,7 @@ def _compile_python(
         if font_paths:
             kwargs["font_paths"] = [str(p) for p in font_paths]
 
-        pdf_bytes = _typst_lib.compile(str(src_path), **kwargs)
+        pdf_bytes = _fresh_typst.compile(str(src_path), **kwargs)
 
         if tmp_ctx:
             tmp_ctx.__exit__(None, None, None)

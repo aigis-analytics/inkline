@@ -1,0 +1,380 @@
+[
+  {
+    "slide_type": "title",
+    "data": {
+      "company": "Aigis Analytics",
+      "tagline": "AI-Powered Due Diligence for Upstream Oil & Gas M&A",
+      "date": "April 2026",
+      "subtitle": "Investor Presentation",
+      "left_footer": "Confidential"
+    }
+  },
+  {
+    "slide_type": "three_card",
+    "data": {
+      "section": "The Problem",
+      "title": "Upstream DD costs USD 200K+ and still misses critical red flags",
+      "cards": [
+        {
+          "title": "Compressed bid timelines",
+          "body": "4-8 weeks of analyst time per transaction -- compressing bid timelines and stretching teams beyond capacity."
+        },
+        {
+          "title": "Advisor fees before you've won",
+          "body": "USD 200K-2M+ in advisor fees -- before you've won the deal. Capital at risk on every process you enter."
+        },
+        {
+          "title": "Red flags found post-close",
+          "body": "Key red flags buried in VDRs -- found post-close, not pre-sign. The liability was always in the data room."
+        }
+      ],
+      "highlight_index": 1,
+      "footnote": "The bottleneck is human capacity to read, cross-reference, and synthesise under time pressure."
+    }
+  },
+  {
+    "slide_type": "table",
+    "data": {
+      "section": "Why Now",
+      "title": "86% of M&A leaders now use GenAI \u2014 the first-mover window is open",
+      "headers": [
+        "Signal",
+        "Data Point",
+        "Source"
+      ],
+      "rows": [
+        [
+          "AI adoption in M&A",
+          "86% of leaders now use GenAI",
+          "Deloitte 2025"
+        ],
+        [
+          "US upstream M&A volume",
+          "USD 65 billion (2025)",
+          "Enverus"
+        ],
+        [
+          "Cost reduction from GenAI",
+          "~20% average",
+          "McKinsey"
+        ],
+        [
+          "Investment in AI for M&A",
+          "83% invested USD 1M+",
+          "Deloitte 2025"
+        ]
+      ],
+      "footnote": "AI capability + market readiness + zero competing product = first-mover window."
+    }
+  },
+  {
+    "slide_type": "three_card",
+    "data": {
+      "section": "The Solution",
+      "title": "Aigis processes any VDR to board-level DD report in 30 minutes for USD 50-100",
+      "cards": [
+        {
+          "title": "1. Ingest",
+          "body": "Reads every PDF, Excel, DOCX, CSV. Classifies against 87-item upstream DD checklist. Identifies data gaps automatically."
+        },
+        {
+          "title": "2. Analyse",
+          "body": "13 sequential AI analysis calls, each focused on a single DD discipline. Every finding cited to source document and page."
+        },
+        {
+          "title": "3. Deliver",
+          "body": "15-section board-level DD report. Deterministically verified. Interactive dashboard. Financial model stress-testing."
+        }
+      ],
+      "highlight_index": 2,
+      "footnote": "Cost per full synthesis: ~USD 50-100 vs USD 200K+ traditional advisory fees."
+    }
+  },
+  {
+    "slide_type": "table",
+    "data": {
+      "section": "Report Coverage",
+      "title": "15 sections covering every material upstream DD question",
+      "headers": [
+        "#",
+        "Section",
+        "Coverage"
+      ],
+      "rows": [
+        [
+          "1",
+          "Executive Summary",
+          "Headline metrics, PROCEED/CAUTION/DNP, bid range"
+        ],
+        [
+          "2-3",
+          "Transaction + Assets",
+          "Entity structure, per-field WI%, reserves, well inventory"
+        ],
+        [
+          "4-6",
+          "VDR + Reserves + Production",
+          "Data room rating, 1P/2P/3P, DCA, water cut trends"
+        ],
+        [
+          "7-8",
+          "Financials + CAPEX",
+          "LTM P&L, cash flow, LOE benchmarking, seller model audit"
+        ],
+        [
+          "9-10",
+          "Regulatory + SWOT",
+          "Permits, BSEE/BOEM INCs, environmental liability"
+        ],
+        [
+          "11-13",
+          "Valuation + Decom + People",
+          "NPV10, bid range, P50/P90 ABEX, key person risk"
+        ],
+        [
+          "14-15",
+          "Actions + Conclusions",
+          "Pre-sign DD checklist, board recommendation"
+        ]
+      ]
+    }
+  },
+  {
+    "slide_type": "kpi_strip",
+    "data": {
+      "section": "Live Proof Points",
+      "title": "93% claim accuracy verified across 7+ real transaction VDRs",
+      "kpis": [
+        {
+          "value": "7+",
+          "label": "Deals Processed",
+          "highlight": false
+        },
+        {
+          "value": "93%",
+          "label": "MARKO Verified",
+          "highlight": true
+        },
+        {
+          "value": "30min",
+          "label": "End-to-End",
+          "highlight": false
+        }
+      ]
+    }
+  },
+  {
+    "slide_type": "four_card",
+    "data": {
+      "section": "Technology",
+      "title": "Four proprietary engines deliver deterministic verification, not generic AI",
+      "cards": [
+        {
+          "title": "MARKO Verification",
+          "body": "93% of quantitative claims deterministically verified against the financial model database."
+        },
+        {
+          "title": "4-Tier Vishwakarma",
+          "body": "Regex - Fuzzy - Haiku - Sonnet. Deterministic speed with LLM intelligence. Never fails silently."
+        },
+        {
+          "title": "Kambr Model Builder",
+          "body": "Generates jurisdiction-aware Excel models (6 fiscal regimes). xlwings COM, self-auditing."
+        },
+        {
+          "title": "Cross-Deal Learning",
+          "body": "Archon engine detects patterns across deals. Learns from every pipeline run."
+        }
+      ]
+    }
+  },
+  {
+    "slide_type": "split",
+    "data": {
+      "section": "Competitive Landscape",
+      "title": "First AI-native platform combining deep domain expertise with deterministic verification",
+      "left_title": "The Market Today",
+      "left_items": [
+        "VDR platforms host docs but don't analyse them",
+        "Data providers give reference data, not VDR processing",
+        "Generic AI has no domain playbooks or verification",
+        "Legal AI covers contracts only, not upstream DD",
+        "Advisory firms are deep but manual, slow, USD 200K+"
+      ],
+      "right_title": "Aigis Advantage",
+      "right_items": [
+        "AI-native + deep domain expertise",
+        "VDR to Report to Dashboard to Buyer Case",
+        "13 specialist playbooks, not generic prompts",
+        "Deterministic verification (MARKO)",
+        "USD 50-100 per full synthesis"
+      ]
+    }
+  },
+  {
+    "slide_type": "kpi_strip",
+    "data": {
+      "section": "Market Opportunity",
+      "title": "USD 3.2B serviceable market with clear path to USD 15-30M by Year 3",
+      "kpis": [
+        {
+          "value": "USD 12B+",
+          "label": "TAM",
+          "highlight": false
+        },
+        {
+          "value": "USD 3.2B",
+          "label": "SAM",
+          "highlight": true
+        },
+        {
+          "value": "USD 15-30M",
+          "label": "SOM (Yr 3)",
+          "highlight": false
+        }
+      ]
+    }
+  },
+  {
+    "slide_type": "table",
+    "data": {
+      "section": "Business Model",
+      "title": "98% gross margin at scale with multiple revenue streams",
+      "headers": [
+        "Model",
+        "Price",
+        "Margin"
+      ],
+      "rows": [
+        [
+          "Enterprise SaaS (annual)",
+          "GBP 60K-150K per seat",
+          ">95%"
+        ],
+        [
+          "Transaction fee (per VDR)",
+          "GBP 5K-15K per analysis",
+          ">98%"
+        ],
+        [
+          "Workstream add-ons",
+          "GBP 2K-5K each",
+          ">95%"
+        ],
+        [
+          "API cost (full synthesis)",
+          "~GBP 40-80",
+          "--"
+        ]
+      ],
+      "footnote": "At GBP 5K/VDR with ~GBP 80 API cost, gross margin exceeds 98%."
+    }
+  },
+  {
+    "slide_type": "table",
+    "data": {
+      "section": "Traction",
+      "title": "From concept to validated full synthesis in 6 months",
+      "headers": [
+        "Date",
+        "Milestone"
+      ],
+      "rows": [
+        [
+          "Oct 2025",
+          "Concept and architecture design"
+        ],
+        [
+          "Feb 2026",
+          "MVP -- first VDR processed end-to-end"
+        ],
+        [
+          "Mar 2026",
+          "MARKO verification engine -- 93% claim verification"
+        ],
+        [
+          "Mar 2026",
+          "Company incorporated (Aigis Analytics Pty Ltd)"
+        ],
+        [
+          "Apr 2026",
+          "Kambr corporate model builder -- 6 jurisdictions"
+        ],
+        [
+          "Apr 2026",
+          "Full synthesis validated (Corsair -- 34/35 sections)"
+        ]
+      ]
+    }
+  },
+  {
+    "slide_type": "table",
+    "data": {
+      "section": "Financials",
+      "title": "Path to profitability with 5 enterprise customers by Year 1",
+      "headers": [
+        "Metric",
+        "Year 1",
+        "Year 2",
+        "Year 3"
+      ],
+      "rows": [
+        [
+          "Customers",
+          "5-10",
+          "25-50",
+          "100+"
+        ],
+        [
+          "ARR",
+          "GBP 300K-600K",
+          "GBP 1.5M-3M",
+          "GBP 6M-15M"
+        ],
+        [
+          "Gross Margin",
+          ">95%",
+          ">95%",
+          ">95%"
+        ],
+        [
+          "Team Size",
+          "3-5",
+          "8-12",
+          "15-25"
+        ]
+      ]
+    }
+  },
+  {
+    "slide_type": "split",
+    "data": {
+      "section": "The Ask",
+      "title": "Seeking GBP 150K-250K pre-seed for product completion and customer acquisition",
+      "left_title": "Use of Funds",
+      "left_items": [
+        "Product completion & hardening (40%)",
+        "First 3 enterprise customer acquisitions (30%)",
+        "Legal, IP, and compliance (15%)",
+        "Infrastructure & operations (15%)"
+      ],
+      "right_title": "What We Offer",
+      "right_items": [
+        "Equity participation (structure TBD)",
+        "Board observer seat",
+        "Co-authorship of first published case studies",
+        "Preferred commercial terms at launch"
+      ]
+    }
+  },
+  {
+    "slide_type": "closing",
+    "data": {
+      "name": "Aaditya Chintalapati",
+      "role": "Founder & CEO, CFA",
+      "email": "aaditya@aigis-analytics.com",
+      "company": "Aigis Analytics",
+      "tagline": "Domain Intelligence, Deal Certainty"
+    }
+  }
+]

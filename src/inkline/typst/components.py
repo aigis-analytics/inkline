@@ -38,13 +38,13 @@ def section_badge(label: str, muted: str) -> str:
     stroke: 0.75pt + {_rgb(muted)},
     radius: 2pt,
     inset: (x: 8pt, y: 3pt),
-    text(size: 9pt, fill: {_rgb(muted)})[#upper("{label}")]
+    text(size: 9pt, fill: {_rgb(muted)})[#upper("{_esc_content(label)}")]
   )"""
 
 
 def slide_title(title: str, text_color: str) -> str:
     """Bold ALL-CAPS slide title."""
-    return f'text(weight: "bold", size: 26pt, fill: {_rgb(text_color)})[#upper("{title}")]'
+    return f'text(weight: "bold", size: 26pt, fill: {_rgb(text_color)})[#upper("{_esc_content(title)}")]'
 
 
 def card(
@@ -70,18 +70,18 @@ def card(
 
 def card_title(title: str, text_color: str) -> str:
     """Bold upper-case card heading."""
-    return f'#text(weight: "bold", size: 13pt, fill: {_rgb(text_color)})[#upper("{title}")]'
+    return f'#text(weight: "bold", size: 13pt, fill: {_rgb(text_color)})[#upper("{_esc_content(title)}")]'
 
 
 def hero_stat(value: str, label: str, desc: str, text_color: str, muted: str, accent: str | None = None) -> str:
     """Big number stat display (centered)."""
     value_color = _rgb(accent) if accent else _rgb(text_color)
     return f"""align(center)[
-      #text(weight: "bold", size: 40pt, fill: {value_color})[{value}]
+      #text(weight: "bold", size: 40pt, fill: {value_color})[{_esc_content(value)}]
       #v(6pt)
-      #text(weight: "bold", size: 12pt, fill: {_rgb(muted)})[#upper("{label}")]
+      #text(weight: "bold", size: 12pt, fill: {_rgb(muted)})[#upper("{_esc_content(label)}")]
       #v(4pt)
-      #text(size: 10pt, fill: {_rgb(muted)})[{desc}]
+      #text(size: 10pt, fill: {_rgb(muted)})[{_esc_content(desc)}]
     ]"""
 
 
@@ -90,7 +90,7 @@ def footer_bar(content: str, border_color: str, muted: str) -> str:
     return f"""v(1fr)
   line(length: 100%, stroke: 0.5pt + {_rgb(border_color)})
   v(4pt)
-  text(size: 7pt, fill: {_rgb(muted)})[{content}]"""
+  text(size: 7pt, fill: {_rgb(muted)})[{_esc_content(content)}]"""
 
 
 def accent_bar(color: str, position: str = "top") -> str:
@@ -167,9 +167,9 @@ def kpi_card(value: str, label: str, fill: str, text_color: str) -> str:
     width: 100%,
   )[
     #align(center)[
-      #text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{value}]
+      #text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{_esc_content(value)}]
       #v(4pt)
-      #text(size: 8pt, fill: {_rgb(text_color)})[#upper("{label}")]
+      #text(size: 8pt, fill: {_rgb(text_color)})[#upper("{_esc_content(label)}")]
     ]
   ]"""
 

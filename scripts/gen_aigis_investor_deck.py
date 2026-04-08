@@ -10,6 +10,7 @@ Usage:
     python scripts/gen_aigis_investor_deck.py
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -265,8 +266,21 @@ SECTIONS = [
 
 
 def main():
-    # Initialize DesignAdvisor with Aigis branding, consulting template
-    advisor = DesignAdvisor(brand="aigis", template="consulting", mode="rules")
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate Aigis investor deck")
+    parser.add_argument("--mode", default="llm", choices=["llm", "rules", "advised"],
+                        help="Design mode: llm (default), rules (fallback), advised")
+    parser.add_argument("--model", default="claude-sonnet-4-20250514",
+                        help="Model for LLM mode")
+    args = parser.parse_args()
+
+    # Initialize DesignAdvisor — LLM mode is now the default
+    advisor = DesignAdvisor(
+        brand="aigis",
+        template="consulting",
+        mode=args.mode,
+        model=args.model,
+    )
 
     # Design the deck
     slides = advisor.design_deck(
@@ -274,6 +288,8 @@ def main():
         sections=SECTIONS,
         date="April 2026",
         subtitle="AI-Powered Due Diligence for Upstream Oil & Gas M&A",
+        audience="PE fund CIOs, energy sector investors, potential design partners",
+        goal="Secure GBP 150K-250K pre-seed investment for an AI-powered upstream O&G due diligence platform",
         contact={
             "name": "Aaditya Chintalapati",
             "role": "Founder & CEO, CFA",
@@ -289,10 +305,15 @@ def main():
         t = s["data"].get("title", s["data"].get("company", ""))
         print(f"  {i+1:2d}. [{s['slide_type']:12s}] {t}")
 
-    # Export to PDF
-    output_path = Path(__file__).parent.parent / "output" / "aigis_investor_deck.pdf"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Save the slide specs as JSON (for reuse / debugging)
+    output_dir = Path(__file__).parent.parent / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / "aigis_investor_deck.json"
+    json_path.write_text(json.dumps(slides, indent=2, default=str), encoding="utf-8")
+    print(f"\nSlide specs saved: {json_path}")
 
+    # Export to PDF
+    output_path = output_dir / "aigis_investor_deck.pdf"
     result = export_typst_slides(
         slides=slides,
         output_path=str(output_path),
@@ -302,7 +323,7 @@ def main():
         date="April 2026",
     )
 
-    print(f"\nPDF generated: {result} ({output_path.stat().st_size:,} bytes)")
+    print(f"PDF generated: {result} ({output_path.stat().st_size:,} bytes)")
 
 
 if __name__ == "__main__":
