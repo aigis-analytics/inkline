@@ -223,7 +223,9 @@ def list_slide_types() -> list[str]:
     """Return all supported slide types."""
     return [
         "title", "content", "three_card", "four_card", "stat",
-        "table", "split", "chart", "bar_chart", "kpi_strip", "closing",
+        "table", "split", "chart", "bar_chart", "kpi_strip",
+        "timeline", "process_flow", "icon_stat", "progress_bars",
+        "pyramid", "comparison", "closing",
     ]
 
 

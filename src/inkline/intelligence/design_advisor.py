@@ -31,25 +31,46 @@ SLIDE_TYPES = [
 SLIDE_TYPE_GUIDE = """
 Available slide types (use these exact names):
 
-- title: Opening slide. company, tagline, date, subtitle, left_footer.
-- content: Bullet list. section, title, items (list of strings), footnote.
-- three_card: 3 equal cards. section, title, cards (list of {title, body}), highlight_index (0-2), footnote.
-- four_card: 2x2 card grid. section, title, cards (list of {title, body}), footnote.
-- stat: 2-4 hero statistics. section, title, stats (list of {value, label, desc}).
-- table: Data table. section, title, headers (list), rows (list of lists), footnote.
-- split: Two-column layout. section, title, left_title, left_items, right_title, right_items.
-- bar_chart: Horizontal bars. section, title, bars (list of {label, value, pct}), footnote.
-- kpi_strip: 3-5 metric cards. section, title, kpis (list of {value, label, highlight}), footnote.
-- closing: Final slide. name, role, email, company, tagline.
+STANDARD LAYOUTS:
+- title: Opening slide. data: {company, tagline, date, subtitle, left_footer}
+- content: Bullet list. data: {section, title, items (list of strings), footnote}
+- three_card: 3 equal cards. data: {section, title, cards [{title, body}], highlight_index (0-2), footnote}
+- four_card: 2x2 card grid. data: {section, title, cards [{title, body}], footnote}
+- stat: 2-4 hero statistics. data: {section, title, stats [{value, label, desc}]}
+- table: Data table. data: {section, title, headers (list), rows (list of lists), footnote}
+- split: Two-column layout. data: {section, title, left_title, left_items, right_title, right_items}
+- bar_chart: Horizontal bars. data: {section, title, bars [{label, value, pct (0-100)}], footnote}
+- kpi_strip: 3-5 metric cards. data: {section, title, kpis [{value, label, highlight (bool)}], footnote}
+- closing: Final slide. data: {name, role, email, company, tagline}
+
+INFOGRAPHIC LAYOUTS:
+- timeline: Horizontal milestone flow. data: {section, title, milestones [{date, label, desc?}], footnote}
+- process_flow: Numbered step sequence with arrows. data: {section, title, steps [{number, title, desc}], footnote}
+- icon_stat: Big number + emoji/icon + label. data: {section, title, stats [{value, icon, label, desc?}], footnote}
+- progress_bars: Labelled percentage bars. data: {section, title, bars [{label, pct (0-100), value?}], footnote}
+- pyramid: 3-5 tier hierarchy (top=smallest). data: {section, title, tiers [{label, desc?}], footnote}
+- comparison: Structured side-by-side with metrics. data: {section, title, left {name, items [{label, value}]}, right {name, items [{label, value}]}, footnote}
+
+EMBEDDED CHARTS (for complex visualisations):
+- chart: Embed a pre-rendered PNG/SVG image. data: {section, title, image_path, footnote}
+  Use this for: line charts, scatter plots, area charts, waterfall, donut/pie, heatmaps,
+  Sankey diagrams, radar charts — anything that requires precise data plotting.
+  The caller generates the chart image (e.g. via matplotlib, Chart.js) and passes the path.
 
 Design principles:
 - Use action titles (conclusion, not topic): "98% gross margin at scale" not "Business Model"
-- Use three_card for triadic arguments (problem/solution/benefit patterns)
-- Use stat for 2-3 hero metrics that tell the story
-- Use split for comparisons (us vs them, before vs after)
-- Use table only when precise data matters (financials, timelines)
+- Use three_card for triadic arguments (problem/solution/benefit)
+- Use stat or icon_stat for 2-3 hero metrics that tell the story
+- Use split or comparison for us-vs-them, before-vs-after
+- Use timeline for milestones, roadmaps, company history
+- Use process_flow for "how it works" (3-5 steps with arrows)
+- Use progress_bars for completion status, ratings, coverage metrics
+- Use pyramid for strategic hierarchy, priority tiers, funnels
+- Use table only when precise data matters (financials, detailed breakdowns)
+- Use chart (embedded image) for any complex data visualisation
 - Vary layouts: never use the same slide type 3 times in a row
 - The highlight_index on three_card accents one card (0=first, 1=middle, 2=last)
+- For icon_stat, use Unicode emoji: document, chart, money, time, people, etc.
 """
 
 

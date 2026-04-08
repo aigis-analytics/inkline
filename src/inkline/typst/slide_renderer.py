@@ -92,6 +92,12 @@ class TypstSlideRenderer:
             "closing": self._closing_slide,
             "bar_chart": self._bar_chart_slide,
             "kpi_strip": self._kpi_strip_slide,
+            "timeline": self._timeline_slide,
+            "process_flow": self._process_flow_slide,
+            "icon_stat": self._icon_stat_slide,
+            "progress_bars": self._progress_bars_slide,
+            "pyramid": self._pyramid_slide,
+            "comparison": self._comparison_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -501,6 +507,400 @@ class TypstSlideRenderer:
   line(length: 100%, stroke: 0.5pt + {_rgb(t['muted'])})
   v(4pt)
   align(center, text(size: 9pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}])
+}}"""
+
+
+    # ==================================================================
+    # INFOGRAPHIC SLIDE TYPES
+    # ==================================================================
+
+    # -- Timeline slide ----------------------------------------------------
+
+    def _timeline_slide(self, d: dict) -> str:
+        """Horizontal timeline with milestones.
+
+        data: section, title, milestones [{date, label, desc?}], footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        milestones = d.get("milestones", [])
+        footnote = d.get("footnote", "")
+
+        n = len(milestones)
+        if n == 0:
+            return self._content_slide(d)
+
+        # Build milestone nodes
+        nodes = []
+        for i, m in enumerate(milestones):
+            date = _esc(m.get("date", ""))
+            label = _esc(m.get("label", ""))
+            desc = _esc(m.get("desc", ""))
+            # Alternate above/below for visual rhythm
+            is_above = i % 2 == 0
+            node = f"""align(center)[
+        #text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[{date}]
+        #v(2pt)
+        #block(
+          fill: {_rgb(t['accent']) if i == n - 1 else _rgb(t['card_fill'])},
+          stroke: 0.75pt + {_rgb(t['border'])},
+          radius: 50%,
+          width: 12pt,
+          height: 12pt,
+        )[]
+        #v(2pt)
+        #text(size: 9pt, weight: "bold", fill: {_rgb(t['text'])})[{label}]
+        {f'#v(1pt)#text(size: 8pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
+      ]"""
+            nodes.append(node)
+
+        cols = ", ".join(["1fr"] * n)
+        nodes_str = ",\n    ".join(nodes)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(1fr)
+
+  // Timeline line
+  place(center + horizon, line(length: 85%, stroke: 2pt + {_rgb(t['border'])}))
+
+  // Milestone nodes
+  grid(
+    columns: ({cols}),
+    gutter: 4pt,
+    {nodes_str}
+  )
+
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    # -- Process flow slide ------------------------------------------------
+
+    def _process_flow_slide(self, d: dict) -> str:
+        """Numbered step sequence with arrows.
+
+        data: section, title, steps [{number, title, desc}], footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        steps = d.get("steps", [])
+        footnote = d.get("footnote", "")
+
+        if not steps:
+            return self._content_slide(d)
+
+        # Build step blocks with arrows between them
+        step_blocks = []
+        for i, step in enumerate(steps):
+            num = step.get("number", str(i + 1))
+            step_title = _esc(step.get("title", ""))
+            desc = _esc(step.get("desc", ""))
+
+            block_str = f"""block(
+        fill: {_rgb(t['card_fill'])},
+        stroke: 0.75pt + {_rgb(t['border'])},
+        radius: 4pt,
+        inset: 10pt,
+        width: 100%,
+      )[
+        #align(center)[
+          #block(
+            fill: {_rgb(t['accent'])},
+            radius: 50%,
+            width: 28pt,
+            height: 28pt,
+            inset: 4pt,
+          )[#align(center + horizon, text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[{_esc(num)}])]
+          #v(6pt)
+          #text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper("{step_title}")]
+          #v(3pt)
+          #text(size: 9pt, fill: {_rgb(t['muted'])})[{desc}]
+        ]
+      ]"""
+            step_blocks.append(block_str)
+
+            # Add arrow between steps (not after last)
+            if i < len(steps) - 1:
+                step_blocks.append(
+                    f'align(center + horizon, text(size: 20pt, fill: {_rgb(t["accent"])})[\\u{{2192}}])'
+                )
+
+        n_cols = len(steps) * 2 - 1  # steps + arrows
+        cols = []
+        for i in range(n_cols):
+            cols.append("0.5fr" if i % 2 == 1 else "1fr")  # arrows get less space
+        cols_str = ", ".join(cols)
+        blocks_str = ",\n    ".join(step_blocks)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(1fr)
+
+  grid(
+    columns: ({cols_str}),
+    gutter: 6pt,
+    {blocks_str}
+  )
+
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    # -- Icon stat slide ---------------------------------------------------
+
+    def _icon_stat_slide(self, d: dict) -> str:
+        """Big number + emoji/icon + label — statistical infographic style.
+
+        data: section, title, stats [{value, icon, label, desc?}], footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        stats = d.get("stats", [])
+        footnote = d.get("footnote", "")
+
+        if not stats:
+            return self._content_slide(d)
+
+        stat_blocks = []
+        colors = t.get("chart_colors", [t["accent"], t.get("accent2", t["accent"])])
+        for i, s in enumerate(stats):
+            color = colors[i % len(colors)]
+            value = _esc(s.get("value", ""))
+            icon = s.get("icon", "")  # emoji or unicode character
+            label = _esc(s.get("label", ""))
+            desc = _esc(s.get("desc", ""))
+
+            stat_blocks.append(f"""block(
+        fill: {_rgb(t['card_fill'])},
+        stroke: 0.75pt + {_rgb(t['border'])},
+        radius: 4pt,
+        inset: 14pt,
+        width: 100%,
+      )[
+        #align(center)[
+          {f'#text(size: 28pt)[{icon}]#v(4pt)' if icon else ''}
+          #text(weight: "bold", size: 36pt, fill: {_rgb(color)})[{value}]
+          #v(4pt)
+          #text(weight: "bold", size: 10pt, fill: {_rgb(t['muted'])})[#upper("{label}")]
+          {f'#v(2pt)#text(size: 9pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
+        ]
+      ]""")
+
+        n = len(stat_blocks)
+        cols_str = ", ".join(["1fr"] * n)
+        blocks_str = ",\n    ".join(stat_blocks)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(1fr)
+
+  grid(
+    columns: ({cols_str}),
+    gutter: 14pt,
+    {blocks_str}
+  )
+
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    # -- Progress bars slide -----------------------------------------------
+
+    def _progress_bars_slide(self, d: dict) -> str:
+        """Labelled percentage bars — skill bars, completion, ratings.
+
+        data: section, title, bars [{label, pct, value?}], footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        bars = d.get("bars", [])
+        footnote = d.get("footnote", "")
+
+        if not bars:
+            return self._content_slide(d)
+
+        colors = t.get("chart_colors", [t["accent"]])
+        bar_rows = []
+        for i, b in enumerate(bars):
+            label = _esc(b.get("label", ""))
+            pct = b.get("pct", 0)
+            value = _esc(b.get("value", f"{pct}%"))
+            color = colors[i % len(colors)]
+
+            bar_rows.append(f"""  grid(
+    columns: (4cm, 1fr, 1.5cm),
+    gutter: 8pt,
+    align(right + horizon, text(size: 10pt, weight: "bold", fill: {_rgb(t['text'])})[{label}]),
+    block(width: 100%, height: 20pt, fill: {_rgb(t['card_fill'])}, stroke: 0.5pt + {_rgb(t['border'])}, radius: 3pt)[
+      #block(width: {pct}%, height: 100%, fill: {_rgb(color)}, radius: 3pt)[]
+    ],
+    align(left + horizon, text(size: 10pt, weight: "bold", fill: {_rgb(t['accent'])})[{value}]),
+  )""")
+
+        bars_str = "\n  v(8pt)\n  ".join(bar_rows)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(20pt)
+
+  {bars_str}
+
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    # -- Pyramid slide -----------------------------------------------------
+
+    def _pyramid_slide(self, d: dict) -> str:
+        """3-5 tier hierarchy pyramid.
+
+        data: section, title, tiers [{label, desc?}] (top to bottom), footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        tiers = d.get("tiers", [])
+        footnote = d.get("footnote", "")
+
+        if not tiers:
+            return self._content_slide(d)
+
+        colors = t.get("chart_colors", [t["accent"]])
+        n = len(tiers)
+        tier_blocks = []
+        for i, tier in enumerate(tiers):
+            label = _esc(tier.get("label", ""))
+            desc = _esc(tier.get("desc", ""))
+            color = colors[i % len(colors)]
+            # Each tier gets wider — top is narrowest
+            width_pct = 30 + (i * (70 // n))
+
+            tier_blocks.append(f"""  align(center, block(
+    fill: {_rgb(color)},
+    radius: 3pt,
+    inset: (x: 12pt, y: 6pt),
+    width: {width_pct}%,
+  )[
+    #align(center)[
+      #text(weight: "bold", size: 11pt, fill: white)[#upper("{label}")]
+      {f'#v(2pt)#text(size: 9pt, fill: white.transparentize(30%))[{desc}]' if desc else ''}
+    ]
+  ])""")
+
+        tiers_str = "\n  v(4pt)\n".join(tier_blocks)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(1fr)
+
+{tiers_str}
+
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    # -- Comparison slide --------------------------------------------------
+
+    def _comparison_slide(self, d: dict) -> str:
+        """Structured side-by-side comparison with metrics.
+
+        data: section, title, left {name, items [{label, value}]},
+              right {name, items [{label, value}]}, footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        left = d.get("left", {})
+        right = d.get("right", {})
+        footnote = d.get("footnote", "")
+
+        left_name = _esc(left.get("name", "Option A"))
+        right_name = _esc(right.get("name", "Option B"))
+        left_items = left.get("items", [])
+        right_items = right.get("items", [])
+
+        # Build comparison rows
+        rows = []
+        max_rows = max(len(left_items), len(right_items))
+        for i in range(max_rows):
+            l_item = left_items[i] if i < len(left_items) else {}
+            r_item = right_items[i] if i < len(right_items) else {}
+            l_label = _esc(l_item.get("label", "") if isinstance(l_item, dict) else str(l_item))
+            l_value = _esc(l_item.get("value", "") if isinstance(l_item, dict) else "")
+            r_label = _esc(r_item.get("label", "") if isinstance(r_item, dict) else str(r_item))
+            r_value = _esc(r_item.get("value", "") if isinstance(r_item, dict) else "")
+
+            fill = _rgb(t['card_fill']) if i % 2 == 0 else _rgb(t['bg'])
+            rows.append(f"""    grid(
+      columns: (1fr, 1fr),
+      gutter: 14pt,
+      block(fill: {fill}, inset: 8pt, width: 100%, radius: 2pt)[
+        #text(size: 10pt, fill: {_rgb(t['muted'])})[{l_label}]
+        {f'#h(1fr)#text(size: 10pt, weight: "bold", fill: {_rgb(t["text"])})[{l_value}]' if l_value else ''}
+      ],
+      block(fill: {fill}, inset: 8pt, width: 100%, radius: 2pt)[
+        #text(size: 10pt, fill: {_rgb(t['muted'])})[{r_label}]
+        {f'#h(1fr)#text(size: 10pt, weight: "bold", fill: {_rgb(t["text"])})[{r_value}]' if r_value else ''}
+      ],
+    )""")
+
+        rows_str = "\n    v(2pt)\n".join(rows)
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(14pt)
+
+  // Column headers
+  grid(
+    columns: (1fr, 1fr),
+    gutter: 14pt,
+    block(fill: {_rgb(t['card_fill'])}, stroke: (bottom: 2pt + {_rgb(t['accent'])}), inset: 10pt, width: 100%)[
+      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['accent'])})[#upper("{left_name}")])
+    ],
+    block(fill: {_rgb(t['accent'])}, inset: 10pt, width: 100%, radius: (top: 3pt))[
+      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[#upper("{right_name}")])
+    ],
+  )
+  v(6pt)
+
+  // Comparison rows
+  {rows_str}
+
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
 
