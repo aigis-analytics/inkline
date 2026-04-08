@@ -1,0 +1,198 @@
+"""Reusable Typst markup components.
+
+Each function returns a Typst markup string that can be embedded in
+slide or document templates. All colors are passed as hex strings and
+converted to Typst ``rgb()`` calls.
+"""
+
+from __future__ import annotations
+
+
+def _rgb(hex_color: str) -> str:
+    """Convert '#RRGGBB' to Typst rgb() call."""
+    return f'rgb("{hex_color}")'
+
+
+# ---------------------------------------------------------------------------
+# Slide components
+# ---------------------------------------------------------------------------
+
+def section_badge(label: str, muted: str) -> str:
+    """Upper-case section label in a bordered pill."""
+    return f"""box(
+    stroke: 0.75pt + {_rgb(muted)},
+    radius: 2pt,
+    inset: (x: 8pt, y: 3pt),
+    text(size: 9pt, fill: {_rgb(muted)})[#upper("{label}")]
+  )"""
+
+
+def slide_title(title: str, text_color: str) -> str:
+    """Bold ALL-CAPS slide title."""
+    return f'text(weight: "bold", size: 26pt, fill: {_rgb(text_color)})[#upper("{title}")]'
+
+
+def card(
+    body: str,
+    *,
+    fill: str,
+    border: str | None = None,
+    text_color: str = "#111111",
+    radius: int = 3,
+) -> str:
+    """Content card with optional border."""
+    stroke = f"stroke: 0.75pt + {_rgb(border)}," if border else ""
+    return f"""block(
+      fill: {_rgb(fill)},
+      {stroke}
+      radius: {radius}pt,
+      inset: 14pt,
+      width: 100%,
+    )[
+      {body}
+    ]"""
+
+
+def card_title(title: str, text_color: str) -> str:
+    """Bold upper-case card heading."""
+    return f'#text(weight: "bold", size: 13pt, fill: {_rgb(text_color)})[#upper("{title}")]'
+
+
+def hero_stat(value: str, label: str, desc: str, text_color: str, muted: str, accent: str | None = None) -> str:
+    """Big number stat display (centered)."""
+    value_color = _rgb(accent) if accent else _rgb(text_color)
+    return f"""align(center)[
+      #text(weight: "bold", size: 40pt, fill: {value_color})[{value}]
+      #v(6pt)
+      #text(weight: "bold", size: 12pt, fill: {_rgb(muted)})[#upper("{label}")]
+      #v(4pt)
+      #text(size: 10pt, fill: {_rgb(muted)})[{desc}]
+    ]"""
+
+
+def footer_bar(content: str, border_color: str, muted: str) -> str:
+    """Bottom bar with divider line."""
+    return f"""v(1fr)
+  line(length: 100%, stroke: 0.5pt + {_rgb(border_color)})
+  v(4pt)
+  text(size: 7pt, fill: {_rgb(muted)})[{content}]"""
+
+
+def accent_bar(color: str, position: str = "top") -> str:
+    """Thin accent bar at top or bottom of slide."""
+    return f'place({position} + left, block(fill: {_rgb(color)}, width: 100%, height: 4pt))'
+
+
+# ---------------------------------------------------------------------------
+# Document components
+# ---------------------------------------------------------------------------
+
+def callout(title: str, body: str, color: str, bg: str) -> str:
+    """Left-bordered alert/callout box."""
+    return f"""block(
+    width: 100%,
+    inset: (left: 14pt, rest: 10pt),
+    stroke: (left: 3pt + {_rgb(color)}),
+    fill: {_rgb(bg)},
+    radius: (right: 4pt),
+  )[
+    #text(weight: "bold", fill: {_rgb(color)})[{title}]
+    #v(4pt)
+    {body}
+  ]"""
+
+
+def rag_badge(status: str) -> str:
+    """RED / AMBER / GREEN inline badge."""
+    colors = {
+        "RED": "#dc2626",
+        "AMBER": "#f59e0b",
+        "GREEN": "#10b981",
+    }
+    color = colors.get(status.upper(), "#6b7280")
+    return f"""box(
+    fill: {_rgb(color)},
+    radius: 2pt,
+    inset: (x: 6pt, y: 2pt),
+    text(size: 8pt, weight: "bold", fill: white)[{status.upper()}]
+  )"""
+
+
+def source_note(content: str, muted: str) -> str:
+    """Grey italic source attribution."""
+    return f'text(size: 8pt, style: "italic", fill: {_rgb(muted)})[Source: {content}]'
+
+
+# ---------------------------------------------------------------------------
+# Chart components (native Typst)
+# ---------------------------------------------------------------------------
+
+def bar_row(label: str, value: str, pct: float, color: str, muted: str) -> str:
+    """Single horizontal bar row for bar charts."""
+    return f"""grid(
+    columns: (3.5cm, 1fr, 2cm),
+    gutter: 6pt,
+    align(right, text(size: 10pt, fill: {_rgb(muted)})[{label}]),
+    block(
+      width: {pct} * 1%,
+      height: 18pt,
+      fill: {_rgb(color)},
+      radius: 2pt,
+    ),
+    text(size: 10pt, weight: "bold")[{value}],
+  )"""
+
+
+def kpi_card(value: str, label: str, fill: str, text_color: str) -> str:
+    """KPI metric card for stat strips."""
+    return f"""block(
+    fill: {_rgb(fill)},
+    radius: 4pt,
+    inset: 10pt,
+    width: 100%,
+  )[
+    #align(center)[
+      #text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{value}]
+      #v(4pt)
+      #text(size: 8pt, fill: {_rgb(text_color)})[#upper("{label}")]
+    ]
+  ]"""
+
+
+def data_table(
+    headers: list[str],
+    rows: list[list[str]],
+    *,
+    header_fill: str,
+    header_text: str = "#FFFFFF",
+    bg: str = "#FFFFFF",
+    alt_bg: str = "#F5F5F5",
+    border: str = "#DDDDDD",
+    col_widths: str | None = None,
+) -> str:
+    """Branded data table with dark header and alternating rows."""
+    n_cols = len(headers)
+    widths = col_widths or ", ".join(["1fr"] * n_cols)
+
+    # Build header cells (comma-separated)
+    header_cells = ",\n    ".join(
+        f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: 9pt)[{h}]]'
+        for h in headers
+    )
+
+    # Build data cells (comma-separated)
+    data_cells = []
+    for row in rows:
+        for cell in row:
+            data_cells.append(f"[{cell}]")
+    data_str = ", ".join(data_cells)
+
+    return f"""table(
+    columns: ({widths}),
+    inset: 6pt,
+    stroke: 0.5pt + {_rgb(border)},
+    fill: (_, y) => if y == 0 {{ {_rgb(header_fill)} }} else if calc.odd(y) {{ {_rgb(bg)} }} else {{ {_rgb(alt_bg)} }},
+    align: (x, _) => if x == 0 {{ left }} else {{ right }},
+    {header_cells},
+    {data_str},
+  )"""
