@@ -13,6 +13,21 @@ def _rgb(hex_color: str) -> str:
     return f'rgb("{hex_color}")'
 
 
+def _esc_content(text: str) -> str:
+    """Escape special Typst characters in content (inside [...] brackets)."""
+    if not text:
+        return ""
+    return (
+        text
+        .replace("\\", "\\\\")
+        .replace("#", "\\#")
+        .replace("$", "\\$")
+        .replace("@", "\\@")
+        .replace("<", "\\<")
+        .replace(">", "\\>")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Slide components
 # ---------------------------------------------------------------------------
@@ -174,17 +189,17 @@ def data_table(
     n_cols = len(headers)
     widths = col_widths or ", ".join(["1fr"] * n_cols)
 
-    # Build header cells (comma-separated)
+    # Build header cells (comma-separated, with Typst escaping)
     header_cells = ",\n    ".join(
-        f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: 9pt)[{h}]]'
+        f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: 9pt)[{_esc_content(h)}]]'
         for h in headers
     )
 
-    # Build data cells (comma-separated)
+    # Build data cells (comma-separated, with Typst escaping)
     data_cells = []
     for row in rows:
         for cell in row:
-            data_cells.append(f"[{cell}]")
+            data_cells.append(f"[{_esc_content(cell)}]")
     data_str = ", ".join(data_cells)
 
     return f"""table(

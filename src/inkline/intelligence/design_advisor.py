@@ -175,8 +175,14 @@ class DesignAdvisor:
 
     def _build_content_slide(self, section: dict, label: str, title: str) -> dict:
         items = section.get("items", [])
+        # Fall back to card titles as bullets if no items
+        if not items and section.get("cards"):
+            items = [f"*{c.get('title', '')}* -- {c.get('body', '')}" for c in section["cards"]]
+        # Fall back to left/right items
+        if not items and section.get("left"):
+            items = section["left"].get("items", [])
+            items += section.get("right", {}).get("items", [])
         if not items and section.get("narrative"):
-            # Split narrative into bullet points
             narrative = section["narrative"]
             sentences = [s.strip() for s in narrative.replace("\n", " ").split(".") if s.strip()]
             items = [f"{s}." for s in sentences[:6]]
@@ -255,9 +261,14 @@ class DesignAdvisor:
         }
 
     def _build_split_slide(self, section: dict, label: str, title: str) -> dict:
-        # Split narrative into two halves, or use left/right data
         left = section.get("left", {})
         right = section.get("right", {})
+        if not left and section.get("cards"):
+            # Split cards into two halves
+            cards = section["cards"]
+            mid = len(cards) // 2
+            left = {"title": cards[0].get("title", ""), "items": [c.get("body", "") for c in cards[:mid]]}
+            right = {"title": cards[mid].get("title", "") if mid < len(cards) else "", "items": [c.get("body", "") for c in cards[mid:]]}
         if not left and section.get("narrative"):
             words = section["narrative"].split()
             mid = len(words) // 2
@@ -278,6 +289,11 @@ class DesignAdvisor:
     def _build_bar_chart_slide(self, section: dict, label: str, title: str) -> dict:
         items = section.get("items", [])
         values = section.get("values", [])
+        if not items or not values:
+            # Can't build bar chart without items/values — fall back to table
+            if section.get("table_data"):
+                return self._build_table_slide(section, label, title)
+            return self._build_content_slide(section, label, title)
         max_val = max(values) if values else 1
         bars = [
             {"label": item, "value": str(val), "pct": round(val / max_val * 100)}
