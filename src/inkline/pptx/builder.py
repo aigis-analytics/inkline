@@ -352,8 +352,8 @@ class PptxBuilder:
         self._label_badge(s, section, 0.5, 0.35)
         self._heading(s, title, 0.5, 0.75, 8.5, 1.0)
 
-        card_w = 2.8
-        gap = 0.3
+        gap = 0.4
+        card_w = (9.0 - 2 * gap) / 3   # ~2.73
         start_x = 0.5
         card_y = 2.2
         card_h = 3.2
@@ -487,11 +487,14 @@ class PptxBuilder:
         self._label_badge(s, section, 0.5, 0.35)
         self._heading(s, title, 0.5, 0.75, 8.5, 0.8)
 
-        card_w = 4.3
+        gap = 0.4
+        card_w = (9.0 - gap) / 2       # 4.3 -> 4.3 (unchanged at 0.4 gap)
         card_h = 2.2
+        row_gap = 0.3
+        col2_x = 0.5 + card_w + gap
         positions = [
-            (0.5, 1.8), (5.1, 1.8),
-            (0.5, 4.2), (5.1, 4.2),
+            (0.5, 1.8), (col2_x, 1.8),
+            (0.5, 1.8 + card_h + row_gap), (col2_x, 1.8 + card_h + row_gap),
         ]
 
         for i, (icon, ctitle, body) in enumerate(cards[:4]):

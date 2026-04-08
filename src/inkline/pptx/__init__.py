@@ -5,5 +5,6 @@ Uses the shared core layer (grid, typography, colors, charts).
 """
 
 from inkline.pptx.builder import PptxBuilder
+from inkline.pptx.auditor import DeckAuditor
 
-__all__ = ["PptxBuilder"]
+__all__ = ["PptxBuilder", "DeckAuditor"]
