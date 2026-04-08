@@ -123,9 +123,11 @@ from inkline.brands.tvf import TvfBrand              # noqa: E402
 from inkline.brands.minimal import MinimalBrand      # noqa: E402
 from inkline.brands.exmachina import ExMachinaBrand  # noqa: E402
 from inkline.brands.statler import StatlerBrand      # noqa: E402
+from inkline.brands.aria import AriaBrand            # noqa: E402
 
 register_brand(AigisBrand)
 register_brand(TvfBrand)
 register_brand(MinimalBrand)
 register_brand(ExMachinaBrand)
 register_brand(StatlerBrand)
+register_brand(AriaBrand)
