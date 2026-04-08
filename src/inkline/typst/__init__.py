@@ -50,6 +50,7 @@ def export_typst_slides(
     date: str = "",
     subtitle: str = "",
     font_paths: Optional[list[str | Path]] = None,
+    image_root: Optional[str | Path] = None,
 ) -> Path:
     """Generate a slide deck PDF from structured slide specifications.
 
@@ -101,7 +102,19 @@ def export_typst_slides(
         all_font_paths.extend(str(p) for p in font_paths)
 
     output_path = Path(output_path)
-    compile_typst(source, output_path=output_path, font_paths=all_font_paths)
+
+    # Determine root for image resolution
+    root = None
+    if image_root:
+        root = str(image_root)
+    else:
+        # Auto-detect: if any slide has image_path, use output dir as root
+        for s in slides:
+            if s.get("data", {}).get("image_path"):
+                root = str(output_path.parent)
+                break
+
+    compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
 
     log.info("Typst slide deck written to %s", output_path)
     return output_path
