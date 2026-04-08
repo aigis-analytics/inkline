@@ -51,6 +51,7 @@ class PptxBuilder:
         title: str = "Untitled",
         brand: str = "aigis",
         subtitle: str = "",
+        template: str | None = None,
     ):
         self.title = title
         self.brand_name = brand
@@ -63,7 +64,29 @@ class PptxBuilder:
 
         # Grid and colour scheme
         self.grid = SlideGrid()
-        self.colors = self._resolve_colors(brand)
+
+        # Template system — overrides colours if template specified
+        from inkline.core.templates import get_template, DeckTemplate
+        self.template: DeckTemplate | None = None
+        if template:
+            self.template = get_template(template)
+        if self.template:
+            # Template colours override brand colours
+            self.colors = ColorScheme(
+                background=self.template.background,
+                surface=self.template.surface,
+                secondary=self.template.secondary,
+                secondary_text=self.template.title_slide.title_color,
+                accent=self.template.primary,
+                accent_text="#FFFFFF",
+                text=self.template.text,
+                muted=self.template.muted,
+                border=self.template.border,
+                positive="#16a34a",
+                negative="#dc2626",
+            )
+        else:
+            self.colors = self._resolve_colors(brand)
 
         # Logo path
         self._logo_path = self._find_logo(brand)
