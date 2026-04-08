@@ -94,13 +94,17 @@ class PptxBuilder:
     def _find_logos(self, brand: str) -> dict:
         base = Path(__file__).resolve().parent.parent / "assets"
         logos = {}
-        for name in [f"{brand}_logo_light.png", f"{brand}_logo_dark.png"]:
+        # Prefer shield-only versions (no text), fall back to full logos
+        search = [
+            (f"{brand}_shield_dark.png", "for_light_bg"),
+            (f"{brand}_shield_light.png", "for_dark_bg"),
+            (f"{brand}_logo_dark.png", "for_light_bg"),
+            (f"{brand}_logo_light.png", "for_dark_bg"),
+        ]
+        for name, key in search:
             p = base / name
-            if p.exists():
-                if "light" in name:
-                    logos["for_dark_bg"] = p
-                else:
-                    logos["for_light_bg"] = p
+            if p.exists() and key not in logos:
+                logos[key] = p
         return logos
 
     def _logo_for(self, bg: str) -> Path | None:
