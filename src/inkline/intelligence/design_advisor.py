@@ -31,9 +31,16 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 log = logging.getLogger(__name__)
+
+# Type alias for the pluggable LLM caller. Any function that takes a system
+# prompt + user prompt and returns the model's text response can be plugged in
+# here — no Anthropic SDK dependency required. This is the integration point
+# for Claude Code SDK, Claude Max sessions, Aigis's llm_bridge, OpenAI, or any
+# other LLM provider.
+LLMCaller = Callable[[str, str], str]
 
 # Available slide types that the Typst renderer supports
 SLIDE_TYPES = [
@@ -190,12 +197,14 @@ class DesignAdvisor:
         mode: str = "llm",
         api_key: str | None = None,
         model: str = "claude-sonnet-4-20250514",
+        llm_caller: Optional["LLMCaller"] = None,
     ):
         self.brand = brand
         self.template = template
         self.mode = mode
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.model = model
+        self.llm_caller = llm_caller
 
     def design_deck(
         self,
@@ -244,7 +253,9 @@ class DesignAdvisor:
         list[dict]
             List of slide specs ready for ``export_typst_slides()``.
         """
-        if self.mode == "llm" and self.api_key:
+        # LLM mode is usable if EITHER an injected caller is present OR an
+        # Anthropic API key is configured.
+        if self.mode == "llm" and (self.llm_caller is not None or self.api_key):
             try:
                 return self._design_deck_llm(
                     title, sections, date=date, subtitle=subtitle,
@@ -277,35 +288,46 @@ class DesignAdvisor:
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
-        """Use Claude to design the optimal slide deck."""
-        import anthropic
+        """Use an LLM to design the optimal slide deck.
 
-        client = anthropic.Anthropic(api_key=self.api_key)
-
-        # Build system prompt with playbook context (+ optional archetype recipes)
+        Routing order:
+          1. ``self.llm_caller`` (if the caller injected one) — any callable
+             ``(system, user) -> str``. Use this for Claude Code SDK, Claude
+             Max session, Aigis llm_bridge, or any non-Anthropic provider.
+          2. Public Anthropic SDK using ``self.api_key`` (or
+             ``ANTHROPIC_API_KEY`` env var). Costs go on the API key's account.
+        """
+        # Build prompts (shared by both routing branches)
         system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
-
-        # Build user prompt with the content to design
         user_prompt = self._build_user_prompt(
             title, sections, date=date, subtitle=subtitle,
             contact=contact, audience=audience, goal=goal,
             additional_guidance=additional_guidance,
         )
 
-        log.info("DesignAdvisor LLM: calling %s with %d chars system, %d chars user",
-                 self.model, len(system_prompt), len(user_prompt))
+        if self.llm_caller is not None:
+            log.info(
+                "DesignAdvisor LLM (via injected caller): %d chars system, %d chars user",
+                len(system_prompt), len(user_prompt),
+            )
+            content = self.llm_caller(system_prompt, user_prompt)
+        else:
+            import anthropic
 
-        response = client.messages.create(
-            model=self.model,
-            max_tokens=8192,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+            client = anthropic.Anthropic(api_key=self.api_key)
+            log.info(
+                "DesignAdvisor LLM (Anthropic SDK %s): %d chars system, %d chars user",
+                self.model, len(system_prompt), len(user_prompt),
+            )
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            content = response.content[0].text
 
-        # Parse the response
-        content = response.content[0].text
         slides = self._parse_llm_response(content, title, date, subtitle, contact)
-
         log.info("DesignAdvisor LLM: planned %d slides for '%s'", len(slides), title)
         return slides
 

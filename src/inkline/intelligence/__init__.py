@@ -26,7 +26,12 @@ Usage::
     )
 """
 
-from inkline.intelligence.design_advisor import DesignAdvisor
+from inkline.intelligence.design_advisor import DesignAdvisor, LLMCaller
+from inkline.intelligence.claude_code import (
+    build_claude_code_caller,
+    claude_code_available,
+    ClaudeCodeNotInstalled,
+)
 from inkline.intelligence.overflow_audit import (
     audit_deck,
     audit_image,
@@ -45,6 +50,12 @@ from inkline.intelligence.template_catalog import (
 
 __all__ = [
     "DesignAdvisor",
+    "LLMCaller",
+    # Claude Code subscription bridge
+    "build_claude_code_caller",
+    "claude_code_available",
+    "ClaudeCodeNotInstalled",
+    # Audit
     "audit_deck",
     "audit_image",
     "audit_slide",
