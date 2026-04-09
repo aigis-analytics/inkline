@@ -21,7 +21,32 @@ class LayoutDecision:
     num_columns: int = 1
     has_hero: bool = False
     highlight_index: int = -1  # Which card to accent (-1 = none)
+    max_items: int = 0  # Max content items that fit (0 = no limit)
     rationale: str = ""
+
+
+# Content capacity per slide type (matches TypstSlideRenderer constants)
+SLIDE_CAPACITY: dict[str, int] = {
+    "content": 8,        # bullet points
+    "table": 12,         # data rows
+    "bar_chart": 8,      # bars
+    "three_card": 3,     # cards
+    "four_card": 4,      # cards
+    "stat": 4,           # hero stats
+    "kpi_strip": 6,      # KPI cards
+    "split": 8,          # bullets per side
+    "timeline": 8,       # milestone nodes
+    "process_flow": 5,   # steps
+    "progress_bars": 7,  # bars
+    "pyramid": 6,        # tiers
+    "comparison": 8,     # rows per side
+}
+
+
+def _with_capacity(decision: LayoutDecision) -> LayoutDecision:
+    """Attach max_items capacity from SLIDE_CAPACITY to a decision."""
+    decision.max_items = SLIDE_CAPACITY.get(decision.slide_type, 0)
+    return decision
 
 
 def select_layout(analysis: ContentAnalysis, context: dict[str, Any] | None = None) -> LayoutDecision:
@@ -44,115 +69,94 @@ def select_layout(analysis: ContentAnalysis, context: dict[str, Any] | None = No
     # Metrics-heavy content
     if ct == ContentType.METRICS:
         if analysis.data_points <= 1:
-            return LayoutDecision(
-                slide_type="stat",
-                num_columns=1,
-                has_hero=True,
+            return _with_capacity(LayoutDecision(
+                slide_type="stat", num_columns=1, has_hero=True,
                 rationale="Single metric gets hero treatment",
-            )
+            ))
         if analysis.data_points <= 3:
-            return LayoutDecision(
-                slide_type="stat",
-                num_columns=3,
-                has_hero=True,
-                highlight_index=1,
+            return _with_capacity(LayoutDecision(
+                slide_type="stat", num_columns=3, has_hero=True, highlight_index=1,
                 rationale="2-3 metrics in stat row with center highlighted",
-            )
+            ))
         if analysis.data_points <= 5:
-            return LayoutDecision(
-                slide_type="kpi_strip",
-                num_columns=analysis.data_points,
+            return _with_capacity(LayoutDecision(
+                slide_type="kpi_strip", num_columns=analysis.data_points,
                 rationale="4-5 KPIs in a strip",
-            )
-        return LayoutDecision(
-            slide_type="table",
-            rationale="6+ metrics overflow to table format",
-        )
+            ))
+        return _with_capacity(LayoutDecision(
+            slide_type="table", rationale="6+ metrics overflow to table format",
+        ))
 
     # Tabular data
     if ct == ContentType.TABLE:
-        return LayoutDecision(
-            slide_type="table",
-            num_columns=analysis.num_columns,
+        return _with_capacity(LayoutDecision(
+            slide_type="table", num_columns=analysis.num_columns,
             rationale="Structured tabular data → table slide",
-        )
+        ))
 
     # Time series
     if ct == ContentType.TIME_SERIES:
-        return LayoutDecision(
-            slide_type="chart",
-            rationale="Time series → line chart slide",
-        )
+        return _with_capacity(LayoutDecision(
+            slide_type="chart", rationale="Time series → line chart slide",
+        ))
 
     # Comparison / ranking
     if ct in (ContentType.COMPARISON, ContentType.RANKING):
         if analysis.data_points <= 3:
-            return LayoutDecision(
-                slide_type="three_card",
-                num_columns=3,
-                highlight_index=1,
+            return _with_capacity(LayoutDecision(
+                slide_type="three_card", num_columns=3, highlight_index=1,
                 rationale="2-3 comparison items → three card with highlight",
-            )
+            ))
         if analysis.data_points <= 4:
-            return LayoutDecision(
-                slide_type="four_card",
-                num_columns=2,
+            return _with_capacity(LayoutDecision(
+                slide_type="four_card", num_columns=2,
                 rationale="4 items → 2x2 grid",
-            )
-        return LayoutDecision(
-            slide_type="bar_chart",
-            rationale="5+ comparison items → bar chart",
-        )
+            ))
+        return _with_capacity(LayoutDecision(
+            slide_type="bar_chart", rationale="5+ comparison items → bar chart",
+        ))
 
     # Risk / RAG
     if ct == ContentType.RISK:
         if analysis.has_rag_status:
-            return LayoutDecision(
-                slide_type="three_card",
-                num_columns=3,
+            return _with_capacity(LayoutDecision(
+                slide_type="three_card", num_columns=3,
                 rationale="RAG assessment → three cards (R/A/G)",
-            )
-        return LayoutDecision(
-            slide_type="table",
-            rationale="Risk data without RAG → risk table",
-        )
+            ))
+        return _with_capacity(LayoutDecision(
+            slide_type="table", rationale="Risk data without RAG → risk table",
+        ))
 
     # Positioning
     if ct == ContentType.POSITIONING:
-        return LayoutDecision(
-            slide_type="four_card",
-            num_columns=2,
+        return _with_capacity(LayoutDecision(
+            slide_type="four_card", num_columns=2,
             rationale="Competitive positioning → 2x2 matrix",
-        )
+        ))
 
     # Flow
     if ct == ContentType.FLOW:
-        return LayoutDecision(
-            slide_type="chart",
-            rationale="Process flow → waterfall/timeline chart",
-        )
+        return _with_capacity(LayoutDecision(
+            slide_type="chart", rationale="Process flow → waterfall/timeline chart",
+        ))
 
     # Mixed content (e.g., executive summary)
     if ct == ContentType.MIXED:
         if analysis.narrative_length > 100 and analysis.data_points > 0:
-            return LayoutDecision(
-                slide_type="split",
-                num_columns=2,
+            return _with_capacity(LayoutDecision(
+                slide_type="split", num_columns=2,
                 rationale="Mixed narrative + data → split slide",
-            )
+            ))
         if analysis.data_points >= 3:
-            return LayoutDecision(
-                slide_type="three_card",
-                num_columns=3,
-                highlight_index=0,
+            return _with_capacity(LayoutDecision(
+                slide_type="three_card", num_columns=3, highlight_index=0,
                 rationale="Mixed with 3+ data points → three card",
-            )
+            ))
 
     # Default: content slide with bullets
-    return LayoutDecision(
-        slide_type="content",
-        rationale="Default: narrative content slide",
-    )
+    return _with_capacity(LayoutDecision(
+        slide_type="content", rationale="Default: narrative content slide",
+    ))
 
 
 def plan_deck_flow(analyses: list[ContentAnalysis]) -> list[LayoutDecision]:
@@ -186,7 +190,7 @@ def _alternative_layout(decision: LayoutDecision) -> LayoutDecision:
         "chart": "split",
     }
     alt_type = alternatives.get(decision.slide_type, "content")
-    return LayoutDecision(
+    return _with_capacity(LayoutDecision(
         slide_type=alt_type,
         rationale=f"Alternative to avoid 3+ consecutive {decision.slide_type} slides",
-    )
+    ))

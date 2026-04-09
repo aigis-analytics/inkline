@@ -27,5 +27,19 @@ Usage::
 """
 
 from inkline.intelligence.design_advisor import DesignAdvisor
+from inkline.intelligence.overflow_audit import (
+    audit_deck,
+    audit_image,
+    audit_slide,
+    format_report,
+    AuditWarning,
+)
 
-__all__ = ["DesignAdvisor"]
+__all__ = [
+    "DesignAdvisor",
+    "audit_deck",
+    "audit_image",
+    "audit_slide",
+    "format_report",
+    "AuditWarning",
+]

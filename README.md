@@ -1,37 +1,221 @@
 # Inkline
 
-Branded document generation toolkit — HTML, PDF, and Google Slides.
+**Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
-## Installation
+Inkline turns structured data or Markdown into publication-quality, brand-consistent
+output. It ships with 92 built-in themes, 17 slide layouts, 11 chart types, a 7-brand
+registry, an LLM-driven design advisor, and an overflow audit that keeps content
+inside the slide frame.
 
 ```bash
-pip install inkline              # HTML only (core)
-pip install inkline[pdf]         # + WeasyPrint PDF
-pip install inkline[slides]      # + Google Slides API
-pip install inkline[all]         # Everything
+pip install inkline                # core: Markdown → HTML
+pip install inkline[typst]         # + Typst PDF (default backend)
+pip install inkline[pdf]           # + WeasyPrint PDF
+pip install inkline[charts]        # + matplotlib chart renderer
+pip install inkline[slides]        # + Google Slides API
+pip install inkline[intelligence]  # + LLM design advisor (Anthropic)
+pip install inkline[all]           # everything
 ```
 
-## Quick Start
+## Quick start
+
+### Branded report (Typst — default)
+```python
+from inkline.typst import export_typst_document
+
+export_typst_document(
+    markdown="# Q4 Review\n\nRevenue up 34%...",
+    output_path="q4_report.pdf",
+    brand="aigis",
+    title="Q4 2026 Review",
+)
+```
+
+### Structured slide deck
+```python
+from inkline.typst import export_typst_slides
+
+slides = [
+    {"slide_type": "title", "data": {
+        "company": "Aigis Analytics",
+        "tagline": "Advisor Pitch",
+        "date": "2026-04-09",
+    }},
+    {"slide_type": "three_card", "data": {
+        "section": "Problem", "title": "Three pain points",
+        "cards": [
+            {"title": "Fragmented data", "body": "..."},
+            {"title": "Manual reporting", "body": "..."},
+            {"title": "Stale insights",   "body": "..."},
+        ],
+    }},
+    {"slide_type": "kpi_strip", "data": {
+        "section": "Traction", "title": "2026 YTD",
+        "kpis": [
+            {"value": "34%",  "label": "Rev growth", "highlight": True},
+            {"value": "$4.2M","label": "ARR"},
+            {"value": "87",   "label": "Customers"},
+        ],
+    }},
+]
+
+export_typst_slides(
+    slides=slides,
+    output_path="aigis_pitch.pdf",
+    brand="aigis",
+    template="consulting",
+)
+```
+
+### LLM-driven design advisor
+```python
+from inkline.intelligence import DesignAdvisor
+
+advisor = DesignAdvisor(brand="aigis", template="consulting", mode="llm")
+slides = advisor.design_deck(
+    title="Project Corsair DD",
+    sections=[
+        {"type": "executive_summary", "metrics": {...}, "narrative": "..."},
+        {"type": "financials", "table_data": {...}},
+        {"type": "risks", "rag": {...}},
+    ],
+    audience="investors",
+    goal="secure term sheet",
+)
+# `slides` is ready for export_typst_slides()
+```
+
+### Chart renderer (matplotlib)
+```python
+from inkline.typst.chart_renderer import render_chart_for_brand
+
+render_chart_for_brand(
+    chart_type="waterfall",
+    data={"labels": [...], "values": [...]},
+    output_path="exhibit_1.png",
+    brand_name="aigis",
+)
+```
+
+## Themes (92 total)
+
+Themes live in `inkline.typst.themes` across 13 categories:
+
+| Category     | Examples                                          |
+|--------------|---------------------------------------------------|
+| consulting   | McKinsey, BCG, Bain, Deloitte, PwC, EY, KPMG      |
+| corporate    | Goldman, JPMorgan, MS, BlackRock                  |
+| tech         | Stripe, Linear, Vercel, Notion, GitHub            |
+| dark         | Nord, Dracula, Catppuccin Mocha, Carbon           |
+| warm         | Cigar, Creme, Linen, Terracotta, Clementa         |
+| cool         | Borealis, Marine, Serene, Zephyr                  |
+| nature       | Sage, Sprout, Moss, Lux                           |
+| creative     | Gamma, Electric, Aurora, Nebulae                  |
+| editorial    | Piano, Chimney, Editoria                          |
+| pastel       | Lavender, Seafoam, Twilight                       |
+| luxury       | Aurum, Gold Leaf, Mercury, Mystique               |
+| minimal      | Pearl, Onyx, Coal, Howlite                        |
+| industry     | Healthcare, Energy, Real Estate, Legal, Education |
 
 ```python
-from inkline import export_html, export_pdf
+from inkline.typst.themes import get_theme, list_themes, search_themes
 
-# Aigis-branded HTML report
-export_html("# My Report\n\nContent...", "report.html", brand="aigis")
-
-# TVF-branded PDF
-export_pdf("# Quarterly Review\n\n...", "review.pdf", brand="tvf")
+theme = get_theme("stripe")
+warm_themes = list_themes(category="warm")
+matches = search_themes("gold")
 ```
 
 ## Brands
 
-- **aigis** — Aigis Analytics (navy/teal)
-- **tvf** — Tamarind Village Foundation (olive/gold)
-- **minimal** — Clean, unbranded
+7 pre-registered brand identities in `inkline.brands`:
+`aigis`, `tvf`, `exmachina`, `statler`, `aria`, `sparkdcs`, `minimal`.
+
+Register your own:
+
+```python
+from inkline.brands import register_brand, BaseBrand
+
+register_brand(BaseBrand(
+    name="mycompany",
+    display_name="My Company",
+    primary="#0B5FFF", secondary="#00C2A8",
+    background="#FFFFFF", surface="#0A2540", text="#111827",
+    muted="#6B7280", border="#E5E7EB", light_bg="#F8FAFC",
+    heading_font="Inter", body_font="Inter",
+))
+```
+
+## Slide types (17)
+
+**Standard:** `title`, `content`, `three_card`, `four_card`, `stat`, `table`,
+`split`, `bar_chart`, `kpi_strip`, `closing`
+**Infographic:** `timeline`, `process_flow`, `icon_stat`, `progress_bars`,
+`pyramid`, `comparison`
+**Embedded:** `chart` (matplotlib PNG/SVG)
+
+## Chart types (11)
+`line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
+`stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`
+
+## Overflow audit
+
+Inkline enforces content limits per slide layout and runs an audit at export time:
+
+```python
+from inkline.intelligence import audit_deck, format_report
+
+warnings = audit_deck(slides)
+print(format_report(warnings))
+# OVERFLOW AUDIT: 0 errors, 2 warnings, 0 info
+# [WARN] slide 3 (content): field 'items' has 15 items but slide capacity is 8...
+```
+
+`export_typst_slides()` runs the audit automatically and logs warnings. Pass
+`audit=False` to disable.
 
 ## CLI
 
 ```bash
 inkline-html report.md --brand aigis --title "My Report"
-inkline-pdf  report.md --brand tvf --title "TVF Review"
+inkline-pdf  report.md --brand tvf   --title "TVF Review"
 ```
+
+## Repository layout
+
+```
+src/inkline/
+├── brands/           # 7 brand identities
+├── html/             # Markdown → styled HTML
+├── pdf/              # WeasyPrint PDF backend
+├── pptx/             # python-pptx backend
+├── slides/           # Google Slides API
+├── typst/            # Typst backend (default)
+│   ├── slide_renderer.py    # 17 slide layouts
+│   ├── chart_renderer.py    # 11 matplotlib charts
+│   ├── theme_registry.py    # template → theme generation
+│   └── themes/              # 92 themes in 13 categories
+└── intelligence/     # Design advisor + overflow audit
+    ├── design_advisor.py
+    ├── content_analyzer.py
+    ├── layout_selector.py
+    ├── chart_advisor.py
+    ├── overflow_audit.py
+    └── playbooks/           # design rules, colour theory, typography
+```
+
+## Documentation
+
+- [Technical specification](docs/TECHNICAL_SPEC.md) — architecture, APIs, data models
+- [Commercial pitch](docs/PITCH.md) — capabilities, competitive comparison
+- [Archon audit workflow](docs/ARCHON_AUDIT.md) — how the overflow process works
+
+## Testing
+
+```bash
+pip install -e .[all] pytest
+pytest tests/ -v
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

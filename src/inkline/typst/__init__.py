@@ -51,6 +51,7 @@ def export_typst_slides(
     subtitle: str = "",
     font_paths: Optional[list[str | Path]] = None,
     image_root: Optional[str | Path] = None,
+    audit: bool = True,
 ) -> Path:
     """Generate a slide deck PDF from structured slide specifications.
 
@@ -82,6 +83,16 @@ def export_typst_slides(
     from inkline.typst.compiler import compile_typst
     from inkline.typst.slide_renderer import DeckSpec, SlideSpec, TypstSlideRenderer
     from inkline.typst.theme_registry import brand_to_typst_theme
+
+    # Pre-render overflow audit — log warnings so Archon/users see sizing issues
+    if audit:
+        try:
+            from inkline.intelligence.overflow_audit import audit_deck, format_report
+            warnings = audit_deck(slides)
+            if warnings:
+                log.warning("Inkline overflow audit:\n%s", format_report(warnings))
+        except Exception as e:
+            log.debug("overflow audit skipped: %s", e)
 
     brand_obj = get_brand(brand)
     theme = brand_to_typst_theme(brand_obj, template)

@@ -53,6 +53,21 @@ class DeckSpec:
 class TypstSlideRenderer:
     """Renders SlideSpec objects into Typst markup."""
 
+    # Slide geometry (16:9 at 25.4cm × 14.29cm with 1.2cm x-margin, 0.8cm y-margin)
+    SLIDE_WIDTH_CM = 23.0   # usable content width (25.4 - 2×1.2)
+    SLIDE_HEIGHT_CM = 12.69  # usable content height (14.29 - 2×0.8)
+    # After section badge + title + spacing: ~2.5cm header, ~1.5cm footer
+    BODY_HEIGHT_CM = 8.5    # usable body area for content
+    # Content limits per slide type
+    MAX_BULLETS = 8
+    MAX_TABLE_ROWS = 12
+    MAX_BARS = 8
+    MAX_TIMELINE_NODES = 8
+    MAX_PROCESS_STEPS = 5
+    MAX_PROGRESS_BARS = 7
+    MAX_PYRAMID_TIERS = 6
+    MAX_COMPARISON_ROWS = 8
+
     def __init__(self, theme: dict):
         self.t = theme
 
@@ -143,7 +158,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        items = d.get("items", [])
+        items = d.get("items", [])[:self.MAX_BULLETS]
         footnote = d.get("footnote", "")
 
         bullets = "\n    ".join(f"- {_esc(item)}" for item in items)
@@ -300,7 +315,7 @@ class TypstSlideRenderer:
         section = d.get("section", "")
         title = d.get("title", "")
         headers = d.get("headers", [])
-        rows = d.get("rows", [])
+        rows = d.get("rows", [])[:self.MAX_TABLE_ROWS]
         footnote = d.get("footnote", "")
 
         table_markup = data_table(
@@ -338,8 +353,8 @@ class TypstSlideRenderer:
         right_title = d.get("right_title", "")
         right_items = d.get("right_items", [])
 
-        left_bullets = "\n      ".join(f"- {_esc(item)}" for item in left_items)
-        right_bullets = "\n      ".join(f"- {_esc(item)}" for item in right_items)
+        left_bullets = "\n      ".join(f"- {_esc(item)}" for item in left_items[:self.MAX_BULLETS])
+        right_bullets = "\n      ".join(f"- {_esc(item)}" for item in right_items[:self.MAX_BULLETS])
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
@@ -401,7 +416,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(14pt)
 
-  align(center, image("{image_path}", width: 90%))
+  align(center, image("{image_path}", width: 90%, height: 8.5cm))
 
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
@@ -412,7 +427,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        bars = d.get("bars", [])  # [{"label": ..., "value": ..., "pct": ...}, ...]
+        bars = d.get("bars", [])[:self.MAX_BARS]
         footnote = d.get("footnote", "")
 
         colors = t.get("chart_colors", ["#3fb950", "#58a6ff", "#f0883e", "#d2a8ff"])
@@ -524,7 +539,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        milestones = d.get("milestones", [])
+        milestones = d.get("milestones", [])[:self.MAX_TIMELINE_NODES]
         footnote = d.get("footnote", "")
 
         n = len(milestones)
@@ -591,7 +606,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        steps = d.get("steps", [])
+        steps = d.get("steps", [])[:self.MAX_PROCESS_STEPS]
         footnote = d.get("footnote", "")
 
         if not steps:
@@ -733,7 +748,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        bars = d.get("bars", [])
+        bars = d.get("bars", [])[:self.MAX_PROGRESS_BARS]
         footnote = d.get("footnote", "")
 
         if not bars:
@@ -783,7 +798,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        tiers = d.get("tiers", [])
+        tiers = d.get("tiers", [])[:self.MAX_PYRAMID_TIERS]
         footnote = d.get("footnote", "")
 
         if not tiers:
@@ -848,7 +863,9 @@ class TypstSlideRenderer:
         left_items = left.get("items", [])
         right_items = right.get("items", [])
 
-        # Build comparison rows
+        # Build comparison rows (cap to fit on slide)
+        left_items = left_items[:self.MAX_COMPARISON_ROWS]
+        right_items = right_items[:self.MAX_COMPARISON_ROWS]
         rows = []
         max_rows = max(len(left_items), len(right_items))
         for i in range(max_rows):

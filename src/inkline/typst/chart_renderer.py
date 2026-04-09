@@ -51,8 +51,8 @@ def render_chart(
     bg: str = "#FFFFFF",
     text_color: str = "#1A1A1A",
     muted: str = "#6B7280",
-    width: float = 10.0,
-    height: float = 5.5,
+    width: float = 8.0,
+    height: float = 4.0,
     dpi: int = 200,
 ) -> Path:
     """Render a chart to PNG.

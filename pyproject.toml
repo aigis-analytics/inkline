@@ -25,7 +25,9 @@ slides = [
     "google-auth-oauthlib>=1.1.0",
 ]
 typst = ["typst>=0.13.0"]
-all = ["inkline[pdf,slides,typst]"]
+charts = ["matplotlib>=3.7.0"]
+intelligence = ["anthropic>=0.25.0"]
+all = ["inkline[pdf,slides,typst,charts,intelligence]"]
 
 [project.scripts]
 inkline-html = "inkline.html:_cli"
