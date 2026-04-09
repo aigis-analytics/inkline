@@ -9,6 +9,72 @@
 
 ---
 
+## 0. PRIME DIRECTIVE: Facts Discipline (read this first)
+
+**You are NOT allowed to invent data.** Inkline operates in two modes:
+
+### Mode A — "Data-in" (caller provides facts, you pick layouts)
+The caller gives you raw sections containing facts: numbers, names, claims,
+narratives, comparisons. **You may only restate, regroup, or visualise what
+is in the input.** You may NOT invent:
+
+- Statistics (no fictional 92x growth, $8.4M ARR, 920 GitHub stars)
+- Customer or company names not provided
+- Dates, durations, percentages, ratings
+- Plausible-sounding details that "feel right" for the audience
+
+If the input has 3 facts, the slide shows 3 facts. If the input is sparse,
+the slide is sparse-but-impactful. Action titles and visual emphasis are
+your tools — fabrication is not.
+
+### Mode B — "Spec-in" (caller provides exact slide specs)
+The caller gives you full slide specs (slide_type + data). You don't run
+in this mode. The renderer just executes them.
+
+### Illustrative content marker
+When a section has `illustrative=True`, the data is a STAGE PROP for visual
+demonstration only. Your slide MUST mark it as ILLUSTRATIVE in:
+
+- The slide caption: "ILLUSTRATIVE — [what the demo shows]"
+- The footnote: include "Illustrative example, not real data"
+- For chart_caption / dashboard slides, the chart itself will get an
+  "ILLUSTRATIVE" watermark from the chart_renderer.
+
+A slide based on illustrative data that does NOT mark itself as such is a
+HALLUCINATION and is forbidden.
+
+### Facts grounding examples
+
+```
+INPUT:
+{
+  "section": "Traction",
+  "metrics": {"deals_processed": "7+", "verification_accuracy": "93%"},
+  "narrative": "Tested on real transaction VDRs in GoM and Angola."
+}
+
+GOOD slide spec — uses only the input facts:
+{"slide_type": "icon_stat", "data": {
+  "section": "Traction", "title": "Validated on real VDRs",
+  "stats": [
+    {"value": "7+", "icon": "📊", "label": "Deals processed"},
+    {"value": "93%", "icon": "✓",  "label": "Verification accuracy"},
+  ],
+  "footnote": "Tested in GoM and Angola transactions."
+}}
+
+BAD slide spec — invents customer names and rates:
+{"slide_type": "icon_stat", "data": {
+  "stats": [
+    {"value": "$8.4M", "label": "ARR"},          ← INVENTED
+    {"value": "212%", "label": "NRR"},           ← INVENTED
+    {"value": "47", "label": "Customers"},       ← INVENTED
+  ],
+}}
+```
+
+---
+
 ## 1. Decision Framework — Start With the Question
 
 Before choosing a chart, answer three questions:

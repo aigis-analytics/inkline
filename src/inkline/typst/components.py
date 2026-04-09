@@ -185,26 +185,41 @@ def data_table(
     border: str = "#DDDDDD",
     col_widths: str | None = None,
 ) -> str:
-    """Branded data table with dark header and alternating rows."""
+    """Branded data table with auto-shrink font based on row count.
+
+    Standard practice: as more rows are added, font size is reduced so
+    everything fits on one slide. Same for cell padding.
+    """
     n_cols = len(headers)
+    n_rows = len(rows)
     widths = col_widths or ", ".join(["1fr"] * n_cols)
+
+    # Auto-shrink: more rows → smaller font + tighter padding
+    if n_rows <= 6:
+        body_size, header_size, inset = 11, 10, 7
+    elif n_rows <= 9:
+        body_size, header_size, inset = 10, 9, 6
+    elif n_rows <= 12:
+        body_size, header_size, inset = 9, 8, 5
+    else:
+        body_size, header_size, inset = 8, 8, 4
 
     # Build header cells (comma-separated, with Typst escaping)
     header_cells = ",\n    ".join(
-        f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: 9pt)[{_esc_content(h)}]]'
+        f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: {header_size}pt)[{_esc_content(h)}]]'
         for h in headers
     )
 
-    # Build data cells (comma-separated, with Typst escaping)
+    # Build data cells (with auto-shrunk text size)
     data_cells = []
     for row in rows:
         for cell in row:
-            data_cells.append(f"[{_esc_content(cell)}]")
+            data_cells.append(f'[#text(size: {body_size}pt)[{_esc_content(cell)}]]')
     data_str = ", ".join(data_cells)
 
     return f"""table(
     columns: ({widths}),
-    inset: 6pt,
+    inset: {inset}pt,
     stroke: 0.5pt + {_rgb(border)},
     fill: (_, y) => if y == 0 {{ {_rgb(header_fill)} }} else if calc.odd(y) {{ {_rgb(bg)} }} else {{ {_rgb(alt_bg)} }},
     align: (x, _) => if x == 0 {{ left }} else {{ right }},

@@ -41,21 +41,47 @@ def _ensure_matplotlib():
         _plt = plt
 
 
+def _shades_of(hex_color: str, n: int) -> list[str]:
+    """Return n shades of a single brand colour.
+
+    Used for category charts (donut, pie, stacked bar) to maintain brand
+    discipline — the chart is recognisably ONE colour, not a rainbow.
+    First shade is the base colour at full intensity; subsequent shades
+    fade towards a lighter tint.
+    """
+    if n <= 0:
+        return []
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    # Range from 100% to 35% intensity (mixed with white)
+    out = []
+    for i in range(n):
+        t = i / max(n - 1, 1)  # 0 to 1
+        mix = 0.65 * t  # max 65% white
+        rr = int(r + (255 - r) * mix)
+        gg = int(g + (255 - g) * mix)
+        bb = int(b + (255 - b) * mix)
+        out.append(f"#{rr:02X}{gg:02X}{bb:02X}")
+    return out
+
+
 def render_chart(
     chart_type: str,
     data: dict[str, Any],
     output_path: str | Path,
     *,
     brand_colors: Optional[list[str]] = None,
+    secondary: Optional[str] = None,
     accent: str = "#1A7FA0",
     bg: str = "#FFFFFF",
     text_color: str = "#1A1A1A",
     muted: str = "#6B7280",
-    width: float = 8.0,
-    height: float = 4.0,
+    width: float = 7.5,
+    height: float = 4.2,
     dpi: int = 200,
+    color_mode: str = "duo",
 ) -> Path:
-    """Render a chart to PNG.
+    """Render a chart to PNG with brand-disciplined colors.
 
     Parameters
     ----------
@@ -67,25 +93,37 @@ def render_chart(
     output_path : Path
         Where to save the PNG.
     brand_colors : list[str], optional
-        Color palette for series. Falls back to a sensible default.
+        Full brand palette. Will be SUBSET based on color_mode.
+    secondary : str, optional
+        Secondary brand color (used in "duo" mode).
     accent, bg, text_color, muted : str
         Brand color tokens.
     width, height : float
-        Figure size in inches.
+        Figure size in inches. Aspect ratio matches Typst slide chart area.
     dpi : int
         Resolution.
-
-    Returns
-    -------
-    Path
-        Path to the generated PNG.
+    color_mode : str
+        "mono" — single accent color (best for category data with one
+                 conceptual group).
+        "duo"  — accent + secondary (DEFAULT — primary colour discipline,
+                 matches brand identity, no rainbow).
+        "palette" — full brand_colors palette (use only for genuinely
+                    multi-category data like 6+ products or RAG charts).
     """
     _ensure_matplotlib()
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    colors = brand_colors or [accent, "#39D3BB", "#f0883e", "#58a6ff", "#d2a8ff", "#e6c069"]
+    # Brand colour discipline: by default use 2 colours, not 6.
+    full_palette = brand_colors or [accent, "#39D3BB", "#f0883e", "#58a6ff", "#d2a8ff", "#e6c069"]
+    if color_mode == "mono":
+        colors = [accent]
+    elif color_mode == "duo":
+        sec = secondary or (full_palette[1] if len(full_palette) > 1 else "#94A3B8")
+        colors = [accent, sec]
+    else:  # "palette"
+        colors = full_palette
 
     renderers = {
         "line_chart": _render_line_chart,
@@ -106,6 +144,16 @@ def render_chart(
         raise ValueError(f"Unknown chart type: {chart_type}. Available: {list(renderers.keys())}")
 
     fig = renderer(data, colors=colors, accent=accent, bg=bg, text_color=text_color, muted=muted, width=width, height=height)
+
+    # Illustrative watermark — diagonal across chart background
+    if data.get("illustrative"):
+        fig.text(
+            0.5, 0.5, "ILLUSTRATIVE",
+            ha="center", va="center",
+            fontsize=44, color=muted, alpha=0.08,
+            rotation=20, weight="bold",
+            transform=fig.transFigure, zorder=0,
+        )
 
     fig.savefig(str(output_path), dpi=dpi, bbox_inches="tight",
                 facecolor=bg, edgecolor="none", transparent=False)
@@ -131,6 +179,7 @@ def render_chart_for_brand(
     return render_chart(
         chart_type, data, output_path,
         brand_colors=brand.chart_colors,
+        secondary=brand.secondary,
         accent=brand.primary,
         bg=brand.background,
         text_color=brand.text,
@@ -286,6 +335,13 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
     values = [it["value"] for it in items]
     is_total = [it.get("total", False) for it in items]
 
+    # Brand-disciplined waterfall colours:
+    #   totals → primary accent (the hero)
+    #   positive deltas → primary accent (lighter shade)
+    #   negative deltas → secondary brand colour (NOT red)
+    accent_light = _shades_of(accent, 3)[1]  # mid shade of primary
+    secondary_color = colors[1] if len(colors) > 1 else accent_light
+
     cumulative = 0
     bottoms = []
     bar_colors = []
@@ -296,10 +352,10 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
         else:
             if val >= 0:
                 bottoms.append(cumulative)
-                bar_colors.append(colors[0] if len(colors) > 0 else "#10b981")
+                bar_colors.append(accent_light)
             else:
                 bottoms.append(cumulative + val)
-                bar_colors.append(colors[2] if len(colors) > 2 else "#dc2626")
+                bar_colors.append(secondary_color)
         if not total:
             cumulative += val
 
@@ -325,7 +381,7 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
 # ---------------------------------------------------------------------------
 
 def _render_donut(data, *, colors, accent, bg, text_color, muted, width, height):
-    """Donut chart (max 6 segments).
+    """Donut chart (max 6 segments) — uses shades of accent for brand consistency.
 
     data:
         segments: list of {label, value}
@@ -337,7 +393,10 @@ def _render_donut(data, *, colors, accent, bg, text_color, muted, width, height)
     segments = data.get("segments", [])[:6]
     labels = [s["label"] for s in segments]
     values = [s["value"] for s in segments]
-    seg_colors = [colors[i % len(colors)] for i in range(len(segments))]
+
+    # Use shades of accent (mono palette) — NOT rainbow.
+    # Each segment gets a different opacity / lightness of the brand colour.
+    seg_colors = _shades_of(accent, len(segments))
 
     wedges, texts, autotexts = ax.pie(
         values, labels=labels, colors=seg_colors, autopct="%1.0f%%",
@@ -396,8 +455,10 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
     x = np.arange(len(categories))
     bottom = np.zeros(len(categories))
 
+    # Stacked bar — use shades of accent for brand discipline
+    seg_colors = _shades_of(accent, len(series))
     for i, s in enumerate(series):
-        color = colors[i % len(colors)]
+        color = seg_colors[i]
         vals = s["values"]
         ax.bar(x, vals, bottom=bottom, color=color, label=s.get("name", ""), width=0.6, edgecolor="white", linewidth=0.5)
         bottom += np.array(vals)

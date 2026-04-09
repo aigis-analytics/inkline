@@ -1040,17 +1040,13 @@ class TypstSlideRenderer:
         if not features:
             return self._content_slide(d)
 
-        colors = t.get("chart_colors", [t["accent"]])
+        # Brand discipline: ALL number badges use the single brand accent
+        # colour, NOT a rainbow. Best practice: 2-3 colour brand system.
         cells = []
         for i, f in enumerate(features):
             icon = f.get("icon", "")
             f_title = _esc(f.get("title", ""))
             f_body = _esc(f.get("body", ""))
-            color = colors[i % len(colors)]
-
-            icon_block = ""
-            if icon:
-                icon_block = f"#text(size: 18pt)[{icon}]#h(8pt)"
 
             cells.append(f"""block(
         fill: {_rgb(t['card_fill'])},
@@ -1062,7 +1058,7 @@ class TypstSlideRenderer:
         #grid(
           columns: (auto, 1fr),
           gutter: 8pt,
-          block(fill: {_rgb(color)}, radius: 50%, width: 24pt, height: 24pt, inset: 4pt)[
+          block(fill: {_rgb(t['accent'])}, radius: 50%, width: 24pt, height: 24pt, inset: 4pt)[
             #align(center + horizon, text(weight: "bold", size: 11pt, fill: white)[{i+1}])
           ],
           text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper("{f_title}")],

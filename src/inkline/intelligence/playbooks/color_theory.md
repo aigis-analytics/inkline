@@ -8,6 +8,70 @@
 
 ---
 
+## 0. PRIME DIRECTIVE: Brand Discipline (read this first)
+
+A branded presentation uses a **2-3 colour system**, NOT a rainbow. This is
+non-negotiable best practice across every major design system (IBM Carbon,
+Material, Apple HIG, Salesforce Lightning, GOV.UK, USWDS).
+
+**The rules:**
+
+1. **One primary brand colour** does the heavy lifting (chart bars, accent
+   stripes, callouts, badges, hero numbers, link colour).
+2. **One secondary** for contrast/highlight (CTAs, hover states, the
+   "look here" element).
+3. **One neutral** for body text and dividers.
+4. Optional: **one semantic** colour pair (red/green) for status only.
+
+**That is the entire palette.** A pitch deck where every card has a different
+icon colour, every chart segment is a different rainbow shade, and every
+button is a different hue is the visual equivalent of using twelve fonts.
+
+### When you need multiple "colours" for category data
+
+Use **shades of the brand primary** — light/medium/dark of the same hue.
+This is what Inkline's chart_renderer does by default for donut, pie, and
+stacked bar via `_shades_of(accent, n)`. The chart is recognisably ONE
+brand colour at a glance, but the segments remain visually distinct.
+
+```
+DON'T (rainbow):                  DO (shades of accent):
+█ red    █ orange  █ yellow       █ accent-100  █ accent-70  █ accent-40
+█ green  █ blue    █ purple       █ accent-25
+```
+
+### Forbidden patterns
+
+- Numbered icon badges where each badge is a different colour.
+- Pie/donut charts using all 6 chart_colors (use `_shades_of(accent, n)`).
+- Bar charts where each bar is a different hue (use one colour for all bars
+  in a single series; use accent + secondary for two series; use a sequential
+  palette for ordinal categories).
+- KPI cards where each metric value is a different colour.
+- Process flow steps where each step number is in a different colour.
+
+### Required pattern: chart_renderer color_mode
+
+When calling `render_chart_for_brand`, ALWAYS pass an explicit `color_mode`:
+
+| Chart type | Default color_mode | Why |
+|---|---|---|
+| line_chart | `duo` | One series in primary, contrast series in secondary |
+| area_chart | `mono` | Single area in primary; gradient fill |
+| donut, pie | `mono` | Use shades of primary — never rainbow |
+| stacked_bar | `mono` | Same hue, different shades for stack segments |
+| grouped_bar | `duo` | At most two groups in primary + secondary |
+| waterfall | `duo` | Positive in primary, negative in secondary |
+| scatter | `mono` or `duo` | Group by primary/secondary if 2 groups |
+| heatmap | (palette ignored) | Sequential or diverging built-in colormap |
+| radar | `palette` only if 3+ series | Otherwise `duo` |
+
+If you don't specify color_mode, the renderer defaults to `duo`. **Never
+use `palette` mode unless the data is genuinely categorical with 4+ distinct
+groups that need to be told apart at a glance.**
+
+---
+
 ## 1. The Three Palette Types
 
 ### 1.1 Sequential Palette

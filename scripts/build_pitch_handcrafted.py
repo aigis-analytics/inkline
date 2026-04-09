@@ -29,10 +29,21 @@ TEMPLATE = "pitch"
 # ---------------------------------------------------------------------------
 
 def generate_charts():
-    """Render the chart PNGs that the deck embeds."""
+    """Render the chart PNGs that the deck embeds.
+
+    All charts marked illustrative=True are STAGE PROPS — visual demos of
+    Inkline's chart_renderer capability. They are NOT real Inkline metrics.
+    The chart_renderer adds an "ILLUSTRATIVE" watermark to make this clear.
+    """
     print("Generating chart PNGs...")
 
-    # 1. Time-saved comparison (line chart) — Inkline vs traditional
+    # Standard width for chart_caption layout (1.75fr column at 22cm content
+    # width = ~14cm wide; chart cell height = 6.2cm; aspect ~2.3:1 → 7.0×3.0in)
+    CC_WIDTH, CC_HEIGHT = 7.0, 3.0
+    # Dashboard layout (1.55fr column = ~13cm wide; same chart cell height)
+    DB_WIDTH, DB_HEIGHT = 6.5, 3.4
+
+    # 1. Time-saved comparison — ILLUSTRATIVE benchmark
     render_chart_for_brand("line_chart", {
         "x": ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"],
         "series": [
@@ -41,9 +52,11 @@ def generate_charts():
         ],
         "x_label": "Day",
         "y_label": "Hours spent on slides",
-    }, str(CHARTS / "time_saved.png"), brand_name=BRAND)
+        "illustrative": True,
+    }, str(CHARTS / "time_saved.png"), brand_name=BRAND,
+       width=CC_WIDTH, height=CC_HEIGHT, color_mode="duo")
 
-    # 2. Stack comparison (donut) — what's in the box
+    # 2. Capability donut — REAL Inkline counts (20/11/90/6 are actual)
     render_chart_for_brand("donut", {
         "segments": [
             {"label": "Slide layouts", "value": 20},
@@ -52,17 +65,20 @@ def generate_charts():
             {"label": "Output formats", "value": 6},
         ],
         "center_label": "Inkline\nv0.2",
-    }, str(CHARTS / "capabilities.png"), brand_name=BRAND)
+    }, str(CHARTS / "capabilities.png"), brand_name=BRAND,
+       width=DB_WIDTH, height=DB_HEIGHT)
 
-    # 3. Adoption velocity (area chart) — installs over time (illustrative)
+    # 3. Adoption — ILLUSTRATIVE (not real GitHub data)
     render_chart_for_brand("area_chart", {
         "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
         "series": [
-            {"name": "GitHub stars", "values": [10, 45, 120, 280, 540, 920]},
+            {"name": "Stars", "values": [10, 45, 120, 280, 540, 920]},
         ],
-    }, str(CHARTS / "adoption.png"), brand_name=BRAND)
+        "illustrative": True,
+    }, str(CHARTS / "adoption.png"), brand_name=BRAND,
+       width=CC_WIDTH, height=CC_HEIGHT, color_mode="mono")
 
-    # 4. Feature radar — Inkline vs Gamma vs PowerPoint
+    # 4. Feature radar — ILLUSTRATIVE positioning (subjective rating)
     render_chart_for_brand("radar", {
         "axes": ["Brand Lock", "PDF Quality", "AI Design", "Python API", "Open Source", "Charts"],
         "series": [
@@ -70,9 +86,11 @@ def generate_charts():
             {"name": "Gamma",       "values": [50, 65, 90, 0, 0, 60]},
             {"name": "PowerPoint",  "values": [40, 70, 0, 0, 0, 60]},
         ],
-    }, str(CHARTS / "radar.png"), brand_name=BRAND)
+        "illustrative": True,
+    }, str(CHARTS / "radar.png"), brand_name=BRAND,
+       width=4.5, height=4.0, color_mode="palette")  # 3 series → small palette OK
 
-    # 5. Cost waterfall — what teams save by switching
+    # 5. Cost waterfall — ILLUSTRATIVE per-deck cost model
     render_chart_for_brand("waterfall", {
         "items": [
             {"label": "Manual cost", "value": 200, "total": True},
@@ -81,7 +99,9 @@ def generate_charts():
             {"label": "Revisions", "value": -25},
             {"label": "Inkline cost", "value": 5, "total": True},
         ],
-    }, str(CHARTS / "savings.png"), brand_name=BRAND)
+        "illustrative": True,
+    }, str(CHARTS / "savings.png"), brand_name=BRAND,
+       width=CC_WIDTH, height=CC_HEIGHT, color_mode="duo")
 
     print(f"  -> {len(list(CHARTS.glob('*.png')))} charts generated")
 
@@ -116,7 +136,7 @@ SLIDES = [
         "section": "The Solution",
         "title": "From days of formatting to seconds of compilation",
         "image_path": "charts/time_saved.png",
-        "caption": "Illustrative comparison; Inkline benchmarked at <2s per deck.",
+        "caption": "ILLUSTRATIVE — actual times depend on deck complexity; Inkline benchmarked sub-2s per deck.",
         "bullets": [
             "Sub-2-second PDF compilation via Typst",
             "Same brand every time, no manual fixes",
@@ -173,7 +193,7 @@ SLIDES = [
         "section": "Compare & Contrast",
         "title": "The only tool that scores high on every axis",
         "image_path": "charts/radar.png",
-        "caption": "Higher is better; based on public docs and feature inventories.",
+        "caption": "ILLUSTRATIVE — subjective ratings based on public docs and feature inventories.",
         "bullets": [
             "Brand lock that's actually enforced",
             "Python API that AI agents can call",
@@ -204,7 +224,7 @@ SLIDES = [
         "section": "ROI",
         "title": "Why teams switch in their first sprint",
         "image_path": "charts/savings.png",
-        "caption": "Per-deck cost; figures illustrative.",
+        "caption": "ILLUSTRATIVE — per-deck cost model based on typical analyst rates.",
         "bullets": [
             "$200 worth of designer time per deck",
             "8+ hours of analyst formatting",
@@ -233,7 +253,7 @@ SLIDES = [
         "section": "Momentum",
         "title": "Open source, free, and getting faster",
         "image_path": "charts/adoption.png",
-        "caption": "Illustrative growth trajectory; v0.2 ships April 2026.",
+        "caption": "ILLUSTRATIVE — hypothetical adoption curve, not actual GitHub data.",
         "bullets": [
             "MIT licensed from day one",
             "Active development, weekly commits",

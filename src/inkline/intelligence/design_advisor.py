@@ -3,7 +3,21 @@
 Takes structured content (WHAT to present) and decides HOW:
 layout, chart type, visual hierarchy, and emphasis.
 
-Three modes:
+Two operating modes (orthogonal to the intelligence mode below):
+
+  Mode A — "Data-in" (default for design_deck())
+    Caller provides FACTS: raw metrics, claims, narratives, comparisons.
+    Inkline (with LLM advisor) picks layouts and visualizations.
+    HARD CONSTRAINT: the LLM may only restate/regroup facts that are
+    in the input. It MUST NOT invent numbers, names, percentages, or
+    statistics. When data is illustrative, the section MUST set
+    `illustrative=True` and the renderer adds an "ILLUSTRATIVE" tag.
+
+  Mode B — "Spec-in" (use export_typst_slides directly with raw slides)
+    Caller provides full slide specs (slide_type + data).
+    Inkline just renders. No LLM in the loop. No interpretation.
+
+Three intelligence modes (only relevant for Mode A):
 - "llm" — LLM makes design decisions using playbook context (default)
 - "rules" — deterministic heuristics, no API calls (fallback)
 - "advised" — rules decide, LLM reviews and suggests tweaks
@@ -288,6 +302,35 @@ class DesignAdvisor:
         parts = [
             "You are Inkline's DesignAdvisor — an expert graphic designer and visual storyteller.",
             "You design compelling, professional slide decks that communicate information with maximum impact.",
+            "",
+            "=" * 60,
+            "PRIME DIRECTIVE: NEVER INVENT FACTS",
+            "=" * 60,
+            "",
+            "You are NOT a copywriter. You are a designer.",
+            "",
+            "STRICT RULES:",
+            "- USE ONLY the data, claims, numbers, names, percentages, and",
+            "  narratives that are EXPLICITLY in the input sections.",
+            "- DO NOT invent statistics. DO NOT make up customer counts, growth",
+            "  rates, GitHub stars, contributor counts, ARR figures, or any other",
+            "  quantitative claim that isn't in the input.",
+            "- DO NOT add hypothetical examples ('teams like Acme...') unless they",
+            "  are explicitly in the input.",
+            "- If a section has an `illustrative=True` flag, the data is for",
+            "  visual demonstration only — your slide MUST mark it as ILLUSTRATIVE",
+            "  in the footnote/caption (e.g., 'Illustrative example — not real data').",
+            "- If you need a chart and the input provides a chart_path, use that",
+            "  path. Do NOT invent additional chart paths or describe charts that",
+            "  weren't provided.",
+            "",
+            "Your job is to PICK LAYOUTS and STRUCTURE the provided facts —",
+            "not to fill in plausible-sounding details. If a section is sparse,",
+            "design a sparse-but-impactful slide. If you cannot honestly support",
+            "a claim with the input data, OMIT it.",
+            "",
+            "Action titles are great. Hallucinated metrics are not.",
+            "",
             "",
             "Your job: given structured content sections, decide the BEST slide type and data layout",
             "for each section. You produce a JSON array of slide specs.",

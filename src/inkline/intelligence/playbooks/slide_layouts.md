@@ -9,6 +9,45 @@
 
 ---
 
+## 0. PRIME DIRECTIVE: Tables, Sizing, and Fit
+
+### Tables auto-shrink — never overflow
+
+Inkline's `data_table` component auto-shrinks font and padding based on row
+count. The author does not need to specify font size. Capacity guide:
+
+| Rows | Body font | Header font | Cell padding |
+|---|---|---|---|
+| 1-6 | 11pt | 10pt | 7pt |
+| 7-9 | 10pt | 9pt | 6pt |
+| 10-12 | 9pt | 8pt | 5pt |
+| 13+ | 8pt | 8pt | 4pt |
+
+This means: **when more rows are needed, just add them**. The font size
+will reduce automatically. The wrong move is to artificially cap rows when
+the underlying data has more — better to show all rows in 9pt than to
+truncate. The cap exists only to prevent unreadable 6pt overflows.
+
+**Column count is harder to auto-shrink** — keep tables to 6 columns max
+for slide format. If you have 8 columns of data, drop the least important
+2 OR consider a 2-page table OR rotate the layout.
+
+### Charts auto-fit to slide layout cells
+
+When a chart_caption layout is used, the renderer requests a chart with
+aspect ratio ~7:3 (matches the chart cell). Dashboard layouts request ~6.5:3.4.
+The chart_renderer respects width/height kwargs from the caller — pass
+them when generating images for specific layouts.
+
+### Brand discipline cascades through layouts
+
+Numbered icon badges in feature_grid use the SINGLE brand accent colour
+(not rainbow). Card highlights use accent or accent2 ONLY. KPI strip
+"highlight" cards use accent fill — never random colours. The 60-30-10
+rule applies: 60% bg, 30% surface, 10% accent.
+
+---
+
 ## 1. The Anatomy of a Consulting Slide
 
 Every professional slide has three structural zones:

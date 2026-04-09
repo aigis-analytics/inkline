@@ -60,7 +60,7 @@ SECTIONS = [
         "type": "kpi_dashboard",
         "narrative": "One Python API. Zero design decisions for the caller. Publication-quality PDF in milliseconds.",
         "metrics": {
-            "Slide Layouts": "17",
+            "Slide Layouts": "20",
             "Chart Types": "11",
             "Themes": "90+",
             "Output Formats": "6",
@@ -160,62 +160,90 @@ def build_slides_via_llm():
     charts_dir = OUT / "charts"
     charts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Each chart spec carries (chart_type, data, illustrative, description, color_mode)
+    CC_W, CC_H = 7.0, 3.0  # chart_caption layout
+    DB_W, DB_H = 6.5, 3.4  # dashboard layout
+
     chart_specs = {
-        "time_saved.png": ("line_chart", {
-            "x": ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"],
-            "series": [
-                {"name": "Traditional (PowerPoint)", "values": [4, 8, 12, 16, 20]},
-                {"name": "Inkline", "values": [0.5, 0.5, 0.5, 0.5, 0.5]},
-            ],
-            "x_label": "Day", "y_label": "Hours on slides",
-        }),
-        "capabilities.png": ("donut", {
-            "segments": [
-                {"label": "Slide layouts", "value": 20},
-                {"label": "Chart types", "value": 11},
-                {"label": "Themes", "value": 90},
-                {"label": "Output formats", "value": 6},
-            ],
-            "center_label": "Inkline\nv0.2",
-        }),
-        "adoption.png": ("area_chart", {
-            "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-            "series": [{"name": "GitHub stars", "values": [10, 45, 120, 280, 540, 920]}],
-        }),
-        "radar.png": ("radar", {
-            "axes": ["Brand Lock", "PDF Quality", "AI Design", "Python API", "Open Source", "Charts"],
-            "series": [
-                {"name": "Inkline",     "values": [95, 90, 85, 100, 100, 90]},
-                {"name": "Gamma",       "values": [50, 65, 90, 0, 0, 60]},
-                {"name": "PowerPoint",  "values": [40, 70, 0, 0, 0, 60]},
-            ],
-        }),
-        "savings.png": ("waterfall", {
-            "items": [
-                {"label": "Manual cost", "value": 200, "total": True},
-                {"label": "Designer", "value": -80},
-                {"label": "Analyst time", "value": -90},
-                {"label": "Revisions", "value": -25},
-                {"label": "Inkline cost", "value": 5, "total": True},
-            ],
-        }),
+        "time_saved.png": {
+            "type": "line_chart",
+            "data": {
+                "x": ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"],
+                "series": [
+                    {"name": "Traditional (PowerPoint)", "values": [4, 8, 12, 16, 20]},
+                    {"name": "Inkline", "values": [0.5, 0.5, 0.5, 0.5, 0.5]},
+                ],
+                "x_label": "Day", "y_label": "Hours on slides",
+                "illustrative": True,
+            },
+            "desc": "ILLUSTRATIVE line chart showing time-saved comparison (synthetic timing data, NOT from real benchmarks). Use only with explicit ILLUSTRATIVE caption.",
+            "width": CC_W, "height": CC_H, "color_mode": "duo",
+        },
+        "capabilities.png": {
+            "type": "donut",
+            "data": {
+                "segments": [
+                    {"label": "Slide layouts", "value": 20},
+                    {"label": "Chart types", "value": 11},
+                    {"label": "Themes", "value": 90},
+                    {"label": "Output formats", "value": 6},
+                ],
+                "center_label": "Inkline\nv0.2",
+            },
+            "desc": "REAL donut showing Inkline v0.2 capability counts (20/11/90/6 are factual). Safe to cite directly.",
+            "width": DB_W, "height": DB_H, "color_mode": "mono",
+        },
+        "adoption.png": {
+            "type": "area_chart",
+            "data": {
+                "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                "series": [{"name": "Stars", "values": [10, 45, 120, 280, 540, 920]}],
+                "illustrative": True,
+            },
+            "desc": "ILLUSTRATIVE area chart (NOT real GitHub data, hypothetical adoption curve). Caption MUST say illustrative.",
+            "width": CC_W, "height": CC_H, "color_mode": "mono",
+        },
+        "radar.png": {
+            "type": "radar",
+            "data": {
+                "axes": ["Brand Lock", "PDF Quality", "AI Design", "Python API", "Open Source", "Charts"],
+                "series": [
+                    {"name": "Inkline",     "values": [95, 90, 85, 100, 100, 90]},
+                    {"name": "Gamma",       "values": [50, 65, 90, 0, 0, 60]},
+                    {"name": "PowerPoint",  "values": [40, 70, 0, 0, 0, 60]},
+                ],
+                "illustrative": True,
+            },
+            "desc": "ILLUSTRATIVE radar comparing Inkline/Gamma/PowerPoint (subjective ratings based on public docs). Caption must mark as illustrative.",
+            "width": 4.5, "height": 4.0, "color_mode": "palette",
+        },
+        "savings.png": {
+            "type": "waterfall",
+            "data": {
+                "items": [
+                    {"label": "Manual cost", "value": 200, "total": True},
+                    {"label": "Designer", "value": -80},
+                    {"label": "Analyst time", "value": -90},
+                    {"label": "Revisions", "value": -25},
+                    {"label": "Inkline cost", "value": 5, "total": True},
+                ],
+                "illustrative": True,
+            },
+            "desc": "ILLUSTRATIVE waterfall — per-deck cost MODEL based on typical analyst rates ($50/hr × 4hr = $200 baseline). NOT real customer data. Caption must mark as illustrative.",
+            "width": CC_W, "height": CC_H, "color_mode": "duo",
+        },
     }
 
     chart_descriptions = []
-    for filename, (chart_type, data) in chart_specs.items():
-        render_chart_for_brand(chart_type, data, str(charts_dir / filename), brand_name=BRAND)
-        # Build a one-line description of each chart for the LLM
-        if filename == "time_saved.png":
-            desc = "line chart: hours per day spent on slides — Traditional (rising 4→20) vs Inkline (flat 0.5)"
-        elif filename == "capabilities.png":
-            desc = "donut chart: 20 layouts, 11 charts, 90 themes, 6 output formats"
-        elif filename == "adoption.png":
-            desc = "area chart: GitHub stars growing 10→920 over 6 months"
-        elif filename == "radar.png":
-            desc = "radar chart: Inkline vs Gamma vs PowerPoint across 6 capability axes"
-        elif filename == "savings.png":
-            desc = "waterfall chart: per-deck cost waterfall — $200 manual → $5 with Inkline"
-        chart_descriptions.append(f"  - charts/{filename}: {desc}")
+    for filename, spec in chart_specs.items():
+        render_chart_for_brand(
+            spec["type"], spec["data"], str(charts_dir / filename),
+            brand_name=BRAND,
+            width=spec["width"], height=spec["height"],
+            color_mode=spec["color_mode"],
+        )
+        marker = "[ILLUSTRATIVE]" if spec["data"].get("illustrative") else "[REAL DATA]"
+        chart_descriptions.append(f"  - charts/{filename} {marker}: {spec['desc']}")
 
     chart_catalog = "\n".join(chart_descriptions)
     print(f"  Pre-rendered {len(chart_specs)} chart PNGs for LLM to reference")
@@ -235,6 +263,25 @@ def build_slides_via_llm():
         "entirely if possible. Every numerical claim should be hero-formatted. "
         "Tables MAX 5 columns × 6 rows. "
         "\n\n"
+        "ABSOLUTELY FORBIDDEN (zero-tolerance hallucination rules):\n"
+        "- DO NOT invent customer counts, GitHub stars, ARR figures, NRR, growth\n"
+        "  rates, contributor counts, monthly downloads, or ANY metric that is\n"
+        "  not in the input sections.\n"
+        "- DO NOT invent source attributions like 'based on internal timing studies'\n"
+        "  or 'across 50+ decks' or 'from beta customer interviews'. If the input\n"
+        "  has no source, the slide has no source.\n"
+        "- DO NOT name fictional customers or design partners (no 'Acme Corp',\n"
+        "  no '3 YC companies', no 'Fortune 500 enterprises').\n"
+        "\n"
+        "ILLUSTRATIVE CHART HANDLING:\n"
+        "Each chart in the catalog below is tagged [REAL DATA] or [ILLUSTRATIVE].\n"
+        "When you use a chart tagged [ILLUSTRATIVE], the slide MUST:\n"
+        "  1. Set the caption field to start with 'ILLUSTRATIVE — '\n"
+        "  2. Include in the footnote: 'Illustrative example, not real data'\n"
+        "  3. The chart_renderer adds an ILLUSTRATIVE watermark automatically.\n"
+        "Charts tagged [REAL DATA] use FACTUAL Inkline counts (slide layouts, chart\n"
+        "types, themes, etc.) and can be cited directly.\n"
+        "\n"
         "AVAILABLE PRE-RENDERED CHART IMAGES (use exact image_path strings):\n"
         f"{chart_catalog}\n"
         "\n"
