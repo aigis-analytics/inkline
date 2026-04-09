@@ -34,6 +34,14 @@ from inkline.intelligence.overflow_audit import (
     format_report,
     AuditWarning,
 )
+from inkline.intelligence.template_catalog import (
+    ARCHETYPES,
+    find_templates,
+    get_archetype_recipe,
+    list_archetypes,
+    load_manifest,
+    suggest_archetype,
+)
 
 __all__ = [
     "DesignAdvisor",
@@ -42,4 +50,11 @@ __all__ = [
     "audit_slide",
     "format_report",
     "AuditWarning",
+    # Template catalog
+    "ARCHETYPES",
+    "find_templates",
+    "get_archetype_recipe",
+    "list_archetypes",
+    "load_manifest",
+    "suggest_archetype",
 ]

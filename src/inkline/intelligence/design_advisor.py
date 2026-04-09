@@ -207,6 +207,8 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        additional_guidance: str = "",
+        reference_archetypes: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
         """Design a slide deck from structured content sections.
 
@@ -226,6 +228,16 @@ class DesignAdvisor:
             Target audience (e.g., "PE fund CIOs", "board members").
         goal : str, optional
             Deck goal (e.g., "secure pre-seed investment", "inform board").
+        additional_guidance : str, optional
+            Free-form guidance the user wants the LLM to follow on top of the
+            playbook rules. Used to teach/steer the advisor in-context. Examples:
+            "Use the iceberg metaphor for the risk slide", "Lean into our
+            burgundy palette", "Avoid all 4-card layouts — use 3-card or split".
+        reference_archetypes : list[str], optional
+            Archetype names from ``inkline.intelligence.template_catalog.ARCHETYPES``
+            that the LLM should consider for this deck. The structured recipes
+            for each are inlined into the system prompt, biasing the LLM toward
+            the named patterns. Use ``list_archetypes()`` to see options.
 
         Returns
         -------
@@ -237,6 +249,8 @@ class DesignAdvisor:
                 return self._design_deck_llm(
                     title, sections, date=date, subtitle=subtitle,
                     contact=contact, audience=audience, goal=goal,
+                    additional_guidance=additional_guidance,
+                    reference_archetypes=reference_archetypes,
                 )
             except Exception as e:
                 log.warning("LLM mode failed, falling back to rules: %s", e)
@@ -260,19 +274,22 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        additional_guidance: str = "",
+        reference_archetypes: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
         """Use Claude to design the optimal slide deck."""
         import anthropic
 
         client = anthropic.Anthropic(api_key=self.api_key)
 
-        # Build system prompt with playbook context
-        system_prompt = self._build_system_prompt()
+        # Build system prompt with playbook context (+ optional archetype recipes)
+        system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
 
         # Build user prompt with the content to design
         user_prompt = self._build_user_prompt(
             title, sections, date=date, subtitle=subtitle,
             contact=contact, audience=audience, goal=goal,
+            additional_guidance=additional_guidance,
         )
 
         log.info("DesignAdvisor LLM: calling %s with %d chars system, %d chars user",
@@ -292,7 +309,10 @@ class DesignAdvisor:
         log.info("DesignAdvisor LLM: planned %d slides for '%s'", len(slides), title)
         return slides
 
-    def _build_system_prompt(self) -> str:
+    def _build_system_prompt(
+        self,
+        reference_archetypes: Optional[list[str]] = None,
+    ) -> str:
         """Build the system prompt with playbook context."""
         from inkline.intelligence.playbooks import load_playbooks_for_task
 
@@ -349,6 +369,32 @@ class DesignAdvisor:
             parts.append(content)
             parts.append("")
 
+        # Optional: inline structured archetype recipes the caller pinned
+        if reference_archetypes:
+            from inkline.intelligence.template_catalog import get_archetype_recipe
+            parts.append("=" * 60)
+            parts.append("PINNED ARCHETYPES")
+            parts.append("=" * 60)
+            parts.append("")
+            parts.append(
+                "The caller has pinned these archetype recipes — bias your slide "
+                "selection toward these patterns where the data fits:"
+            )
+            parts.append("")
+            for arch_name in reference_archetypes:
+                try:
+                    recipe = get_archetype_recipe(arch_name)
+                except ValueError:
+                    log.warning("Unknown pinned archetype '%s', skipping", arch_name)
+                    continue
+                parts.append(f"### {arch_name}: {recipe['name']}")
+                parts.append(f"  best_for: {', '.join(recipe['best_for'])}")
+                parts.append(f"  layout: {recipe['layout']}")
+                parts.append(f"  palette_rule: {recipe['palette_rule']}")
+                parts.append(f"  inkline_slide_type: {recipe['inkline_slide_type']}")
+                parts.append(f"  n_items: {recipe['n_items']}")
+                parts.append("")
+
         return "\n".join(parts)
 
     def _build_user_prompt(
@@ -361,6 +407,7 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        additional_guidance: str = "",
     ) -> str:
         """Build the user prompt with content to design."""
         parts = [
@@ -374,6 +421,11 @@ class DesignAdvisor:
             parts.append(f"Target audience: {audience}")
         if goal:
             parts.append(f"Goal: {goal}")
+        if additional_guidance:
+            parts.append("")
+            parts.append("## Additional guidance from the caller")
+            parts.append("Apply this on top of the playbook rules:")
+            parts.append(additional_guidance.strip())
 
         parts.append(f"\nBrand: {self.brand}")
         parts.append(f"Template style: {self.template}")

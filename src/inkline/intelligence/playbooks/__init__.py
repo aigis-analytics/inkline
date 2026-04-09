@@ -38,6 +38,7 @@ PLAYBOOK_REGISTRY: Dict[str, str] = {
     "color_theory": "color_theory.md",
     "typography": "typography.md",
     "visual_libraries": "visual_libraries.md",
+    "template_catalog": "template_catalog.md",
 }
 
 # Convenience list of playbook names
@@ -120,9 +121,9 @@ def load_playbooks_for_task(task_type: str) -> Dict[str, str]:
     """
     task_playbooks = {
         "chart": ["chart_selection", "color_theory"],
-        "slide": ["slide_layouts", "typography", "color_theory"],
+        "slide": ["slide_layouts", "template_catalog", "typography", "color_theory"],
         "document": ["document_design", "typography", "color_theory"],
-        "infographic": ["infographic_styles", "color_theory", "typography"],
+        "infographic": ["infographic_styles", "template_catalog", "color_theory", "typography"],
         "full": PLAYBOOK_NAMES,
     }
 
@@ -155,6 +156,7 @@ def get_playbook_summary() -> str:
         "color_theory": "Colour palette selection, accessibility (WCAG), and the 60-30-10 rule",
         "typography": "Font selection, pairing rules, type scales for slides and documents",
         "visual_libraries": "Reference catalogue of open-source chart libraries and design systems",
+        "template_catalog": "16 named slide archetype recipes (iceberg, pinwheel, hexagonal, ladder, waffle, etc.) with structural coordinates, plus a queryable index of 771 real templates from SlideModel + Genspark",
     }
 
     lines = ["Available Design Playbooks:", ""]
