@@ -222,22 +222,15 @@ def audit_rendered_pdf(pdf_path: str | Path, expected_slides: int) -> list[Audit
 
     Counts actual pages in the PDF and compares to expected slide count.
     Returns errors if any slides overflowed onto extra pages.
-
-    This is the post-render visual audit that the static capacity audit
-    cannot do. It catches the cases where:
-    - Title wraps to 2 lines and pushes a chart off the page
-    - A grid is taller than the available content area
-    - Page header/footer chrome reduces usable height unexpectedly
     """
     warnings: list[AuditWarning] = []
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         return warnings
 
-    # Try to count pages via pdf libraries (pypdf preferred, pdfplumber fallback)
     actual_pages = _count_pdf_pages(pdf_path)
     if actual_pages is None:
-        return warnings  # no PDF library — skip silently
+        return warnings
 
     if actual_pages > expected_slides:
         overflow = actual_pages - expected_slides
@@ -264,6 +257,85 @@ def audit_rendered_pdf(pdf_path: str | Path, expected_slides: int) -> list[Audit
             ),
         ))
 
+    return warnings
+
+
+def audit_chart_image(image_path: str | Path) -> list[AuditWarning]:
+    """Detect content touching the edge of a chart PNG (bbox clipping).
+
+    When matplotlib renders with `bbox_inches="tight"`, labels positioned
+    outside the axes can be clipped. This audit checks if any content
+    pixels are touching the outer 4px border of the image — that's a
+    near-certain sign of clipping.
+
+    Returns warning(s) if the chart appears to be clipped.
+    """
+    warnings: list[AuditWarning] = []
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        return warnings
+
+    image_path = Path(image_path)
+    if not image_path.exists():
+        return warnings
+
+    try:
+        with Image.open(image_path) as im:
+            im_rgba = im.convert("RGBA")
+            arr = np.array(im_rgba)
+    except Exception:
+        return warnings
+
+    if arr.size == 0 or arr.shape[0] < 20 or arr.shape[1] < 20:
+        return warnings
+
+    # Detect "content" pixels — anything that's not the chart background.
+    # Background is whatever colour is in the corner pixels (most chart
+    # backgrounds are uniform white/off-white). A content pixel differs
+    # from background by more than 25/255 in any channel.
+    bg_pixel = arr[2, 2, :3].astype(int)  # near-corner sample
+    diff = np.abs(arr[:, :, :3].astype(int) - bg_pixel).max(axis=2)
+    content_mask = diff > 25  # boolean
+
+    # Check the outer 4px border for content
+    border = 4
+    h, w = content_mask.shape
+    edges_with_content = []
+    if content_mask[:border, :].any():
+        edges_with_content.append("top")
+    if content_mask[-border:, :].any():
+        edges_with_content.append("bottom")
+    if content_mask[:, :border].any():
+        edges_with_content.append("left")
+    if content_mask[:, -border:].any():
+        edges_with_content.append("right")
+
+    if edges_with_content:
+        warnings.append(AuditWarning(
+            slide_index=-1,
+            slide_type="chart_image",
+            severity="warn",
+            message=(
+                f"CHART CLIPPING: {image_path.name} has content touching the "
+                f"{', '.join(edges_with_content)} edge — labels or data are "
+                f"likely cut off. Increase figure size, move labels inside the "
+                f"plot area, or use an external legend. Inspect: {image_path}"
+            ),
+        ))
+
+    return warnings
+
+
+def audit_all_chart_images(charts_dir: str | Path) -> list[AuditWarning]:
+    """Audit every PNG in a charts directory for edge clipping."""
+    charts_dir = Path(charts_dir)
+    if not charts_dir.is_dir():
+        return []
+    warnings: list[AuditWarning] = []
+    for png in sorted(charts_dir.glob("*.png")):
+        warnings.extend(audit_chart_image(png))
     return warnings
 
 

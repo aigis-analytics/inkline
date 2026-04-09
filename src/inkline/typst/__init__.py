@@ -126,20 +126,35 @@ def export_typst_slides(
 
     compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
 
-    # Post-render visual audit — count actual PDF pages vs expected slides.
-    # This is the only audit that catches real overflow (chart pushing off page,
-    # 2-line title eating content area, etc.)
+    # Post-render visual audit — three layers:
+    #   1. Page count vs expected slides (catches layout overflow)
+    #   2. Chart image edge clipping (catches matplotlib labels falling off)
+    #   3. Static content capacity (catches too-many-bullets-in-slide)
     if audit:
         try:
             from inkline.intelligence.overflow_audit import (
                 audit_rendered_pdf,
+                audit_chart_image,
                 emit_audit_report,
             )
             post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
+
+            # Audit any embedded chart images for edge clipping
+            seen_images = set()
+            for s in slides:
+                img = s.get("data", {}).get("image_path")
+                if img and img not in seen_images:
+                    seen_images.add(img)
+                    # Resolve relative paths against image_root or output dir
+                    if root:
+                        img_path = Path(root) / img
+                    else:
+                        img_path = output_path.parent / img
+                    if img_path.exists():
+                        post_warnings.extend(audit_chart_image(img_path))
+
             all_warnings = pre_warnings + post_warnings
             if all_warnings:
-                # Print to stderr (visible without logging config) — this is
-                # the user-facing audit that the previous version never showed.
                 emit_audit_report(all_warnings)
         except Exception as e:
             log.debug("post-render audit skipped: %s", e)

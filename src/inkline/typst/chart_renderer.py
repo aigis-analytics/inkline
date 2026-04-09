@@ -383,39 +383,57 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
 def _render_donut(data, *, colors, accent, bg, text_color, muted, width, height):
     """Donut chart (max 6 segments) — uses shades of accent for brand consistency.
 
+    Layout: donut on the left, labelled legend on the right. This avoids
+    the chronic clipping problem of pie/donut charts with external labels.
+
     data:
         segments: list of {label, value}
         center_label: str (optional — text in center)
     """
-    fig, ax = _plt.subplots(figsize=(min(width, height), min(width, height)))
+    fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
 
     segments = data.get("segments", [])[:6]
     labels = [s["label"] for s in segments]
     values = [s["value"] for s in segments]
+    total = sum(values) if values else 1
 
     # Use shades of accent (mono palette) — NOT rainbow.
-    # Each segment gets a different opacity / lightness of the brand colour.
     seg_colors = _shades_of(accent, len(segments))
 
-    wedges, texts, autotexts = ax.pie(
-        values, labels=labels, colors=seg_colors, autopct="%1.0f%%",
-        startangle=90, pctdistance=0.75, labeldistance=1.1,
-        wedgeprops={"width": 0.4, "edgecolor": bg, "linewidth": 2},
-    )
-    for t in texts:
-        t.set_color(text_color)
-        t.set_fontsize(9)
+    # Place donut in left ~55% of figure; legend in right ~45%
+    ax.set_position([0.02, 0.05, 0.55, 0.9])
+
+    wedges, autotexts = ax.pie(
+        values, colors=seg_colors, autopct="%1.0f%%",
+        startangle=90, pctdistance=0.78,
+        wedgeprops={"width": 0.42, "edgecolor": bg, "linewidth": 2},
+        textprops={"fontsize": 10, "color": "white", "fontweight": "bold"},
+    )[:2]
     for t in autotexts:
         t.set_color("white")
-        t.set_fontsize(9)
+        t.set_fontsize(10)
         t.set_fontweight("bold")
 
     if data.get("center_label"):
         ax.text(0, 0, data["center_label"], ha="center", va="center",
-                fontsize=14, fontweight="bold", color=text_color)
+                fontsize=15, fontweight="bold", color=text_color)
 
-    fig.tight_layout()
+    # Right-side legend with label + value, vertically centered
+    legend_lines = [
+        f"{labels[i]}  ·  {values[i]}" for i in range(len(segments))
+    ]
+    legend_handles = [
+        _plt.Rectangle((0, 0), 1, 1, color=seg_colors[i]) for i in range(len(segments))
+    ]
+    fig.legend(
+        legend_handles, legend_lines,
+        loc="center left", bbox_to_anchor=(0.6, 0.5),
+        frameon=False, fontsize=11, labelcolor=text_color,
+        handlelength=1.2, handleheight=1.2, handletextpad=0.8,
+        labelspacing=1.0,
+    )
+
     return fig
 
 
@@ -557,15 +575,23 @@ def _render_heatmap(data, *, colors, accent, bg, text_color, muted, width, heigh
 def _render_radar(data, *, colors, accent, bg, text_color, muted, width, height):
     """Radar/spider chart for multi-axis comparison.
 
+    Layout: radar on the left, legend on the right (separated). Axis labels
+    given generous padding so they never clip. Designed for the wider
+    chart_caption / dashboard cells.
+
     data:
         axes: list of str (axis labels)
         series: list of {name, values} (values 0-100 or 0-max)
     """
     import numpy as np
 
-    fig, ax = _plt.subplots(figsize=(min(width, height), min(width, height)),
-                             subplot_kw={"projection": "polar"})
+    fig = _plt.figure(figsize=(width, height))
     fig.patch.set_facecolor(bg)
+
+    # Polar plot in left ~62% of figure with margin for axis labels;
+    # legend on the right ~32%.
+    ax = fig.add_axes([0.08, 0.10, 0.55, 0.80], projection="polar")
+    ax.set_facecolor(bg)
 
     axes_labels = data.get("axes", [])
     series = data.get("series", [])
@@ -581,19 +607,32 @@ def _render_radar(data, *, colors, accent, bg, text_color, muted, width, height)
     for i, s in enumerate(series):
         color = colors[i % len(colors)]
         values = s["values"] + s["values"][:1]
-        ax.plot(angles, values, color=color, linewidth=2, label=s.get("name", ""))
+        ax.plot(angles, values, color=color, linewidth=2.2, label=s.get("name", ""))
         ax.fill(angles, values, color=color, alpha=0.15)
 
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(axes_labels, fontsize=9, color=text_color)
-    ax.tick_params(axis="y", labelsize=8, colors=muted)
-    ax.grid(color=muted, alpha=0.3)
-    ax.set_facecolor(bg)
+    ax.set_xticklabels(axes_labels, fontsize=8, color=text_color)
+    ax.tick_params(axis="y", labelsize=7, colors=muted, pad=2)
+    ax.grid(color=muted, alpha=0.3, linewidth=0.5)
+    # Push axis labels further from the chart so they don't clip
+    ax.tick_params(axis="x", pad=8)
+    # Hide r-axis tick labels for cleaner look (the legend explains scale)
+    ax.set_yticklabels([])
 
-    if len(series) > 1:
-        ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.0), frameon=False, fontsize=9, labelcolor=text_color)
+    # External legend (right side) — does NOT overlap chart
+    if len(series) > 0:
+        legend_handles = [
+            _plt.Line2D([0], [0], color=colors[i % len(colors)], linewidth=2.2,
+                        label=s.get("name", ""))
+            for i, s in enumerate(series)
+        ]
+        fig.legend(
+            handles=legend_handles,
+            loc="center left", bbox_to_anchor=(0.66, 0.5),
+            frameon=False, fontsize=10, labelcolor=text_color,
+            handlelength=1.6, labelspacing=1.2,
+        )
 
-    fig.tight_layout()
     return fig
 
 

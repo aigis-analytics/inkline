@@ -857,20 +857,21 @@ class TypstSlideRenderer:
         if not bars:
             return self._content_slide(d)
 
-        colors = t.get("chart_colors", [t["accent"]])
+        # Brand discipline: ALL progress bars use the SINGLE brand accent
+        # colour. Variation is by FILL PERCENTAGE, not hue. A roadmap is
+        # one programme, not six unrelated initiatives in different colours.
         bar_rows = []
         for i, b in enumerate(bars):
             label = _esc(b.get("label", ""))
             pct = b.get("pct", 0)
             value = _esc(b.get("value", f"{pct}%"))
-            color = colors[i % len(colors)]
 
             bar_rows.append(f"""  grid(
     columns: (4cm, 1fr, 1.5cm),
     gutter: 8pt,
     align(right + horizon, text(size: 10pt, weight: "bold", fill: {_rgb(t['text'])})[{label}]),
     block(width: 100%, height: 16pt, fill: {_rgb(t['card_fill'])}, stroke: 0.5pt + {_rgb(t['border'])}, radius: 3pt)[
-      #block(width: {pct}%, height: 100%, fill: {_rgb(color)}, radius: 3pt)[]
+      #block(width: {pct}%, height: 100%, fill: {_rgb(t['accent'])}, radius: 3pt)[]
     ],
     align(left + horizon, text(size: 10pt, weight: "bold", fill: {_rgb(t['accent'])})[{value}]),
   )""")
