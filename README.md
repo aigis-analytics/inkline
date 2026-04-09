@@ -3,9 +3,11 @@
 **Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
 Inkline turns structured data or Markdown into publication-quality, brand-consistent
-output. It ships with 92 built-in themes, 17 slide layouts, 11 chart types, a 7-brand
-registry, an LLM-driven design advisor, and an overflow audit that keeps content
-inside the slide frame.
+output. It ships with 90 built-in themes, 20 slide layouts, 11 chart types, a 1-brand
+public registry (extensible via plugins), an LLM-driven design advisor with a
+pluggable caller (Anthropic SDK or Claude Code subprocess — no API key required),
+a 771-template archetype catalog, and a two-layer audit (structural + Claude vision)
+that keeps content inside the slide frame and on-brand.
 
 ```bash
 pip install inkline                # core: Markdown → HTML
@@ -208,7 +210,7 @@ src/inkline/
 ├── pptx/             # python-pptx backend
 ├── slides/           # Google Slides API
 ├── typst/            # Typst backend (default)
-│   ├── slide_renderer.py    # 17 slide layouts
+│   ├── slide_renderer.py    # 20 slide layouts
 │   ├── chart_renderer.py    # 11 matplotlib charts
 │   ├── theme_registry.py    # template → theme generation
 │   └── themes/              # 90 themes in 13 categories

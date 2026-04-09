@@ -1,6 +1,6 @@
 # Inkline — Technical Specification
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Language:** Python 3.11+
 **License:** MIT
 **Status:** Production
@@ -19,11 +19,17 @@ embedded fonts and crisp vector graphics.
 1. **Brand first** — every output is bound to a registered brand identity
    (colours, typography, logos, metadata, chart palette).
 2. **Data in, art out** — callers describe *what* they want, never *how* to draw it.
-3. **Fits on the page** — hard content limits per layout + an audit pass prevent overflow.
-4. **Backend agnostic** — Typst, HTML, WeasyPrint, python-pptx, Google Slides
+3. **Fits on the page** — hard content limits per layout + a structural audit
+   pass + optional Claude vision audit on rendered PNGs prevent overflow.
+4. **Facts discipline** — in "data-in" mode the LLM advisor may only restate
+   the numbers and claims supplied by the caller; it cannot invent statistics.
+   Illustrative content must be marked and is auto-tagged in the renderer.
+5. **Backend agnostic** — Typst, HTML, WeasyPrint, python-pptx, Google Slides
    all accept the same brand + content model.
-5. **Intelligence is optional** — rule-based design advisor works offline; LLM
-   advisor activates when `ANTHROPIC_API_KEY` is set.
+6. **Intelligence is optional and pluggable** — rule-based design advisor works
+   offline; LLM advisor activates when `ANTHROPIC_API_KEY` is set OR via the
+   bundled Claude Code subprocess caller (no API key required, uses the
+   user's logged-in Pro/Max subscription).
 
 ---
 
@@ -40,14 +46,16 @@ embedded fonts and crisp vector graphics.
 │                    inkline.intelligence                     │
 │  ContentAnalyzer → LayoutSelector → ChartAdvisor            │
 │  DesignAdvisor  (rules | advised | llm modes)               │
-│  OverflowAudit  (hard capacity + image sizing)              │
+│  TemplateCatalog (771 archetypes + 16 structured recipes)   │
+│  OverflowAudit  (capacity + image sizing + Claude vision)   │
+│  ClaudeCodeCaller (subprocess bridge, no API key)           │
 └──────────────┬──────────────────────────────────────────────┘
                │
                ▼
 ┌──────────────────────┐    ┌──────────────────────────────┐
 │  inkline.brands      │───▶│  inkline.typst.theme_registry│
 │  BaseBrand registry  │    │  brand + template → theme    │
-│  1 public brand      │    │  (90 themes, 11 templates)   │
+│  1 public + plugin   │    │  (90 themes, 10 templates)   │
 └──────────────────────┘    └──────────────┬───────────────┘
                                            │
                                            ▼
@@ -77,8 +85,8 @@ src/inkline/
 ├── typst/
 │   ├── __init__.py          # export_typst_slides(), export_typst_document()
 │   ├── compiler.py          # Typst subprocess wrapper
-│   ├── slide_renderer.py    # TypstSlideRenderer — 17 layouts
-│   ├── doc_renderer.py      # Markdown → Typst document
+│   ├── slide_renderer.py    # TypstSlideRenderer — 20 layouts
+│   ├── document_renderer.py # Markdown → Typst document
 │   ├── chart_renderer.py    # matplotlib chart generator (11 types)
 │   ├── components.py        # Shared Typst primitives (card, badge, footer…)
 │   ├── theme_registry.py    # brand_to_typst_theme(), SLIDE_TEMPLATES
@@ -87,11 +95,20 @@ src/inkline/
 ├── intelligence/
 │   ├── __init__.py          # DesignAdvisor, audit_deck, audit_image
 │   ├── design_advisor.py    # Main entry — design_deck(), design_document()
+│   ├── claude_code.py       # build_claude_code_caller() — subprocess LLM bridge
 │   ├── content_analyzer.py  # ContentAnalysis, ContentType enum
 │   ├── layout_selector.py   # select_layout(), SLIDE_CAPACITY
 │   ├── chart_advisor.py     # suggest_chart_type()
-│   ├── overflow_audit.py    # audit_deck(), audit_image()
-│   └── playbooks/           # colour theory, typography, design rules
+│   ├── overflow_audit.py    # audit_deck(), audit_image(), audit_*_with_llm()
+│   ├── playbooks/           # 9 playbooks: colour theory, typography, design
+│   │                        #   rules, infographic styles, slide layouts,
+│   │                        #   chart selection, document design, visual
+│   │                        #   libraries, template catalog
+│   └── template_catalog/    # 771-template manifest + 16 archetype recipes
+│       ├── __init__.py      # find_templates(), get_archetype_recipe()
+│       ├── slidemodel_manifest.json          (328 templates)
+│       ├── genspark_professional_manifest.json (128 multi-slide decks)
+│       └── genspark_manifest.json            (315 single-thumb templates)
 └── assets/
     └── fonts/               # bundled fonts
 ```
@@ -239,24 +256,131 @@ THEME_CATEGORIES: dict[str, list[str]]
 ### 4.5 Intelligence — `inkline.intelligence`
 
 ```python
+LLMCaller = Callable[[str, str], str]   # (system_prompt, user_prompt) -> text
+
 class DesignAdvisor:
-    def __init__(self, brand: str, template: str = "consulting",
-                 mode: Literal["rules", "advised", "llm"] = "advised")
-    def design_deck(self, title: str, sections: list[dict],
-                    audience: str = "", goal: str = "") -> list[dict]
-    def design_document(self, markdown: str, exhibits: list[dict] | None = None) -> str
+    def __init__(
+        self,
+        brand: str = "minimal",
+        template: str = "brand",
+        mode: Literal["rules", "advised", "llm"] = "llm",
+        api_key: str | None = None,
+        model: str = "claude-sonnet-4-20250514",
+        llm_caller: LLMCaller | None = None,    # plug in any caller
+    ) -> None: ...
+
+    def design_deck(
+        self,
+        title: str,
+        sections: list[dict],
+        *,
+        date: str = "",
+        subtitle: str = "",
+        contact: dict | None = None,
+        audience: str = "",
+        goal: str = "",
+        additional_guidance: str = "",            # free-form steering
+        reference_archetypes: list[str] | None = None,  # bias toward catalog patterns
+    ) -> list[dict]: ...
+
+    def design_document(self, markdown: str, exhibits: list[dict] | None = None) -> str: ...
 
 select_layout(analysis: ContentAnalysis, context: dict | None = None) -> LayoutDecision
 SLIDE_CAPACITY: dict[str, int]
 
-# Overflow audit
+# Structural overflow audit (no API needed)
 audit_deck(slides: list[dict]) -> list[AuditWarning]
 audit_slide(slide_index: int, slide_type: str, data: dict) -> list[AuditWarning]
 audit_image(path, *, max_width_cm=20.7, max_height_cm=8.5, dpi=200) -> list[AuditWarning]
+audit_chart_image(image_path) -> list[AuditWarning]            # label clipping, aspect
+audit_all_chart_images(charts_dir) -> list[AuditWarning]
+audit_rendered_pdf(pdf_path, expected_slides: int) -> list[AuditWarning]
 format_report(warnings: list[AuditWarning]) -> str
+emit_audit_report(warnings: list[AuditWarning]) -> None        # logger output
+
+# Claude vision audit — pixel-grounded check on the rendered slide
+audit_slide_with_llm(
+    image_path,
+    *,
+    slide_index: int = -1,
+    slide_type: str = "",
+    api_key: str | None = None,
+    model: str = "claude-sonnet-4-20250514",
+) -> list[AuditWarning]
+
+audit_deck_with_llm(pdf_path, expected_slides: int, **kwargs) -> list[AuditWarning]
 ```
 
-### 4.6 Chart renderer — `inkline.typst.chart_renderer`
+### 4.6 Claude Code subprocess caller — `inkline.intelligence.claude_code`
+
+Run the LLM design pipeline against the user's logged-in Claude Pro/Max
+subscription instead of consuming `ANTHROPIC_API_KEY` budget. Adds zero
+new dependencies — only `subprocess` from the stdlib.
+
+```python
+from inkline.intelligence import DesignAdvisor
+from inkline.intelligence.claude_code import (
+    build_claude_code_caller,
+    claude_code_available,
+    ClaudeCodeNotInstalled,
+)
+
+def build_claude_code_caller(
+    *,
+    model: str = "sonnet",                # or "opus", or full ID
+    timeout: int = 300,
+    extra_args: list[str] | None = None,  # forwarded to `claude`
+) -> LLMCaller
+
+def claude_code_available() -> bool       # is the `claude` CLI on $PATH?
+
+class ClaudeCodeNotInstalled(RuntimeError): ...
+
+# Wire it up:
+caller = build_claude_code_caller(model="sonnet")
+advisor = DesignAdvisor(brand="aigis", llm_caller=caller, mode="llm")
+```
+
+Internally invokes `claude --print --bare --model <m> --no-session-persistence
+--output-format text --append-system-prompt <playbook>` and pipes the user
+brief on stdin. The `--bare` flag skips hooks, plugins, MCP servers, and
+CLAUDE.md auto-discovery so Inkline supplies the entire prompt.
+
+### 4.7 Template catalog — `inkline.intelligence.template_catalog`
+
+Searchable index of 771 real slide templates (snapshot 2026-04-09) plus 16
+structured archetype recipes for common infographic patterns. Manifests
+ship as ~1 MB of static JSON inside the package; image previews stay on
+remote CDNs unless `INKLINE_TEMPLATE_CATALOG_DIR` points at a local mirror.
+
+```python
+from inkline.intelligence.template_catalog import (
+    load_manifest,         # name -> dict ('slidemodel', 'genspark_professional', 'genspark_creative')
+    find_templates,        # search by tags / palette / keyword
+    list_archetypes,       # 16 names: 'iceberg', 'pyramid', 'waffle', 'funnel_ribbon', ...
+    get_archetype_recipe,  # structured recipe: palette_rule, layout, slide_type mapping
+    suggest_archetype,     # heuristic given content shape
+    get_local_image_dir,
+    resolve_local_image,   # CDN URL -> local mirror path if available
+)
+```
+
+**Sources**
+- **SlideModel** — 328 templates from `infographics` and `data-visualization`
+  tags. Hex palette, tags, item ID, slide count, gallery URLs.
+- **Genspark Professional** — 128 multi-slide decks (12-20 page screenshots each).
+- **Genspark Creative** — 315 single-thumbnail prompt-driven templates.
+
+**16 archetypes** wired to renderer recipes: `iceberg`, `sidebar_profile`,
+`funnel_kpi_strip`, `persona_dashboard`, `radial_pinwheel`,
+`hexagonal_honeycomb`, `semicircle_taxonomy`, `process_curved_arrows`,
+`pyramid`, `ladder`, `petal_teardrop`, `funnel_ribbon`, `dual_donut`,
+`waffle`, `metaphor_backdrop`, `chart_row`.
+
+Pass them via `DesignAdvisor.design_deck(reference_archetypes=["iceberg",
+"funnel_ribbon"])` to bias the LLM toward those patterns.
+
+### 4.8 Chart renderer — `inkline.typst.chart_renderer`
 
 ```python
 render_chart(
@@ -286,22 +410,30 @@ in `intelligence.layout_selector.SLIDE_CAPACITY`.
 
 | Slide type       | Capacity      | Notes                                        |
 |------------------|---------------|----------------------------------------------|
-| `content`        | 8 bullets     | Title + bullet list                          |
-| `table`          | 12 rows       | Headers + alternating-row data table         |
+| `content`        | 6 bullets     | Title + bullet list                          |
+| `table`          | 6 rows        | Headers + alternating-row data table; auto-shrinks font when full |
 | `bar_chart`      | 8 bars        | Native Typst horizontal bars                 |
 | `three_card`     | 3 cards       | One can be accent-filled via `highlight_index` |
 | `four_card`      | 4 cards       | 2×2 grid                                     |
 | `stat`           | 4 stats       | Big hero numbers                             |
-| `kpi_strip`      | 6 KPIs        | Horizontal KPI cards                         |
-| `split`          | 8 bullets/side| Two-column narrative                         |
-| `timeline`       | 8 milestones  | Horizontal milestone nodes                   |
-| `process_flow`   | 5 steps       | Numbered steps with arrows                   |
+| `kpi_strip`      | 5 KPIs        | Horizontal KPI cards                         |
+| `split`          | 6 bullets/side| Two-column narrative                         |
+| `timeline`       | 6 milestones  | Horizontal milestone nodes                   |
+| `process_flow`   | 4 steps       | Numbered steps with arrows                   |
 | `icon_stat`      | 4 stats       | Emoji + big number + label                   |
-| `progress_bars`  | 7 bars        | Percentage bars with values                  |
-| `pyramid`        | 6 tiers       | Hierarchical pyramid                         |
-| `comparison`     | 8 rows/side   | Two-column structured comparison             |
+| `progress_bars`  | 6 bars        | Percentage bars with values                  |
+| `pyramid`        | 5 tiers       | Hierarchical pyramid                         |
+| `comparison`     | 6 rows/side   | Two-column structured comparison             |
+| `feature_grid`   | 6 features    | Icon + title + body grid (new in 0.3)        |
+| `dashboard`      | 3 panels      | Multi-panel KPI/chart dashboard (new in 0.3) |
+| `chart_caption`  | 5 caption pts | Chart with structured caption sidebar (new in 0.3) |
 | `title`, `closing`| n/a          | Cover and contact slides                     |
 | `chart`          | 1 image       | Embedded PNG, max 20.7×8.5 cm                |
+
+**20 slide types total.** Capacities are tighter than 0.2.0 because the
+Claude-vision audit pass exposed many cases where the previous limits still
+overflowed visually; renderers now also auto-shrink table fonts and bullet
+sizes as a final safety net.
 
 ### Geometry (constants in `TypstSlideRenderer`)
 
@@ -399,8 +531,8 @@ dict with the same keys as a brand theme (bg, title_bg, accent, chart_colors, et
 ### Slide templates (layout-style overrides)
 
 10 templates in `inkline.typst.theme_registry.SLIDE_TEMPLATES`:
-`executive`, `minimalism`, `newspaper`, `investor`, `consulting`, `pitch`, `dark`,
-`editorial`, `boardroom`, `brand` (brand-only, no overrides).
+`brand` (brand-only, no overrides), `executive`, `minimalism`, `newspaper`,
+`investor`, `consulting`, `pitch`, `dark`, `editorial`, `boardroom`.
 
 A template applies fixed overrides for `title_bg`, `title_fg`, and optionally
 `accent`, `accent2`, `bg`, `card_fill`, `surface`, `text`, `muted`, `border`.
@@ -444,22 +576,57 @@ to respect.
 
 ### 8.3 DesignAdvisor
 
-Three modes:
+**Two operating modes** (orthogonal to the intelligence mode):
+
+- **Mode A — "Data-in" (default for `design_deck()`)**
+  Caller provides facts (raw metrics, claims, narratives, comparisons).
+  Inkline picks layouts and visualizations. Hard constraint: the LLM may
+  only restate or regroup facts that are in the input — it MUST NOT
+  invent numbers, names, percentages, or statistics. When data is
+  illustrative the section sets `illustrative=True` and the renderer
+  adds an "ILLUSTRATIVE" tag to the slide.
+
+- **Mode B — "Spec-in"** (call `export_typst_slides()` with raw slides)
+  Caller provides full slide specs. Inkline just renders. No LLM in the loop.
+
+**Three intelligence modes** (Mode A only):
 - `rules` — purely deterministic content analysis + layout selection
 - `advised` — rules baseline, then an LLM reviews and refines
-- `llm` — LLM drives the full plan, rules supply capacity constraints as context
+- `llm` — **default** — LLM drives the full plan, rules supply capacity
+  constraints as context
 
-Plays three playbooks under the hood: design rules (grid, hierarchy), colour
-theory (accent vs. muted), and typography (scales, pairings).
+The LLM advisor consumes nine playbooks under the hood: design rules
+(grid, hierarchy), colour theory, typography, slide layouts, infographic
+styles, chart selection, document design, visual libraries, and the
+template catalog (16 archetype recipes). Reference archetypes and free-form
+guidance can be passed at call time via `reference_archetypes=` and
+`additional_guidance=`.
 
-### 8.4 Overflow audit
+The LLM caller is fully pluggable via `llm_caller=`. Three call paths:
+1. **Anthropic SDK** — set `api_key=` or `ANTHROPIC_API_KEY`. Default.
+2. **Claude Code subprocess** — `build_claude_code_caller()`. Uses the
+   user's Pro/Max subscription via the local `claude` CLI. No API spend.
+3. **Custom** — any `Callable[[system, user], str]`. Use this to plug in
+   AWS Bedrock, an internal proxy, or a mocked test caller.
 
-`audit_deck()` checks every slide against `SLIDE_CAPACITY` and emits structured
-warnings. `audit_image()` opens PNGs (requires Pillow) and checks that their
-aspect ratio won't push them off the slide when fit to width.
+### 8.4 Overflow audit (structural + visual)
 
-`export_typst_slides()` calls `audit_deck()` automatically and logs warnings.
-Pass `audit=False` to opt out.
+**Structural pass** (`audit_deck()`) checks every slide against
+`SLIDE_CAPACITY` and emits structured warnings. `audit_image()` /
+`audit_chart_image()` open PNGs (requires Pillow) and check aspect ratio
+plus matplotlib label clipping. `audit_rendered_pdf()` walks a compiled
+PDF and reports per-page issues.
+
+**Visual pass** — Claude vision audit (`audit_slide_with_llm()`,
+`audit_deck_with_llm()`) — renders the compiled PDF to PNGs and posts
+each page to Claude with a strict JSON-only system prompt. Claude inspects
+for actual visual problems (overflowing text, clipped charts, illegible
+contrast, off-brand colours) and returns `AuditWarning` objects with the
+same shape as the structural pass. Falls back to silent no-op if no API
+key. This is the audit pass that catches what `SLIDE_CAPACITY` cannot.
+
+`export_typst_slides()` calls `audit_deck()` automatically and logs
+warnings. Pass `audit=False` to opt out. The visual pass is opt-in.
 
 ---
 
@@ -566,25 +733,58 @@ bundles the Rust binary. No external `typst` binary required.
 pytest tests/ -v
 ```
 
-Test scope: 46 tests covering brands, slide builder, templates, utils.
+Test scope: 75 tests covering brands, slide builder, templates, intelligence
+layer, template catalog, and LLM injection.
 
 ### What's tested
 - Brand registry contents + BaseBrand dataclass
 - PPTX element creation (shapes, text boxes, tables, images, lines)
 - Slide builder chaining API
 - Template listing + individual templates
+- Template catalog manifest loading + archetype recipes
+- LLM caller injection (mock callers exercising the `llm_caller=` path)
 - Utility functions (hex→rgb, luminance, unit conversions)
 
 ### What's not yet tested
-- Typst rendering (requires subprocess)
-- Chart rendering (matplotlib)
-- Overflow audit warnings
-- LLM design advisor
+- Typst PDF compile (requires subprocess + binary)
+- End-to-end chart rendering (matplotlib subprocess)
+- Live Claude vision audit (requires API key)
+- Live Claude Code subprocess caller (requires `claude` CLI)
 
 ---
 
 ## 14. Versioning & changelog
 
+- **0.3.0** *(current)* —
+  - **Pluggable LLM caller** — `DesignAdvisor(llm_caller=...)` accepts any
+    `Callable[[system, user], str]`. Default path is the Anthropic SDK; the
+    bundled `inkline.intelligence.claude_code` provides a Claude Code
+    subprocess bridge that uses the user's logged-in Pro/Max subscription
+    with no API key spend.
+  - **Template catalog** — 771 real-world slide templates indexed across
+    SlideModel + Genspark Professional + Genspark Creative manifests, plus
+    16 structured archetype recipes (`iceberg`, `funnel_ribbon`, `waffle`,
+    `dual_donut`, etc.) wired into the design advisor via
+    `reference_archetypes=`.
+  - **Visual audit (Claude vision)** — `audit_slide_with_llm()` and
+    `audit_deck_with_llm()` post compiled slide PNGs to Claude for
+    pixel-grounded layout/contrast/overflow checks.
+  - **Facts discipline** — Mode A vs Mode B contract; LLM may not invent
+    numbers; illustrative content auto-tagged in the renderer.
+  - **3 new slide types** — `feature_grid`, `dashboard`, `chart_caption`
+    (total: 20).
+  - **Tighter capacities** — most layouts dropped 2 items based on
+    visual-audit feedback; tables and bullets auto-shrink as a final
+    safety net.
+  - **Chart fixes** — matplotlib label clipping, `progress_bars` rainbow
+    palette, `audit_chart_image` for chart-level inspection.
+  - **Brand colour discipline** — accent / muted distinction enforced in
+    the slide renderer chrome.
+  - **9 design playbooks** (was 3) — added `infographic_styles`,
+    `slide_layouts`, `chart_selection`, `document_design`,
+    `visual_libraries`, `template_catalog`.
+
 - **0.2.0** — Typst backend, 17 slide types, 11 chart types, 90 themes,
-  intelligence layer, overflow audit, 11 slide templates, plugin brand loader.
+  intelligence layer, structural overflow audit, 10 slide templates,
+  plugin brand loader.
 - **0.1.0** — Initial HTML + PDF backends.

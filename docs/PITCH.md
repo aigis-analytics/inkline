@@ -11,14 +11,24 @@ due-diligence reports, and executive briefings — automatically, in your brand.
 
 You describe *what* you want to say. Inkline handles the design.
 
-- 90 themes — consulting, tech, luxury, editorial, industry-specific
-- 17 slide layouts — hero stats, timelines, pyramids, comparisons, waterfalls
-- 11 chart types — line, waterfall, donut, heatmap, radar, gauge
-- 1 public brand + unlimited custom brands loaded from a user directory
-  (`~/.config/inkline/brands/`) — proprietary logos and palettes never
-  touch the package source
-- An AI design advisor that picks the right layout for the content
-- An overflow audit that guarantees every slide fits on the page
+- **90 themes** — consulting, tech, luxury, editorial, industry-specific
+- **20 slide layouts** — hero stats, timelines, pyramids, comparisons,
+  waterfalls, dashboards, feature grids, infographics
+- **11 chart types** — line, waterfall, donut, heatmap, radar, gauge…
+- **771-template archetype catalog** — searchable index of real-world slide
+  designs (SlideModel + Genspark) plus 16 structured archetype recipes
+  (`iceberg`, `funnel_ribbon`, `waffle`, `dual_donut`, `pyramid`…) the
+  design advisor can copy
+- **Brand plugin system** — 1 public brand + unlimited custom brands
+  loaded from `~/.config/inkline/brands/`. Proprietary logos and palettes
+  never touch the package source.
+- **AI design advisor with pluggable LLM caller** — Anthropic SDK,
+  Claude Code subprocess (uses your Pro/Max subscription, no API key),
+  or any custom callable
+- **Two-layer audit** — structural capacity checks + Claude vision pass on
+  the rendered PNGs to catch what content limits cannot
+- **Facts discipline** — the LLM cannot invent statistics; illustrative
+  data is auto-tagged in the slide
 
 Output formats: **Typst PDF** (default), HTML, WeasyPrint PDF, PPTX, Google Slides.
 
@@ -52,12 +62,16 @@ Plug Inkline into any LangChain / CrewAI / custom agent as the rendering step.
 Your agent's insight becomes a boardroom-ready artefact.
 
 ### 4. "Content keeps overflowing the slide"
-Inkline enforces per-layout content capacities and audits every deck before
-compiling. If a slide has too many bullets, you get a warning with a fix.
+Two audit layers. First, structural capacity checks fire before compile.
+Then a Claude-vision pass renders the PDF, sends each page to Claude, and
+flags actual visual problems — overflowing text, clipped chart labels,
+illegible contrast, off-brand colours — that hard limits cannot detect.
 
 ### 5. "We can't afford a visual designer for every report"
-Inkline's design advisor uses MBB playbooks (hierarchy, colour theory, data
-viz best practices) to make design decisions a junior analyst wouldn't.
+Inkline's design advisor consumes nine playbooks (hierarchy, colour theory,
+typography, data viz, infographics, slide layouts, document design, visual
+libraries, template catalog) and a 771-template archetype catalog. It makes
+design decisions a junior analyst wouldn't.
 
 ### 6. "Our brand assets are confidential — we can't commit them to the public toolkit"
 Inkline splits public and private cleanly. The package ships with a
@@ -65,6 +79,18 @@ single `minimal` brand; your proprietary brand definitions, logos, and
 footer strings live in `~/.config/inkline/brands/` (or any path on
 `$INKLINE_BRANDS_DIR`) and are auto-loaded on import. Same code, same
 API, zero leakage of identity material into source control.
+
+### 7. "We're already paying for Claude — we don't want a separate API key for our docs tool"
+Inkline ships a Claude Code subprocess caller. Run `claude /login` once
+to authenticate with your Pro/Max subscription, then point Inkline at it
+with `build_claude_code_caller()` — no `ANTHROPIC_API_KEY` needed, no
+duplicate billing, no secret to manage.
+
+### 8. "We can't trust LLMs to write our investor deck — they'll make up numbers"
+Inkline's design advisor runs in "data-in" mode by default. The LLM may
+restate or regroup the facts you supply but it cannot invent statistics,
+percentages, or names. Anything illustrative must be flagged at the call
+site and is auto-tagged "ILLUSTRATIVE" in the rendered slide.
 
 ---
 
@@ -85,9 +111,12 @@ API, zero leakage of identity material into source control.
 | Licence                       | MIT     | Commercial | SaaS  | SaaS          | MIT         | MIT    |
 
 **Where Inkline wins:**
-- It's the only open-source toolkit that combines Typst PDF output, LLM design
-  decisions, overflow auditing, and a brand-first mental model.
-- It treats "consistency" as a hard constraint, not a best-effort aspiration.
+- It's the only open-source toolkit that combines Typst PDF output, a
+  pluggable LLM design pipeline (Anthropic SDK or Claude Code subprocess),
+  pixel-grounded vision auditing, a 771-template archetype catalog, and a
+  brand-first mental model.
+- It treats "consistency" and "no fabricated facts" as hard constraints,
+  not best-effort aspirations.
 - It's built for agents, not humans-with-mice.
 
 **Where Inkline is not the right tool:**
@@ -101,12 +130,18 @@ API, zero leakage of identity material into source control.
 
 - **Typst** — the default PDF engine. Rust-based. Fonts embedded. Deterministic.
   Think "LaTeX's successor" but with Python-level ergonomics.
-- **Matplotlib** — for charts. Agg backend, no display needed.
+- **Matplotlib** — for charts. Agg backend, no display needed. Label-clipping
+  audit + brand-palette enforcement.
 - **BaseBrand dataclass** — 8 palette colours + typography + assets + metadata.
 - **Intelligence layer** — ContentAnalyzer → LayoutSelector → ChartAdvisor →
-  DesignAdvisor (rules / advised / LLM modes).
-- **Overflow audit** — `SLIDE_CAPACITY` constants per layout, image aspect-ratio
-  checks, automatic truncation in the renderer as a safety net.
+  DesignAdvisor (rules / advised / LLM modes) → 9 design playbooks +
+  16 archetype recipes from a 771-template catalog.
+- **Pluggable LLM caller** — `LLMCaller = Callable[[system, user], str]`. Drop
+  in the Anthropic SDK, the bundled Claude Code subprocess bridge, an internal
+  proxy, or a mock for tests.
+- **Two-layer audit** — `SLIDE_CAPACITY` structural checks + Claude vision
+  pass on rendered PNGs. Automatic table/bullet auto-shrink in the renderer
+  as the final safety net.
 
 ---
 
@@ -167,10 +202,27 @@ into the [README](../README.md) for more examples.
 
 ---
 
+## What's new in 0.3
+
+- **Pluggable LLM caller** — bring your own caller, including the bundled
+  Claude Code subprocess bridge that uses your Pro/Max subscription with
+  no API key spend
+- **771-template archetype catalog** — searchable index of real-world
+  decks (SlideModel + Genspark) plus 16 structured archetype recipes
+- **Visual audit** — Claude vision pass on rendered slide PNGs catches
+  what content limits cannot
+- **Facts discipline** — LLM cannot invent statistics; illustrative
+  data is auto-tagged
+- **3 new slide types** — `feature_grid`, `dashboard`, `chart_caption`
+- **Tighter capacities** — most layouts dropped 2 items based on
+  visual-audit feedback; tables auto-shrink fonts as a safety net
+- **9 design playbooks** (up from 3)
+
 ## Roadmap
 
 - More themes (industry-specific for healthcare, legal, energy, real estate)
 - Automatic slide-to-slide narrative flow (LLM storyboarding)
+- Local image catalog mirror (offline image-grounded design)
 - Export to Keynote (.key)
 - Mermaid / Graphviz diagram integration
 - Interactive live preview server
