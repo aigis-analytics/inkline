@@ -291,9 +291,47 @@ class TypstDocumentRenderer:
         output = []
         in_table = False
         table_rows: list[list[str]] = []
+        in_code = False
+        code_buffer: list[str] = []
+        code_lang = ""
 
         for line in lines:
             stripped = line.strip()
+
+            # Fenced code blocks (```lang ... ```)
+            if stripped.startswith("```"):
+                if in_code:
+                    # Closing fence — emit raw block.
+                    # Pass raw() as a positional arg to block() to avoid
+                    # Typst's content-mode [...] parsing the string contents
+                    # (which would treat @, # etc. as syntax inside the body).
+                    code_text = "\n".join(code_buffer)
+                    escaped = (
+                        code_text
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\n")
+                    )
+                    if code_lang:
+                        raw_call = f'raw(lang: "{code_lang}", block: true, "{escaped}")'
+                    else:
+                        raw_call = f'raw(block: true, "{escaped}")'
+                    output.append(
+                        f'#block(fill: rgb("#F5F5F5"), inset: 8pt, radius: 3pt, '
+                        f'width: 100%, {raw_call})'
+                    )
+                    code_buffer = []
+                    code_lang = ""
+                    in_code = False
+                else:
+                    # Opening fence
+                    code_lang = stripped[3:].strip()
+                    in_code = True
+                continue
+
+            if in_code:
+                code_buffer.append(line)
+                continue
 
             # Flush table if we leave table context
             if in_table and not stripped.startswith("|"):
@@ -301,15 +339,11 @@ class TypstDocumentRenderer:
                 table_rows = []
                 in_table = False
 
-            # Headings
-            if stripped.startswith("# "):
-                level = 0
-                for ch in stripped:
-                    if ch == "#":
-                        level += 1
-                    else:
-                        break
-                text = stripped[level:].strip()
+            # Headings — any number of # followed by space
+            heading_match = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+            if heading_match:
+                level = len(heading_match.group(1))
+                text = self._inline_format(heading_match.group(2))
                 output.append(f'{"=" * level} {text}')
                 continue
 
@@ -352,6 +386,17 @@ class TypstDocumentRenderer:
 
     def _inline_format(self, text: str) -> str:
         """Convert inline Markdown formatting to Typst."""
+        # First escape Typst-special characters that aren't markdown syntax:
+        #   $ → math mode
+        #   @ → label reference
+        #   < → label declaration (e.g. <2 seconds is parsed as unclosed label)
+        #   > → end of label / heading marker in some contexts
+        # Done BEFORE markdown processing so they survive to output.
+        text = text.replace("$", "\\$")
+        text = text.replace("@", "\\@")
+        text = text.replace("<", "\\<")
+        text = text.replace(">", "\\>")
+        # Don't escape # here because we want #raw() etc. to work in headers
         # Bold
         text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
         text = re.sub(r"__(.+?)__", r"*\1*", text)
@@ -373,7 +418,7 @@ class TypstDocumentRenderer:
         bg = t.get("surface", "#F4F6F8")
 
         header_cells = ",\n    ".join(
-            f'table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[{cell}]]'
+            f'table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[{self._inline_format(cell)}]]'
             for cell in rows[0]
         )
 

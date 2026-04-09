@@ -43,8 +43,8 @@ def section_badge(label: str, muted: str) -> str:
 
 
 def slide_title(title: str, text_color: str) -> str:
-    """Bold ALL-CAPS slide title."""
-    return f'text(weight: "bold", size: 26pt, fill: {_rgb(text_color)})[#upper("{_esc_content(title)}")]'
+    """Bold slide title — sentence case, 22pt to fit 2 lines on dense layouts."""
+    return f'text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{_esc_content(title)}]'
 
 
 def card(

@@ -84,15 +84,14 @@ def export_typst_slides(
     from inkline.typst.slide_renderer import DeckSpec, SlideSpec, TypstSlideRenderer
     from inkline.typst.theme_registry import brand_to_typst_theme
 
-    # Pre-render overflow audit — log warnings so Archon/users see sizing issues
+    # Pre-render content audit (catches static capacity issues)
+    pre_warnings: list = []
     if audit:
         try:
-            from inkline.intelligence.overflow_audit import audit_deck, format_report
-            warnings = audit_deck(slides)
-            if warnings:
-                log.warning("Inkline overflow audit:\n%s", format_report(warnings))
+            from inkline.intelligence.overflow_audit import audit_deck
+            pre_warnings = audit_deck(slides)
         except Exception as e:
-            log.debug("overflow audit skipped: %s", e)
+            log.debug("pre-render audit skipped: %s", e)
 
     brand_obj = get_brand(brand)
     theme = brand_to_typst_theme(brand_obj, template)
@@ -126,6 +125,24 @@ def export_typst_slides(
                 break
 
     compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
+
+    # Post-render visual audit — count actual PDF pages vs expected slides.
+    # This is the only audit that catches real overflow (chart pushing off page,
+    # 2-line title eating content area, etc.)
+    if audit:
+        try:
+            from inkline.intelligence.overflow_audit import (
+                audit_rendered_pdf,
+                emit_audit_report,
+            )
+            post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
+            all_warnings = pre_warnings + post_warnings
+            if all_warnings:
+                # Print to stderr (visible without logging config) — this is
+                # the user-facing audit that the previous version never showed.
+                emit_audit_report(all_warnings)
+        except Exception as e:
+            log.debug("post-render audit skipped: %s", e)
 
     log.info("Typst slide deck written to %s", output_path)
     return output_path

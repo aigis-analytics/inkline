@@ -24,53 +24,131 @@ log = logging.getLogger(__name__)
 # Available slide types that the Typst renderer supports
 SLIDE_TYPES = [
     "title", "content", "three_card", "four_card", "stat",
-    "table", "split", "chart", "bar_chart", "kpi_strip", "closing",
+    "table", "split", "chart", "bar_chart", "kpi_strip",
+    "timeline", "process_flow", "icon_stat", "progress_bars",
+    "pyramid", "comparison", "feature_grid", "dashboard",
+    "chart_caption", "closing",
 ]
 
 # Slide type descriptions for the LLM
 SLIDE_TYPE_GUIDE = """
-Available slide types (use these exact names):
+====================================================================
+PRIME DIRECTIVE: PREFER VISUALS OVER TEXT, ALWAYS.
+====================================================================
 
-STANDARD LAYOUTS:
-- title: Opening slide. data: {company, tagline, date, subtitle, left_footer}
-- content: Bullet list. data: {section, title, items (list of strings), footnote}
-- three_card: 3 equal cards. data: {section, title, cards [{title, body}], highlight_index (0-2), footnote}
-- four_card: 2x2 card grid. data: {section, title, cards [{title, body}], footnote}
-- stat: 2-4 hero statistics. data: {section, title, stats [{value, label, desc}]}
-- table: Data table. data: {section, title, headers (list), rows (list of lists), footnote}
-- split: Two-column layout. data: {section, title, left_title, left_items, right_title, right_items}
-- bar_chart: Horizontal bars. data: {section, title, bars [{label, value, pct (0-100)}], footnote}
-- kpi_strip: 3-5 metric cards. data: {section, title, kpis [{value, label, highlight (bool)}], footnote}
-- closing: Final slide. data: {name, role, email, company, tagline}
+A great Inkline slide is SCANNABLE in 3 seconds, not READ in 30.
+Your default reflex should be: "How can I show this visually instead of writing it?"
 
-INFOGRAPHIC LAYOUTS:
-- timeline: Horizontal milestone flow. data: {section, title, milestones [{date, label, desc?}], footnote}
-- process_flow: Numbered step sequence with arrows. data: {section, title, steps [{number, title, desc}], footnote}
-- icon_stat: Big number + emoji/icon + label. data: {section, title, stats [{value, icon, label, desc?}], footnote}
-- progress_bars: Labelled percentage bars. data: {section, title, bars [{label, pct (0-100), value?}], footnote}
-- pyramid: 3-5 tier hierarchy (top=smallest). data: {section, title, tiers [{label, desc?}], footnote}
+FORBIDDEN PATTERNS:
+- Plain bullet lists ("content" type) when ANY of these alternatives fit:
+  numbers → icon_stat/kpi_strip/stat
+  comparisons → comparison/split/feature_grid
+  steps → process_flow/timeline
+  hierarchy → pyramid
+  6 items → feature_grid
+  trends → chart/chart_caption (request chart_type from caller)
+- Tables wider than 6 columns or longer than 6 rows (they overflow the slide).
+- Two consecutive text-heavy slides (content + content + content = boring).
+- A slide that has only one element if a multi-exhibit layout would work better.
+
+REQUIRED CADENCE:
+- AT LEAST 60% of content slides must be visual layouts (icon_stat, kpi_strip,
+  feature_grid, dashboard, chart_caption, timeline, process_flow, pyramid,
+  progress_bars, comparison, three_card, four_card).
+- AT MOST 1 plain "content" (bullet list) slide per deck.
+- Every numerical value should be hero-formatted (icon_stat, stat, or kpi_strip).
+- Every multi-step concept should be process_flow or timeline.
+
+====================================================================
+HARD CAPACITY LIMITS (audit-enforced — exceed and the slide overflows)
+====================================================================
+- Slide titles: KEEP UNDER 50 CHARS to stay on one line at 22pt.
+  A 2-line title eats ~1.5cm of content area and pushes charts off the page.
+- progress_bars: MAX 6 bars
+- chart_caption bullets: MAX 5 short bullets (8-10 words each)
+- dashboard bullets: MAX 3 short bullets (8-10 words each)
+- dashboard stats: EXACTLY 3 stat callouts
+- feature_grid features: EXACTLY 6 features (3x2 grid)
+- table: MAX 6 rows × 6 columns. NEVER exceed 6 columns.
+- three_card cards: EXACTLY 3
+- four_card cards: EXACTLY 4
+- icon_stat stats: 3 or 4
+- kpi_strip kpis: 3 to 5
+- timeline milestones: MAX 6
+- process_flow steps: MAX 4
+- pyramid tiers: MAX 5
+- comparison rows: MAX 6 per side
+- content (bullets): MAX 6 bullets — and AVOID this slide type when possible
+
+====================================================================
+SLIDE TYPE CATALOGUE
+====================================================================
+
+VISUAL HEROES (prefer these):
+- icon_stat: Big number + emoji + label, in cards. data: {section, title, stats [{value, icon, label, desc?}], footnote}
+  Use for: hero metrics with semantic meaning. Pick emoji that match the metric:
+  $/£ for money, ⚡ for speed, 📈 for growth, 🎯 for accuracy, ✓ for done, ⏱ for time.
+- kpi_strip: 3-5 metric cards in a strip. data: {section, title, kpis [{value, label, highlight}], footnote}
+  Use for: dashboards where one metric is the hero (highlight=true).
+- stat: 2-4 hero statistics, very large numbers. data: {section, title, stats [{value, label, desc}]}
+- feature_grid: 6 features in a 3x2 grid with numbered icons. data: {section, title, features [{title, body, icon?}], footnote}
+  Use for: capability showcases, feature catalogs, "what we offer" — better than 4-card when you have 5-6 items.
+- dashboard: Chart image (left 60%) + 3 stat callouts + max 3 bullets (right 40%). data: {section, title, image_path, stats [{value, label}], bullets, footnote}
+  Use this for the SHOWCASE slide of any deck — the most info-dense, brochure-style layout.
+  HARD CAP: 3 stat callouts, 3 bullets max — anything more overflows.
+- chart_caption: Chart image (left 65%) + key takeaways panel (right 35%). data: {section, title, image_path, caption, bullets, footnote}
+  Use for: any chart that needs context. ALWAYS prefer this over bare 'chart'.
+  HARD CAP: 5 short bullets max.
+- chart: Bare embedded chart image (full width). data: {section, title, image_path, footnote}
+  Use ONLY when the chart speaks entirely for itself. Prefer chart_caption.
+- bar_chart: Native horizontal bars. data: {section, title, bars [{label, value, pct (0-100)}], footnote}
+- progress_bars: Labelled percentage bars. data: {section, title, bars [{label, pct, value?}], footnote}
+
+NARRATIVE LAYOUTS:
+- timeline: Horizontal milestones with date nodes. data: {section, title, milestones [{date, label, desc?}], footnote}
+  Use for: roadmaps, company history, project plans.
+- process_flow: Numbered steps with arrows. data: {section, title, steps [{number, title, desc}], footnote}
+  Use for: "how it works", workflows, methodologies (3-5 steps).
+- pyramid: 3-5 tier hierarchy (top=smallest, bottom=largest). data: {section, title, tiers [{label, desc?}], footnote}
+  Use for: strategic hierarchy, priority tiers, funnels, layered architecture.
+- three_card: 3 equal cards with optional accent on one. data: {section, title, cards [{title, body}], highlight_index (0-2), footnote}
+- four_card: 2x2 grid. data: {section, title, cards [{title, body}], footnote}
+- split: Two-column layout (right side gets accent fill). data: {section, title, left_title, left_items, right_title, right_items}
+  Use for: us-vs-them, before-vs-after, problem-vs-solution.
 - comparison: Structured side-by-side with metrics. data: {section, title, left {name, items [{label, value}]}, right {name, items [{label, value}]}, footnote}
 
-EMBEDDED CHARTS (for complex visualisations):
-- chart: Embed a pre-rendered PNG/SVG image. data: {section, title, image_path, footnote}
-  Use this for: line charts, scatter plots, area charts, waterfall, donut/pie, heatmaps,
-  Sankey diagrams, radar charts — anything that requires precise data plotting.
-  The caller generates the chart image (e.g. via matplotlib, Chart.js) and passes the path.
+STRUCTURAL:
+- title: Opening slide. data: {company, tagline, date, subtitle, left_footer}
+- closing: Final slide. data: {name, role, email, company, tagline}
+- table: Data table — MAX 6 ROWS x 6 COLUMNS. data: {section, title, headers, rows, footnote}
+  AVOID unless absolutely necessary. Tables with more than 6 columns will overflow.
+- content: Plain bullet list. data: {section, title, items, footnote}
+  USE SPARINGLY. Only when nothing else fits.
 
-Design principles:
-- Use action titles (conclusion, not topic): "98% gross margin at scale" not "Business Model"
-- Use three_card for triadic arguments (problem/solution/benefit)
-- Use stat or icon_stat for 2-3 hero metrics that tell the story
-- Use split or comparison for us-vs-them, before-vs-after
-- Use timeline for milestones, roadmaps, company history
-- Use process_flow for "how it works" (3-5 steps with arrows)
-- Use progress_bars for completion status, ratings, coverage metrics
-- Use pyramid for strategic hierarchy, priority tiers, funnels
-- Use table only when precise data matters (financials, detailed breakdowns)
-- Use chart (embedded image) for any complex data visualisation
-- Vary layouts: never use the same slide type 3 times in a row
-- The highlight_index on three_card accents one card (0=first, 1=middle, 2=last)
-- For icon_stat, use Unicode emoji: document, chart, money, time, people, etc.
+====================================================================
+WRITING RULES
+====================================================================
+- Action titles: state the CONCLUSION, not the topic.
+  BAD: "Business Model" → GOOD: "98% gross margin at scale"
+  BAD: "The Problem" → GOOD: "Analysts spend 80% of their week in PowerPoint"
+- Card body text: 1-2 short sentences max. No paragraphs.
+- Bullet items: 5-10 words each. Telegraphic, not prose.
+- Footnotes: optional, one short line, source attribution or caveat.
+
+====================================================================
+CHART REQUESTS
+====================================================================
+When a slide should embed a chart (chart, chart_caption, dashboard types),
+you do NOT generate the image. The caller generates it via Inkline's
+chart_renderer (matplotlib). You request a chart by setting:
+  "image_path": "<chart_name>.png"
+And in your section data, indicate which chart_type to render via a hint.
+The caller handles the rendering.
+
+For deck.image_path values, just use a simple filename (e.g. "growth.png",
+"funnel.png") — the caller will resolve the path.
+
+====================================================================
 """
 
 

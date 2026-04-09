@@ -59,6 +59,9 @@ _CONTENT_FIELDS: dict[str, list[str]] = {
     "progress_bars": ["bars"],
     "pyramid": ["tiers"],
     "comparison": ["left.items", "right.items"],
+    "feature_grid": ["features"],
+    "dashboard": ["bullets"],   # the limiting field — chart + 3 stats are fixed
+    "chart_caption": ["bullets"],
 }
 
 
@@ -204,3 +207,113 @@ def format_report(warnings: list[AuditWarning]) -> str:
     lines = [header, "-" * len(header)]
     lines.extend(str(w) for w in warnings)
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# POST-RENDER VISUAL AUDIT
+# ---------------------------------------------------------------------------
+# After the PDF is compiled, count actual pages and compare to expected
+# slide count. If they differ, content has overflowed onto extra pages.
+# This is the only audit that catches real layout overflow (vs the static
+# capacity audit above which is content-count-based).
+
+def audit_rendered_pdf(pdf_path: str | Path, expected_slides: int) -> list[AuditWarning]:
+    """Audit a compiled PDF: every slide must occupy exactly one page.
+
+    Counts actual pages in the PDF and compares to expected slide count.
+    Returns errors if any slides overflowed onto extra pages.
+
+    This is the post-render visual audit that the static capacity audit
+    cannot do. It catches the cases where:
+    - Title wraps to 2 lines and pushes a chart off the page
+    - A grid is taller than the available content area
+    - Page header/footer chrome reduces usable height unexpectedly
+    """
+    warnings: list[AuditWarning] = []
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        return warnings
+
+    # Try to count pages via pdf libraries (pypdf preferred, pdfplumber fallback)
+    actual_pages = _count_pdf_pages(pdf_path)
+    if actual_pages is None:
+        return warnings  # no PDF library — skip silently
+
+    if actual_pages > expected_slides:
+        overflow = actual_pages - expected_slides
+        warnings.append(AuditWarning(
+            slide_index=-1,
+            slide_type="deck",
+            severity="error",
+            message=(
+                f"VISUAL OVERFLOW: deck has {expected_slides} slides but rendered "
+                f"{actual_pages} pages ({overflow} slides overflow onto extra pages). "
+                f"Most likely cause: a chart/grid + 2-line title combination exceeds "
+                f"the slide content area. Reduce chart height, shorten titles, or "
+                f"split content across multiple slides. Inspect: {pdf_path}"
+            ),
+        ))
+    elif actual_pages < expected_slides:
+        warnings.append(AuditWarning(
+            slide_index=-1,
+            slide_type="deck",
+            severity="warn",
+            message=(
+                f"deck has {expected_slides} slides but only {actual_pages} pages "
+                f"rendered — some slides may have been merged or are empty."
+            ),
+        ))
+
+    return warnings
+
+
+def _count_pdf_pages(pdf_path: Path) -> int | None:
+    """Count pages in a PDF. Returns None if no PDF library available."""
+    # Try pypdf first
+    try:
+        from pypdf import PdfReader
+        return len(PdfReader(str(pdf_path)).pages)
+    except ImportError:
+        pass
+    # Try pdfplumber
+    try:
+        import pdfplumber
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            return len(pdf.pages)
+    except ImportError:
+        pass
+    # Try PyPDF2
+    try:
+        from PyPDF2 import PdfReader
+        return len(PdfReader(str(pdf_path)).pages)
+    except ImportError:
+        pass
+    return None
+
+
+def emit_audit_report(warnings: list[AuditWarning]) -> None:
+    """Print audit report directly to stderr — visible without logging config.
+
+    This is the user-facing audit. Logging warnings get swallowed by default;
+    stderr prints are always visible.
+    """
+    if not warnings:
+        return
+
+    import sys
+    errors = [w for w in warnings if w.severity == "error"]
+    warns = [w for w in warnings if w.severity == "warn"]
+    infos = [w for w in warnings if w.severity == "info"]
+
+    bar = "=" * 76
+    print("", file=sys.stderr)
+    print(bar, file=sys.stderr)
+    print(
+        f" INKLINE AUDIT  ·  {len(errors)} errors  ·  {len(warns)} warnings  ·  {len(infos)} info",
+        file=sys.stderr,
+    )
+    print(bar, file=sys.stderr)
+    for w in errors + warns + infos:
+        print(f"  {w}", file=sys.stderr)
+    print(bar, file=sys.stderr)
+    print("", file=sys.stderr)

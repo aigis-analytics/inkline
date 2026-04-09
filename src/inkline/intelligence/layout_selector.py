@@ -27,19 +27,22 @@ class LayoutDecision:
 
 # Content capacity per slide type (matches TypstSlideRenderer constants)
 SLIDE_CAPACITY: dict[str, int] = {
-    "content": 8,        # bullet points
-    "table": 12,         # data rows
+    "content": 6,        # bullet points
+    "table": 6,          # data rows (max 6 rows × 6 cols)
     "bar_chart": 8,      # bars
     "three_card": 3,     # cards
     "four_card": 4,      # cards
     "stat": 4,           # hero stats
-    "kpi_strip": 6,      # KPI cards
-    "split": 8,          # bullets per side
-    "timeline": 8,       # milestone nodes
-    "process_flow": 5,   # steps
-    "progress_bars": 7,  # bars
-    "pyramid": 6,        # tiers
-    "comparison": 8,     # rows per side
+    "kpi_strip": 5,      # KPI cards
+    "split": 6,          # bullets per side
+    "timeline": 6,       # milestone nodes
+    "process_flow": 4,   # steps
+    "progress_bars": 6,  # bars (audit-validated; 7 overflows)
+    "pyramid": 5,        # tiers
+    "comparison": 6,     # rows per side
+    "feature_grid": 6,   # features (3×2 grid)
+    "dashboard": 3,      # bullets in right column (caps the limiting field)
+    "chart_caption": 5,  # bullets in takeaways panel
 }
 
 

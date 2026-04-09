@@ -1,23 +1,49 @@
-"""Minimal brand — clean, unbranded default."""
+"""Minimal brand — clean, unbranded default.
+
+This is the public default. It uses an indigo accent (#6366F1) with
+warm off-white surfaces, Hubot Sans for headings, and Source Sans 3 for
+body text — fonts that ship with the package.
+"""
 
 from inkline.brands import BaseBrand
 
 MinimalBrand = BaseBrand(
     name="minimal",
-    display_name="",
+    display_name="Inkline",
 
-    primary="#1F2328",
-    secondary="#0969DA",
-    background="#FFFFFF",
-    surface="#F6F8FA",
-    text="#1F2328",
-    muted="#57606A",
-    light_bg="#F6F8FA",
-    border="#D0D7DE",
+    # Modern, premium palette — indigo accent on warm off-white
+    primary="#6366F1",          # indigo-500 — primary accent
+    secondary="#F59E0B",        # amber-500 — secondary accent
+    background="#FAFAFA",       # warm off-white
+    surface="#0F172A",          # slate-900 (dark headers, title slide)
+    text="#0F172A",             # slate-900 body text
+    muted="#64748B",            # slate-500 captions
+    light_bg="#F1F5F9",         # slate-100 alternating rows / card fill
+    border="#E2E8F0",           # slate-200 borders
 
-    heading_font="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-    body_font="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+    # Use fonts that actually ship in src/inkline/assets/fonts/
+    heading_font="Hubot Sans",
+    body_font="Source Sans 3",
+    mono_font="Roboto Mono",
+    heading_size=28,
+    body_size=14,
+
+    font_files=[
+        "fonts/HubotSans-Bold.ttf",
+        "fonts/SourceSans3-VariableFont_wght.ttf",
+    ],
 
     confidentiality="",
-    footer_text="",
+    footer_text="Branded documents and decks · github.com/u3126117/inkline",
+    tagline="Because your output should be as good as your analysis",
+
+    # A modern indigo + amber chart palette
+    chart_colors=[
+        "#6366F1",  # indigo
+        "#F59E0B",  # amber
+        "#10B981",  # emerald
+        "#EC4899",  # pink
+        "#06B6D4",  # cyan
+        "#8B5CF6",  # violet
+    ],
 )
