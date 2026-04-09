@@ -11,10 +11,12 @@ due-diligence reports, and executive briefings — automatically, in your brand.
 
 You describe *what* you want to say. Inkline handles the design.
 
-- 92 themes — consulting, tech, luxury, editorial, industry-specific
+- 90 themes — consulting, tech, luxury, editorial, industry-specific
 - 17 slide layouts — hero stats, timelines, pyramids, comparisons, waterfalls
 - 11 chart types — line, waterfall, donut, heatmap, radar, gauge
-- 7 pre-built brand identities + unlimited custom brands
+- 1 public brand + unlimited custom brands loaded from a user directory
+  (`~/.config/inkline/brands/`) — proprietary logos and palettes never
+  touch the package source
 - An AI design advisor that picks the right layout for the content
 - An overflow audit that guarantees every slide fits on the page
 
@@ -56,6 +58,13 @@ compiling. If a slide has too many bullets, you get a warning with a fix.
 ### 5. "We can't afford a visual designer for every report"
 Inkline's design advisor uses MBB playbooks (hierarchy, colour theory, data
 viz best practices) to make design decisions a junior analyst wouldn't.
+
+### 6. "Our brand assets are confidential — we can't commit them to the public toolkit"
+Inkline splits public and private cleanly. The package ships with a
+single `minimal` brand; your proprietary brand definitions, logos, and
+footer strings live in `~/.config/inkline/brands/` (or any path on
+`$INKLINE_BRANDS_DIR`) and are auto-loaded on import. Same code, same
+API, zero leakage of identity material into source control.
 
 ---
 
@@ -137,12 +146,12 @@ export_typst_slides(
         }},
     ],
     output_path="corsair_pitch.pdf",
-    brand="aigis",
+    brand="minimal",
     template="consulting",
 )
 ```
 
-→ You get a 4-slide investor deck in the Aigis brand, with McKinsey-style
+→ You get a 4-slide investor deck in the minimal brand, with McKinsey-style
 layouts, auto-audited for overflow, compiled to PDF in <2 seconds.
 
 ---

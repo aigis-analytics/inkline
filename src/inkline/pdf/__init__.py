@@ -12,7 +12,7 @@ Usage::
     path = export_pdf(
         "# My Report\\n\\nContent...",
         output_path="report.pdf",
-        brand="aigis",
+        brand="minimal",
         title="My Report",
     )
 """
@@ -33,7 +33,7 @@ def export_pdf(
     markdown: str,
     output_path: str | Path,
     *,
-    brand: str | BaseBrand = "aigis",
+    brand: str | BaseBrand = "minimal",
     title: str = "",
     confidentiality: str | None = None,
     date: Optional[datetime] = None,
@@ -106,7 +106,7 @@ def _cli() -> None:
     )
     parser.add_argument("input", help="Path to the Markdown (.md) file")
     parser.add_argument("--out", "-o", default=None, help="Output PDF path")
-    parser.add_argument("--brand", "-b", default="aigis", help="Brand name (default: aigis)")
+    parser.add_argument("--brand", "-b", default="minimal", help="Brand name (default: minimal)")
     parser.add_argument("--title", "-t", default="", help="Document title")
     args = parser.parse_args()
 

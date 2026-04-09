@@ -1,8 +1,9 @@
 """Inkline — Branded document generation toolkit.
 
 Generates Typst (default), HTML, PDF, PPTX, and Google Slides with
-consistent brand identity. Supports Aigis Analytics, TVF, Statler Energy,
-Ex Machina, Aria, SparkDCS, and custom brands.
+consistent brand identity. Ships with the ``minimal`` brand out of the
+box; additional brands can be loaded from ``~/.config/inkline/brands/``
+(see :mod:`inkline.brands` for the plugin discovery mechanism).
 
 Usage::
 
@@ -10,12 +11,12 @@ Usage::
     from inkline.typst import export_typst_slides, export_typst_document
 
     # Typst (default — publication-quality PDF)
-    export_typst_document("# My Report", output_path="report.pdf", brand="aigis")
-    export_typst_slides(slides=[...], output_path="deck.pdf", brand="aigis")
+    export_typst_document("# My Report", output_path="report.pdf", brand="minimal")
+    export_typst_slides(slides=[...], output_path="deck.pdf", brand="minimal")
 
     # Legacy backends
-    export_html("# My Report", output_path="report.html", brand="aigis")
-    export_pdf("# My Report", output_path="report.pdf", brand="tvf")
+    export_html("# My Report", output_path="report.html", brand="minimal")
+    export_pdf("# My Report", output_path="report.pdf", brand="minimal")
 """
 
 from inkline.brands import get_brand, BaseBrand, list_brands

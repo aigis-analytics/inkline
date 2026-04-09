@@ -11,3 +11,30 @@ venv/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# User/private brand files — keep personal brands out of the public repo
+# (they belong in ~/.config/inkline/brands/ or a path set via $INKLINE_BRANDS_DIR)
+src/inkline/brands/aigis.py
+src/inkline/brands/tvf.py
+src/inkline/brands/exmachina.py
+src/inkline/brands/statler.py
+src/inkline/brands/aria.py
+src/inkline/brands/sparkdcs.py
+src/inkline/brands/user_*.py
+src/inkline/brands/_local_*.py
+inkline_brands/
+inkline_assets/
+
+# Personal logos / assets — never commit proprietary brand art
+src/inkline/assets/aigis_*
+src/inkline/assets/aria_*
+src/inkline/assets/tvf_*
+src/inkline/assets/exmachina_*
+src/inkline/assets/statler_*
+src/inkline/assets/sparkdcs_*
+
+# Test output & scratch
+output/
+decks/
+scripts/gen_*_investor_deck.py
+scripts/_local_*.py

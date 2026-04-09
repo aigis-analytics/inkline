@@ -1,9 +1,9 @@
 """PptxBuilder -- Advisor-pitch-grade slide generation.
 
-Matches the Aigis Analytics advisor pitch aesthetic:
+Matches the warm-stone advisor-pitch aesthetic:
 - Warm beige background (#e8e8e3)
-- HubotSans-Bold ALL-CAPS titles
-- RobotoCondensed body text
+- Condensed bold ALL-CAPS titles
+- Condensed body text
 - Cards with thin dark borders (not solid fills)
 - Dark navy panels used sparingly for emphasis
 - Section labels in bordered badges
@@ -71,7 +71,7 @@ class PptxBuilder:
     def __init__(
         self,
         title: str = "Untitled",
-        brand: str = "aigis",
+        brand: str = "minimal",
         heading_font: str = "Hubot Sans",
         body_font: str = "Roboto Condensed",
         template: str | None = None,

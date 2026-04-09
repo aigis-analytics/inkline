@@ -30,10 +30,10 @@ def list_templates() -> list[str]:
     return list(_TEMPLATES.keys())
 
 
-DEFAULT_TEMPLATE = "aigis"
+DEFAULT_TEMPLATE = "minimalism"
 
 # Auto-register built-in templates on import
-from inkline.slides.templates.aigis import template_aigis                  # noqa: E402
+from inkline.slides.templates.warm_stone import template_warm_stone        # noqa: E402
 from inkline.slides.templates.newspaper import template_newspaper          # noqa: E402
 from inkline.slides.templates.minimalism import template_minimalism        # noqa: E402
 from inkline.slides.templates.executive import template_executive          # noqa: E402
@@ -45,7 +45,7 @@ from inkline.slides.templates.infotainment import template_infotainment    # noq
 from inkline.slides.templates.neon_tech import template_neon_tech          # noqa: E402
 from inkline.slides.templates.sculpture_pop import template_sculpture_pop  # noqa: E402
 
-register_template("aigis", template_aigis)
+register_template("warm_stone", template_warm_stone)
 register_template("newspaper", template_newspaper)
 register_template("minimalism", template_minimalism)
 register_template("executive", template_executive)

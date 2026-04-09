@@ -5,7 +5,7 @@ Usage::
     from inkline.slides import SlideBuilder
 
     deck = (
-        SlideBuilder(title="Q1 Report", brand="aigis")
+        SlideBuilder(title="Q1 Report", brand="minimal")
         .authenticate(refresh_token="...", client_id="...", client_secret="...")
         .slide()
             .title("Executive Summary")
@@ -245,7 +245,7 @@ class SlideBuilder:
     def __init__(
         self,
         title: str = "Untitled",
-        brand: str | BaseBrand = "aigis",
+        brand: str | BaseBrand = "minimal",
         *,
         template: str | None = None,
     ):

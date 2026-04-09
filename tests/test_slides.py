@@ -125,9 +125,9 @@ class TestElements:
 
 class TestBuilder:
     def test_builder_init(self):
-        builder = SlideBuilder(title="Test", brand="aigis")
+        builder = SlideBuilder(title="Test", brand="minimal")
         assert builder._title == "Test"
-        assert builder._brand.name == "aigis"
+        assert builder._brand.name == "minimal"
 
     def test_builder_slide_chaining(self):
         builder = SlideBuilder(title="Test")
@@ -215,7 +215,7 @@ class TestTemplates:
 
     def test_newspaper_template(self):
         from inkline.brands import get_brand
-        brand = get_brand("aigis")
+        brand = get_brand("minimal")
         func = get_template("newspaper")
 
         # Title slide
@@ -227,7 +227,7 @@ class TestTemplates:
 
     def test_minimalism_template(self):
         from inkline.brands import get_brand
-        brand = get_brand("aigis")
+        brand = get_brand("minimal")
         func = get_template("minimalism")
 
         # Content slide
@@ -236,7 +236,7 @@ class TestTemplates:
 
     def test_executive_template(self):
         from inkline.brands import get_brand
-        brand = get_brand("aigis")
+        brand = get_brand("minimal")
         func = get_template("executive")
 
         # Title slide (dark bg)

@@ -7,7 +7,7 @@ Usage::
     path = export_html(
         "# My Report\\n\\nContent...",
         output_path="report.html",
-        brand="aigis",
+        brand="minimal",
         title="My Report",
     )
 """
@@ -28,7 +28,7 @@ def export_html(
     markdown: str,
     output_path: str | Path,
     *,
-    brand: str | BaseBrand = "aigis",
+    brand: str | BaseBrand = "minimal",
     title: str = "",
     confidentiality: str | None = None,
     date: Optional[datetime] = None,
@@ -124,7 +124,7 @@ def _cli() -> None:
     )
     parser.add_argument("input", help="Path to the Markdown (.md) file")
     parser.add_argument("--out", "-o", default=None, help="Output HTML path")
-    parser.add_argument("--brand", "-b", default="aigis", help="Brand name (default: aigis)")
+    parser.add_argument("--brand", "-b", default="minimal", help="Brand name (default: minimal)")
     parser.add_argument("--title", "-t", default="", help="Document title")
     parser.add_argument("--no-pandoc", action="store_true", help="Force python-markdown")
     args = parser.parse_args()

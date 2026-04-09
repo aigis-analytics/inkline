@@ -5,7 +5,7 @@ Charts follow the brand's colour scheme and typography.
 
 Usage:
     from inkline.core.charts import ChartEngine, ChartType
-    engine = ChartEngine(brand="aigis")
+    engine = ChartEngine()
     png_path = engine.bar_chart(
         labels=["Q1", "Q2", "Q3"],
         values=[120, 185, 210],
@@ -25,12 +25,12 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Aigis chart colour palette (from brand)
-AIGIS_COLORS = ["#1A7FA0", "#39D3BB", "#3fb950", "#f0883e", "#58a6ff", "#d2a8ff", "#e6c069"]
-AIGIS_BG = "#FFFFFF"
-AIGIS_TEXT = "#1A1A1A"
-AIGIS_GRID = "#E5E7EB"
-AIGIS_MUTED = "#6B7280"
+# Default chart colour palette
+DEFAULT_CHART_COLORS = ["#1A7FA0", "#39D3BB", "#3fb950", "#f0883e", "#58a6ff", "#d2a8ff", "#e6c069"]
+DEFAULT_CHART_BG = "#FFFFFF"
+DEFAULT_CHART_TEXT = "#1A1A1A"
+DEFAULT_CHART_GRID = "#E5E7EB"
+DEFAULT_CHART_MUTED = "#6B7280"
 
 
 class ChartType(Enum):
@@ -50,13 +50,13 @@ class ChartEngine:
     def __init__(
         self,
         colors: list[str] | None = None,
-        bg_color: str = AIGIS_BG,
-        text_color: str = AIGIS_TEXT,
-        grid_color: str = AIGIS_GRID,
+        bg_color: str = DEFAULT_CHART_BG,
+        text_color: str = DEFAULT_CHART_TEXT,
+        grid_color: str = DEFAULT_CHART_GRID,
         font_family: str = "Inter",
         dpi: int = 200,
     ):
-        self.colors = colors or AIGIS_COLORS
+        self.colors = colors or DEFAULT_CHART_COLORS
         self.bg_color = bg_color
         self.text_color = text_color
         self.grid_color = grid_color

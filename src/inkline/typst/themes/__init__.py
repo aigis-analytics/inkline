@@ -17,7 +17,7 @@ Categories:
   - Pastel & Soft
   - Gold & Luxury
   - Minimal & Monochrome
-  - Brand-specific (Aigis variants)
+  - Curated palettes & industry-specific
 
 Usage:
     from inkline.typst.themes import ALL_THEMES, STRIPE_DARK
@@ -1350,44 +1350,6 @@ ONYX = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════
-# BRAND-SPECIFIC (Aigis variants)
-# ═══════════════════════════════════════════════════════════════════════
-
-AIGIS = {
-    "name": "Aigis Analytics",
-    "desc": "Warm beige, Hubot Sans, advisor pitch aesthetic",
-    "bg": "#e8e8e3",
-    "title_bg": "#e8e8e3",
-    "title_fg": "#0c0d0f",
-    "text": "#0c0d0f",
-    "muted": "#55575a",
-    "accent": "#1a3a5c",
-    "accent2": "#39d3bb",
-    "border": "#c8cac1",
-    "surface": "#e8e8e3",
-    "card_fill": "#e8e8e3",
-    "heading_font": "Hubot Sans",
-    "body_font": "Roboto Condensed",
-}
-
-AIGIS_DARK = {
-    "name": "Aigis Analytics",
-    "desc": "Dark variant — dashboards and title slides",
-    "bg": "#0d1117",
-    "title_bg": "#0d1117",
-    "title_fg": "#e6edf3",
-    "text": "#e6edf3",
-    "muted": "#8b949e",
-    "accent": "#39d3bb",
-    "accent2": "#1A7FA0",
-    "border": "#30363d",
-    "surface": "#161b22",
-    "card_fill": "#161b22",
-    "heading_font": "Hubot Sans",
-    "body_font": "Roboto Condensed",
-}
-
-# ═══════════════════════════════════════════════════════════════════════
 # CURATED PALETTES (from research — ready-to-use combos)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1755,10 +1717,6 @@ ALL_THEMES = {
     "slate": SLATE,
     "ash": ASH,
     "onyx": ONYX,
-
-    # Brand-specific
-    "aigis": AIGIS,
-    "aigis_dark": AIGIS_DARK,
 
     # Curated Palettes
     "energizing_blue": ENERGIZING_BLUE,

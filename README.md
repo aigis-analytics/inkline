@@ -26,7 +26,7 @@ from inkline.typst import export_typst_document
 export_typst_document(
     markdown="# Q4 Review\n\nRevenue up 34%...",
     output_path="q4_report.pdf",
-    brand="aigis",
+    brand="minimal",
     title="Q4 2026 Review",
 )
 ```
@@ -37,8 +37,8 @@ from inkline.typst import export_typst_slides
 
 slides = [
     {"slide_type": "title", "data": {
-        "company": "Aigis Analytics",
-        "tagline": "Advisor Pitch",
+        "company": "Acme Corp",
+        "tagline": "Series B Pitch",
         "date": "2026-04-09",
     }},
     {"slide_type": "three_card", "data": {
@@ -61,8 +61,8 @@ slides = [
 
 export_typst_slides(
     slides=slides,
-    output_path="aigis_pitch.pdf",
-    brand="aigis",
+    output_path="acme_pitch.pdf",
+    brand="minimal",
     template="consulting",
 )
 ```
@@ -71,7 +71,7 @@ export_typst_slides(
 ```python
 from inkline.intelligence import DesignAdvisor
 
-advisor = DesignAdvisor(brand="aigis", template="consulting", mode="llm")
+advisor = DesignAdvisor(brand="minimal", template="consulting", mode="llm")
 slides = advisor.design_deck(
     title="Project Corsair DD",
     sections=[
@@ -93,11 +93,11 @@ render_chart_for_brand(
     chart_type="waterfall",
     data={"labels": [...], "values": [...]},
     output_path="exhibit_1.png",
-    brand_name="aigis",
+    brand_name="minimal",
 )
 ```
 
-## Themes (92 total)
+## Themes (90 total)
 
 Themes live in `inkline.typst.themes` across 13 categories:
 
@@ -127,22 +127,40 @@ matches = search_themes("gold")
 
 ## Brands
 
-7 pre-registered brand identities in `inkline.brands`:
-`aigis`, `tvf`, `exmachina`, `statler`, `aria`, `sparkdcs`, `minimal`.
+Inkline ships with a single public brand — `minimal` — and an open
+plugin system for loading additional brands from a user-controlled
+directory. Drop a `.py` file in one of these locations and any
+`BaseBrand` instance it defines will be auto-registered at import time:
 
-Register your own:
+1. Every path in the `INKLINE_BRANDS_DIR` environment variable
+2. `$XDG_CONFIG_HOME/inkline/brands/` (default: `~/.config/inkline/brands/`)
+3. `./inkline_brands/` in the current working directory
+
+Asset files (logos, fonts) are looked up in a parallel list of
+directories (`INKLINE_ASSETS_DIR`, `~/.config/inkline/assets/`,
+`./inkline_assets/`, then the package's bundled assets).
+
+This means personal / proprietary brands — with their own logos,
+palettes, and confidentiality strings — live **outside** this repository
+and are never committed.
+
+Example brand file (`~/.config/inkline/brands/mycorp.py`):
 
 ```python
-from inkline.brands import register_brand, BaseBrand
+from inkline.brands import BaseBrand
 
-register_brand(BaseBrand(
-    name="mycompany",
-    display_name="My Company",
+MyCorpBrand = BaseBrand(
+    name="mycorp",
+    display_name="My Corporation",
     primary="#0B5FFF", secondary="#00C2A8",
     background="#FFFFFF", surface="#0A2540", text="#111827",
     muted="#6B7280", border="#E5E7EB", light_bg="#F8FAFC",
     heading_font="Inter", body_font="Inter",
-))
+    logo_dark_path="mycorp_logo_white.png",   # resolved from asset dirs
+    logo_light_path="mycorp_logo_dark.png",
+    confidentiality="Private & Confidential",
+    footer_text="My Corporation",
+)
 ```
 
 ## Slide types (17)
@@ -176,15 +194,15 @@ print(format_report(warnings))
 ## CLI
 
 ```bash
-inkline-html report.md --brand aigis --title "My Report"
-inkline-pdf  report.md --brand tvf   --title "TVF Review"
+inkline-html report.md --brand minimal --title "My Report"
+inkline-pdf  report.md --brand mycorp  --title "Quarterly Review"
 ```
 
 ## Repository layout
 
 ```
 src/inkline/
-├── brands/           # 7 brand identities
+├── brands/           # public brand(s) + plugin loader
 ├── html/             # Markdown → styled HTML
 ├── pdf/              # WeasyPrint PDF backend
 ├── pptx/             # python-pptx backend
@@ -193,7 +211,7 @@ src/inkline/
 │   ├── slide_renderer.py    # 17 slide layouts
 │   ├── chart_renderer.py    # 11 matplotlib charts
 │   ├── theme_registry.py    # template → theme generation
-│   └── themes/              # 92 themes in 13 categories
+│   └── themes/              # 90 themes in 13 categories
 └── intelligence/     # Design advisor + overflow audit
     ├── design_advisor.py
     ├── content_analyzer.py

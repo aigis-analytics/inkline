@@ -1,14 +1,14 @@
 """Inkline Intelligence Layer — smart document and presentation design.
 
 Provides rules-based (and optionally LLM-advised) layout, chart type,
-and visual hierarchy decisions. Any client (Aigis, Aria, etc.) gets
-intelligent output without implementing their own presentation logic.
+and visual hierarchy decisions. Any client application gets intelligent
+output without implementing its own presentation logic.
 
 Usage::
 
     from inkline.intelligence import DesignAdvisor
 
-    advisor = DesignAdvisor(brand="aigis", template="consulting")
+    advisor = DesignAdvisor(brand="minimal", template="consulting")
 
     # Smart slides from structured data
     slides = advisor.design_deck(

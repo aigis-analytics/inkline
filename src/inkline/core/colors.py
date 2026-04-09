@@ -58,8 +58,8 @@ class ColorScheme:
         )
 
     @classmethod
-    def aigis_light(cls) -> ColorScheme:
-        """Aigis Analytics light theme (white background)."""
+    def teal_light(cls) -> ColorScheme:
+        """Teal on white — print-ready light theme."""
         return cls(
             background="#FFFFFF",
             surface="#F4F6F8",
@@ -75,8 +75,8 @@ class ColorScheme:
         )
 
     @classmethod
-    def aigis_dark(cls) -> ColorScheme:
-        """Aigis Analytics dark theme (navy background)."""
+    def navy_dark(cls) -> ColorScheme:
+        """Teal on navy — pitch-ready dark theme."""
         return cls(
             background="#0d1117",
             surface="#161b22",

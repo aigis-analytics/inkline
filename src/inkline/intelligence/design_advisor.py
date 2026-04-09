@@ -80,7 +80,7 @@ class DesignAdvisor:
     Parameters
     ----------
     brand : str
-        Brand name (e.g., "aigis", "tvf", "aria", "sparkdcs").
+        Brand name (e.g., "minimal" or any user-registered brand).
     template : str
         Slide template style (e.g., "consulting", "executive", "brand").
     mode : str
@@ -93,7 +93,7 @@ class DesignAdvisor:
 
     def __init__(
         self,
-        brand: str = "aigis",
+        brand: str = "minimal",
         template: str = "brand",
         mode: str = "llm",
         api_key: str | None = None,

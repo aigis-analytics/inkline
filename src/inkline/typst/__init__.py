@@ -10,11 +10,11 @@ Usage::
     # Slides from structured data
     export_typst_slides(
         slides=[
-            {"slide_type": "title", "data": {"company": "Aigis Analytics", ...}},
+            {"slide_type": "title", "data": {"company": "Acme Corp", ...}},
             {"slide_type": "three_card", "data": {"section": "Problem", ...}},
         ],
         output_path="deck.pdf",
-        brand="aigis",
+        brand="minimal",
         template="consulting",
     )
 
@@ -22,8 +22,8 @@ Usage::
     export_typst_document(
         markdown="# Due Diligence Report\\n...",
         output_path="report.pdf",
-        brand="aigis",
-        title="Project Corsair DD Report",
+        brand="minimal",
+        title="DD Report",
     )
 """
 
@@ -44,7 +44,7 @@ def export_typst_slides(
     slides: list[dict[str, Any]],
     output_path: str | Path,
     *,
-    brand: str = "aigis",
+    brand: str = "minimal",
     template: str = "brand",
     title: str = "Untitled",
     date: str = "",
@@ -62,7 +62,7 @@ def export_typst_slides(
     output_path : Path
         Where to write the PDF.
     brand : str
-        Brand name (e.g., "aigis", "tvf", "aria").
+        Brand name (e.g., "minimal" or any user-registered brand).
     template : str
         Slide template (e.g., "consulting", "executive", "newspaper", "brand").
     title : str
@@ -135,7 +135,7 @@ def export_typst_document(
     markdown: str,
     output_path: str | Path,
     *,
-    brand: str = "aigis",
+    brand: str = "minimal",
     title: str = "",
     subtitle: str = "",
     date: Optional[str | datetime] = None,
@@ -260,8 +260,8 @@ def list_slide_types() -> list[str]:
 def get_capabilities() -> dict:
     """Return a dict describing Inkline's full capabilities.
 
-    Used by Aigis, Aria, and other clients to discover available
-    output formats, brands, templates, and chart types.
+    Used by client applications to discover available output
+    formats, brands, templates, and chart types.
     """
     from inkline.brands import list_brands
     return {

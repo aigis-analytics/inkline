@@ -47,7 +47,7 @@ embedded fonts and crisp vector graphics.
 ┌──────────────────────┐    ┌──────────────────────────────┐
 │  inkline.brands      │───▶│  inkline.typst.theme_registry│
 │  BaseBrand registry  │    │  brand + template → theme    │
-│  7 pre-registered    │    │  (92 themes, 10 templates)   │
+│  1 public brand      │    │  (90 themes, 11 templates)   │
 └──────────────────────┘    └──────────────┬───────────────┘
                                            │
                                            ▼
@@ -66,7 +66,7 @@ src/inkline/
 ├── __init__.py              # Public surface: get_brand, export_html, export_pdf, SlideBuilder
 ├── brands/
 │   ├── __init__.py          # BaseBrand, register_brand, get_brand, list_brands
-│   ├── aigis.py, tvf.py, aria.py, statler.py, exmachina.py, sparkdcs.py, minimal.py
+│   ├── minimal.py           # only built-in brand; private brands live in ~/.config/inkline/brands/
 ├── html/
 │   └── __init__.py          # export_html() — markdown → styled HTML
 ├── pdf/
@@ -83,7 +83,7 @@ src/inkline/
 │   ├── components.py        # Shared Typst primitives (card, badge, footer…)
 │   ├── theme_registry.py    # brand_to_typst_theme(), SLIDE_TEMPLATES
 │   └── themes/
-│       └── __init__.py      # 92 themes across 13 categories
+│       └── __init__.py      # 90 themes across 13 categories
 ├── intelligence/
 │   ├── __init__.py          # DesignAdvisor, audit_deck, audit_image
 │   ├── design_advisor.py    # Main entry — design_deck(), design_document()
@@ -187,7 +187,7 @@ export_typst_slides(
     slides: list[dict],
     output_path: str | Path,
     *,
-    brand: str = "aigis",
+    brand: str = "minimal",
     template: str = "brand",
     title: str = "Untitled",
     date: str = "",
@@ -201,7 +201,7 @@ export_typst_document(
     markdown: str,
     output_path: str | Path,
     *,
-    brand: str = "aigis",
+    brand: str = "minimal",
     title: str = "",
     author: str = "",
     date: str = "",
@@ -212,8 +212,8 @@ export_typst_document(
 ### 4.2 Legacy backends — `inkline`
 
 ```python
-export_html(markdown: str, output_path: str | Path, *, brand="aigis", title="") -> Path
-export_pdf(markdown: str, output_path: str | Path, *, brand="aigis", title="") -> Path
+export_html(markdown: str, output_path: str | Path, *, brand="minimal", title="") -> Path
+export_pdf(markdown: str, output_path: str | Path, *, brand="minimal", title="") -> Path
 SlideBuilder(...)  # Google Slides; requires auth
 ```
 
@@ -274,7 +274,7 @@ render_chart(
     dpi: int = 200,
 ) -> Path
 
-render_chart_for_brand(chart_type, data, output_path, brand_name="aigis", **kwargs) -> Path
+render_chart_for_brand(chart_type, data, output_path, brand_name="minimal", **kwargs) -> Path
 ```
 
 ---
@@ -313,9 +313,87 @@ BODY_HEIGHT_CM   =  8.50   # body area after header + footer
 
 ---
 
+## 5b. Brand plugin system
+
+Only the `minimal` brand ships in the package. Additional brands are
+loaded at import time from user-controlled directories — the package
+never contains proprietary logos, palettes, or company names.
+
+### Discovery order (first-win per name)
+
+**Brands** (`.py` files containing `BaseBrand` instances):
+1. Every path in `$INKLINE_BRANDS_DIR` (colon-separated, like `$PATH`)
+2. `$XDG_CONFIG_HOME/inkline/brands/` (default: `~/.config/inkline/brands/`)
+3. `./inkline_brands/` in the current working directory
+
+**Assets** (logo PNGs, font files, referenced by relative path):
+1. Every path in `$INKLINE_ASSETS_DIR`
+2. `~/.config/inkline/assets/`
+3. `./inkline_assets/`
+4. The package's bundled `src/inkline/assets/` (shipped fonts only)
+
+### Loader
+
+`inkline.brands._load_user_brands()` runs once on first import. For each
+`.py` file in the search path (sorted, skipping `_`-prefixed), it:
+
+1. Calls `importlib.util.spec_from_file_location()` under a synthetic
+   `inkline._user_brands.<stem>` namespace
+2. Executes the module in its own `ModuleType`
+3. Iterates top-level attributes; any `BaseBrand` instance is passed to
+   `register_brand()`
+4. Catches and logs exceptions at `WARNING` — a broken user brand never
+   kills the package import
+
+### User brand file template
+
+```python
+# ~/.config/inkline/brands/mycorp.py
+from inkline.brands import BaseBrand
+
+MyCorp = BaseBrand(
+    name="mycorp",
+    display_name="My Corporation",
+    primary="#0B5FFF", secondary="#00C2A8",
+    background="#FFFFFF", surface="#0A2540", text="#111827",
+    muted="#6B7280", border="#E5E7EB", light_bg="#F8FAFC",
+    heading_font="Inter", body_font="Inter",
+    logo_dark_path="mycorp_logo_white.png",   # resolved from asset dirs
+    logo_light_path="mycorp_logo_dark.png",
+    confidentiality="Private & Confidential",
+    footer_text="My Corporation Pty Ltd",
+)
+```
+
+### Docker / container integration
+
+Mount the brand directory read-only and set the env vars. Example for
+an agentic application container:
+
+```yaml
+services:
+  agent:
+    volumes:
+      - ~/.config/inkline:/root/.config/inkline:ro
+    environment:
+      - INKLINE_BRANDS_DIR=/root/.config/inkline/brands
+      - INKLINE_ASSETS_DIR=/root/.config/inkline/assets
+```
+
+### Introspection
+
+```python
+from inkline.brands import brand_search_paths, asset_search_paths, list_brands
+brand_search_paths()   # [Path('/home/user/.config/inkline/brands'), ...]
+asset_search_paths()   # [Path('/home/user/.config/inkline/assets'), ...]
+list_brands()          # ['minimal', 'mycorp', ...]
+```
+
+---
+
 ## 6. Themes
 
-92 themes in 13 categories registered in `inkline.typst.themes`. Each theme is a
+90 themes in 13 categories registered in `inkline.typst.themes`. Each theme is a
 dict with the same keys as a brand theme (bg, title_bg, accent, chart_colors, etc.).
 
 ### Slide templates (layout-style overrides)
@@ -507,6 +585,6 @@ Test scope: 46 tests covering brands, slide builder, templates, utils.
 
 ## 14. Versioning & changelog
 
-- **0.2.0** — Typst backend, 17 slide types, 11 chart types, 92 themes,
-  intelligence layer, overflow audit, 10 slide templates, 7 brands.
+- **0.2.0** — Typst backend, 17 slide types, 11 chart types, 90 themes,
+  intelligence layer, overflow audit, 11 slide templates, plugin brand loader.
 - **0.1.0** — Initial HTML + PDF backends.

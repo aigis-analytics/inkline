@@ -119,7 +119,7 @@ def render_chart_for_brand(
     chart_type: str,
     data: dict[str, Any],
     output_path: str | Path,
-    brand_name: str = "aigis",
+    brand_name: str = "minimal",
     **kwargs,
 ) -> Path:
     """Render a chart using a brand's color palette.
