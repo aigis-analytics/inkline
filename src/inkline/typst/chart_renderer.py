@@ -155,8 +155,13 @@ def render_chart(
             transform=fig.transFigure, zorder=0,
         )
 
-    fig.savefig(str(output_path), dpi=dpi, bbox_inches="tight",
-                facecolor=bg, edgecolor="none", transparent=False)
+    # Save with generous padding so rotated labels and axis ticks never clip.
+    # bbox_inches="tight" with pad_inches=0.25 leaves margin for the worst case.
+    fig.savefig(
+        str(output_path), dpi=dpi,
+        bbox_inches="tight", pad_inches=0.25,
+        facecolor=bg, edgecolor="none", transparent=False,
+    )
     _plt.close(fig)
 
     log.info("Chart rendered: %s (%s, %d bytes)", chart_type, output_path, output_path.stat().st_size)
@@ -369,7 +374,16 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
                 ha="center", va="center", fontsize=9, fontweight="bold", color="white")
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
+    # Keep labels horizontal — much cleaner. Use small font if any label
+    # is long. Reserve generous bottom margin via subplots_adjust.
+    max_label_len = max((len(str(l)) for l in labels), default=0)
+    if max_label_len > 12:
+        ax.set_xticklabels(labels, fontsize=7)
+    elif max_label_len > 8:
+        ax.set_xticklabels(labels, fontsize=8)
+    else:
+        ax.set_xticklabels(labels, fontsize=9)
+    fig.subplots_adjust(bottom=0.20)
     ax.axhline(y=0, color=muted, linewidth=0.5)
     ax.grid(axis="y", alpha=0.2, color=muted)
     fig.tight_layout()

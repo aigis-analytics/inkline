@@ -793,12 +793,13 @@ class TypstSlideRenderer:
         if not stats:
             return self._content_slide(d)
 
+        # Brand discipline: ALL stat values use the SINGLE brand accent.
+        # Variation is by ICON, not by colour. A multi-coloured row of stats
+        # is the visual equivalent of mixed fonts.
         stat_blocks = []
-        colors = t.get("chart_colors", [t["accent"], t.get("accent2", t["accent"])])
         for i, s in enumerate(stats):
-            color = colors[i % len(colors)]
             value = _esc(s.get("value", ""))
-            icon = s.get("icon", "")  # emoji or unicode character
+            icon = s.get("icon", "")
             label = _esc(s.get("label", ""))
             desc = _esc(s.get("desc", ""))
 
@@ -811,7 +812,7 @@ class TypstSlideRenderer:
       )[
         #align(center)[
           {f'#text(size: 28pt)[{icon}]#v(4pt)' if icon else ''}
-          #text(weight: "bold", size: 36pt, fill: {_rgb(color)})[{value}]
+          #text(weight: "bold", size: 36pt, fill: {_rgb(t['accent'])})[{value}]
           #v(4pt)
           #text(weight: "bold", size: 10pt, fill: {_rgb(t['muted'])})[#upper("{label}")]
           {f'#v(2pt)#text(size: 9pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}

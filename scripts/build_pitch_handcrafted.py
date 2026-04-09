@@ -409,6 +409,7 @@ def main():
         date="April 2026",
         subtitle="Branded documents and decks for teams who'd rather ship than format",
         image_root=str(OUT),
+        audit_visual=True,  # Run Claude visual audit on every slide
     )
     print(f"\n  PDF: {slides_path} ({slides_path.stat().st_size:,} bytes)")
 

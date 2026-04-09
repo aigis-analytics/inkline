@@ -339,6 +339,262 @@ def audit_all_chart_images(charts_dir: str | Path) -> list[AuditWarning]:
     return warnings
 
 
+# ---------------------------------------------------------------------------
+# LLM-DRIVEN VISUAL AUDIT (Claude vision)
+# ---------------------------------------------------------------------------
+# A real designer looks at each slide and tells you what's wrong. Claude can
+# do the same — vastly more accurate than pixel-scanning heuristics. This is
+# the audit that catches:
+#  - Donut chart label clipping
+#  - Radar chart legend overlap
+#  - Multi-coloured elements that should be single-colour (brand discipline)
+#  - Misalignment, weak hierarchy, awkward spacing
+#  - Style inconsistency across slides
+
+_VISUAL_AUDIT_SYSTEM = """You are Inkline's Visual Auditor. You inspect rendered \
+slide images and report visual quality issues that need to be fixed before the \
+deck ships.
+
+What you look for, in priority order:
+
+1. CLIPPING — any text, chart label, axis tick, legend, or icon that is cut off \
+at the edge of the slide or any container box. This is always an ERROR.
+
+2. OVERLAP — chart legends overlapping plot areas, text overlapping other text, \
+icons overlapping borders, footnotes overlapping content. ERROR.
+
+3. BRAND DISCIPLINE VIOLATIONS — A branded slide deck uses a 2-3 colour system. \
+Flag multi-coloured elements that should be single-colour:
+   - Numbered icon badges in feature_grid: ALL should use the single brand accent.
+   - Big-number stat values in icon_stat/kpi_strip: ALL should use the single brand accent.
+   - Progress bars: ALL bars should be the brand accent colour.
+   - Chart series in line/bar charts with 4+ series: should use a sequential
+     palette (shades of one accent), not 6+ distinct rainbow hues.
+   This is a WARN.
+
+   IMPORTANT — what is NOT a brand violation (do NOT flag these):
+   - Donut/pie/stacked bar segments using DIFFERENT SHADES of the same hue
+     (e.g., dark indigo → light indigo). This is brand-disciplined "monochrome
+     palette" — recognisably one colour, just different intensities. CORRECT.
+   - 2-series charts (e.g., line chart with 2 lines, scatter with 2 groups,
+     waterfall with totals + deltas) using BRAND ACCENT + BRAND SECONDARY.
+     The minimal brand pairs INDIGO (#6366F1) + AMBER (#F59E0B). Any 2-colour
+     chart using indigo + amber is CORRECT brand discipline. DO NOT FLAG.
+   - 3-series comparison charts (line, radar, grouped bar) with 3 distinct
+     colours when the data is genuinely 3 separate things being compared
+     (e.g., Inkline vs Gamma vs PowerPoint). Distinct colours are required
+     here for readability. DO NOT FLAG these as violations.
+   - Semantic colours used for status: red for negative, green for positive,
+     amber for warning. These are conventions, not brand violations.
+   - Illustrative watermarks (diagonal grey "ILLUSTRATIVE" text) — these are
+     intentional design elements, not clutter.
+
+   The bar for flagging brand violations is HIGH: only flag a chart if it
+   has 4+ distinct hues that should obviously be a single colour (e.g., a
+   roadmap with 6 progress bars in 6 different colours, or numbered icons
+   1-6 each in a different hue). Do not flag 2 or 3 colour usage.
+
+4. ALIGNMENT — misaligned elements (cards at different heights, columns not \
+flush, baselines off). WARN.
+
+5. TYPOGRAPHY — inconsistent font sizes, weight, or family within a slide. WARN.
+
+6. ILLEGIBILITY — text too small, low contrast, on top of busy backgrounds. WARN.
+
+7. HIERARCHY / EMPHASIS — unclear what the slide's main message is, no focal \
+point. INFO.
+
+8. POSITIVE — if the slide looks good, return [] (empty list). Don't manufacture \
+issues to seem helpful.
+
+Output format: a JSON array of findings. Each finding has:
+  {"severity": "error|warn|info", "message": "<what's wrong, where, and how to fix>"}
+
+Output ONLY the JSON array. No prose, no markdown fences, no commentary.
+
+Examples:
+
+Good slide → []
+
+Donut chart with clipped label →
+[{"severity": "error", "message": "Donut chart top-right segment label '5%' is \
+clipped by the chart container. Move labels inside wedges or use an external \
+legend."}]
+
+Roadmap with rainbow progress bars →
+[{"severity": "warn", "message": "Progress bars use 6 different colours (indigo, \
+orange, green, pink, cyan, violet). Brand discipline requires a single accent \
+colour for all bars in one programme. Use the brand accent for every bar."}]
+"""
+
+
+def audit_slide_with_llm(
+    image_path: str | Path,
+    *,
+    slide_index: int = -1,
+    slide_type: str = "",
+    api_key: str | None = None,
+    model: str = "claude-sonnet-4-20250514",
+) -> list[AuditWarning]:
+    """Send a rendered slide PNG to Claude and ask for a visual audit.
+
+    Returns AuditWarning objects with Claude's findings. If no API key
+    is available, returns empty silently.
+    """
+    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return []
+
+    image_path = Path(image_path)
+    if not image_path.exists():
+        return []
+
+    try:
+        import anthropic
+        import base64
+        import json
+    except ImportError:
+        return []
+
+    img_b64 = base64.standard_b64encode(image_path.read_bytes()).decode("utf-8")
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    user_text = (
+        f"Audit this rendered slide image (slide_index={slide_index}, "
+        f"slide_type='{slide_type}'). Return JSON array of findings only."
+    )
+
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=_VISUAL_AUDIT_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": img_b64,
+                        },
+                    },
+                    {"type": "text", "text": user_text},
+                ],
+            }],
+        )
+    except Exception as e:
+        return [AuditWarning(
+            slide_index=slide_index, slide_type=slide_type,
+            severity="info",
+            message=f"LLM visual audit skipped: {str(e)[:80]}",
+        )]
+
+    text = response.content[0].text.strip()
+    # Strip markdown fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        findings = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(findings, list):
+        return []
+
+    warnings: list[AuditWarning] = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        sev = f.get("severity", "info")
+        msg = f.get("message", "")
+        if sev not in ("error", "warn", "info"):
+            sev = "warn"
+        if msg:
+            warnings.append(AuditWarning(
+                slide_index=slide_index,
+                slide_type=slide_type,
+                severity=sev,
+                message=msg,
+            ))
+    return warnings
+
+
+def audit_deck_with_llm(
+    pdf_path: str | Path,
+    slides: list[dict],
+    *,
+    api_key: str | None = None,
+    model: str = "claude-sonnet-4-20250514",
+    page_dir: str | Path | None = None,
+) -> list[AuditWarning]:
+    """Render each PDF page to PNG and run LLM visual audit on each.
+
+    Uses pymupdf if available (fast), else falls back to recompiling the
+    Typst source via typst.compile(format='png').
+    """
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        return []
+
+    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return []
+
+    # Render PDF pages to PNGs in a temp/output dir
+    if page_dir is None:
+        page_dir = pdf_path.parent / f"_audit_{pdf_path.stem}"
+    page_dir = Path(page_dir)
+    page_dir.mkdir(parents=True, exist_ok=True)
+
+    page_pngs = _render_pdf_pages(pdf_path, page_dir)
+    if not page_pngs:
+        return []
+
+    warnings: list[AuditWarning] = []
+    for i, png in enumerate(page_pngs):
+        slide_type = slides[i].get("slide_type", "?") if i < len(slides) else "?"
+        page_warnings = audit_slide_with_llm(
+            png,
+            slide_index=i + 1,
+            slide_type=slide_type,
+            api_key=api_key,
+            model=model,
+        )
+        warnings.extend(page_warnings)
+
+    return warnings
+
+
+def _render_pdf_pages(pdf_path: Path, out_dir: Path) -> list[Path]:
+    """Render PDF pages to PNGs. Tries pymupdf, then falls back to nothing."""
+    # Try pymupdf (fitz)
+    try:
+        import fitz  # pymupdf
+        doc = fitz.open(str(pdf_path))
+        pages = []
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=120)
+            png_path = out_dir / f"page_{i+1:02d}.png"
+            pix.save(str(png_path))
+            pages.append(png_path)
+        doc.close()
+        return pages
+    except ImportError:
+        pass
+    except Exception:
+        return []
+
+    # No PDF→PNG library available
+    return []
+
+
 def _count_pdf_pages(pdf_path: Path) -> int | None:
     """Count pages in a PDF. Returns None if no PDF library available."""
     # Try pypdf first

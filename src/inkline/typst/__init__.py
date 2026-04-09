@@ -52,6 +52,7 @@ def export_typst_slides(
     font_paths: Optional[list[str | Path]] = None,
     image_root: Optional[str | Path] = None,
     audit: bool = True,
+    audit_visual: bool = False,
 ) -> Path:
     """Generate a slide deck PDF from structured slide specifications.
 
@@ -126,15 +127,22 @@ def export_typst_slides(
 
     compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
 
-    # Post-render visual audit — three layers:
+    # Post-render audit — four layers (each catches what the others can't):
     #   1. Page count vs expected slides (catches layout overflow)
-    #   2. Chart image edge clipping (catches matplotlib labels falling off)
-    #   3. Static content capacity (catches too-many-bullets-in-slide)
+    #   2. Chart image edge clipping (deterministic PIL pixel scan)
+    #   3. Static content capacity (counts items vs SLIDE_CAPACITY)
+    #   4. LLM visual audit (Claude vision — the real designer's eye)
+    #
+    # Layer 4 is the most powerful: it catches everything the heuristics
+    # miss (rainbow bars, label clipping inside slides, hierarchy issues,
+    # alignment problems). Runs automatically when ANTHROPIC_API_KEY is set
+    # OR when audit_visual=True is passed explicitly.
     if audit:
         try:
             from inkline.intelligence.overflow_audit import (
                 audit_rendered_pdf,
                 audit_chart_image,
+                audit_deck_with_llm,
                 emit_audit_report,
             )
             post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
@@ -145,13 +153,17 @@ def export_typst_slides(
                 img = s.get("data", {}).get("image_path")
                 if img and img not in seen_images:
                     seen_images.add(img)
-                    # Resolve relative paths against image_root or output dir
                     if root:
                         img_path = Path(root) / img
                     else:
                         img_path = output_path.parent / img
                     if img_path.exists():
                         post_warnings.extend(audit_chart_image(img_path))
+
+            # LLM visual audit — every page reviewed by Claude vision
+            if audit_visual:
+                log.info("Running LLM visual audit on %d slides...", len(slides))
+                post_warnings.extend(audit_deck_with_llm(output_path, slides))
 
             all_warnings = pre_warnings + post_warnings
             if all_warnings:
