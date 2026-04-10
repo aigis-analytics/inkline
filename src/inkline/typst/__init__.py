@@ -40,6 +40,42 @@ _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 _FONTS_DIR = _ASSETS_DIR / "fonts"
 
 
+def _verify_page_count(pdf_path: Path, expected: int) -> None:
+    """Hard gate: verify rendered PDF has exactly the expected number of pages.
+
+    If the page count doesn't match, content has overflowed onto extra pages.
+    This logs a loud warning with details so the caller knows which slides
+    overflowed. Does not raise — the PDF is still usable, but the caller
+    should inspect and fix.
+    """
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(str(pdf_path))
+        actual = len(doc)
+        doc.close()
+    except ImportError:
+        try:
+            from pypdf import PdfReader
+            actual = len(PdfReader(str(pdf_path)).pages)
+        except ImportError:
+            log.debug("No PDF reader available for page count verification")
+            return
+
+    if actual != expected:
+        overflow = actual - expected
+        import sys
+        msg = (
+            f"\n{'='*72}\n"
+            f" INKLINE OVERFLOW GATE  |  {actual} pages rendered, {expected} expected\n"
+            f" {overflow} slide(s) overflowed onto extra pages.\n"
+            f" The PDF has been written but contains layout overflow.\n"
+            f" Fix: reduce content, shorten titles, or split slides.\n"
+            f"{'='*72}\n"
+        )
+        print(msg, file=sys.stderr)
+        log.error("Page count mismatch: %d pages for %d slides", actual, expected)
+
+
 def _auto_render_charts(
     slides: list[dict[str, Any]],
     brand: str,
@@ -191,6 +227,9 @@ def export_typst_slides(
         all_font_paths.extend(str(p) for p in font_paths)
 
     compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
+
+    # Hard gate: verify page count matches slide count (overflow detection)
+    _verify_page_count(output_path, expected=len(slides))
 
     # Post-render audit — four layers (each catches what the others can't):
     #   1. Page count vs expected slides (catches layout overflow)

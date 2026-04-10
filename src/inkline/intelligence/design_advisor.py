@@ -81,25 +81,46 @@ REQUIRED CADENCE:
 - Every multi-step concept should be process_flow or timeline.
 
 ====================================================================
-HARD CAPACITY LIMITS (audit-enforced — exceed and the slide overflows)
+HARD CAPACITY LIMITS (overflow = broken slide — NEVER exceed these)
 ====================================================================
-- Slide titles: KEEP UNDER 50 CHARS to stay on one line at 22pt.
-  A 2-line title eats ~1.5cm of content area and pushes charts off the page.
-- progress_bars: MAX 6 bars
-- chart_caption bullets: MAX 5 short bullets (8-10 words each)
+TITLES:
+- Slide titles: KEEP UNDER 50 CHARS. Wrapping to 2 lines pushes content
+  off the page and causes layout overflow. Count characters carefully.
+
+ITEM COUNTS (anything beyond these limits is SILENTLY DROPPED):
+- chart_caption bullets: MAX 4 short bullets (8-10 words each)
 - dashboard bullets: MAX 3 short bullets (8-10 words each)
 - dashboard stats: EXACTLY 3 stat callouts
 - feature_grid features: EXACTLY 6 features (3x2 grid)
-- table: MAX 6 rows × 6 columns. NEVER exceed 6 columns.
+- table: MAX 6 rows x 6 columns. NEVER exceed 6 columns.
+  If the input has more rows, KEEP ALL ROWS — do NOT truncate user data.
 - three_card cards: EXACTLY 3
 - four_card cards: EXACTLY 4
 - icon_stat stats: 3 or 4
 - kpi_strip kpis: 3 to 5
 - timeline milestones: MAX 6
 - process_flow steps: MAX 4
+- progress_bars: MAX 6 bars
 - pyramid tiers: MAX 5
 - comparison rows: MAX 6 per side
 - content (bullets): MAX 6 bullets — and AVOID this slide type when possible
+
+TEXT LENGTH:
+- Card body text: MAX 2 short sentences (~60-80 chars total)
+- Bullet items: MAX 10 words each. Telegraphic, not prose.
+- Table cell text: MAX 50 chars per cell. Abbreviate if needed.
+- Footnotes: MAX 80 chars. One short line only.
+
+CHARTS (chart_caption / dashboard):
+- Chart images are constrained to 6cm height on slide. Design accordingly.
+- Keep chart titles short — they share vertical space with the image.
+- MAX 4 bullets in the side panel (not 5 — accounts for caption text).
+
+CONSISTENCY:
+- three_card: ALL 3 cards render at the SAME HEIGHT regardless of text.
+  Keep body text length similar across cards so content looks balanced.
+- four_card: ALL 4 cards render at the SAME HEIGHT. Same rule applies.
+- feature_grid: ALL 6 cells are equal size. Keep descriptions uniform length.
 
 ====================================================================
 SLIDE TYPE CATALOGUE
@@ -291,6 +312,22 @@ class DesignAdvisor:
             Deck title.
         sections : list[dict]
             Content sections, each with ``type`` and data fields.
+
+            Each section can include a ``"slide_mode"`` field to control how
+            much creative freedom the LLM has:
+
+            - ``"exact"`` — Section is a complete slide spec. The LLM does not
+              touch it. Must include ``"slide_type"`` and ``"data"`` keys.
+              Use this when you know exactly what the slide should look like.
+            - ``"guided"`` — Section specifies constraints (e.g., ``slide_type``,
+              some ``data`` fields). The LLM fills missing fields but MUST
+              preserve everything the user provided. Use this when you want
+              the LLM to polish presentation but not change substance.
+            - ``"auto"`` (default) — Full LLM control. The LLM picks the best
+              slide type and structures all data from the section content.
+
+            If ``slide_mode`` is omitted, defaults to ``"auto"``.
+
         date : str
             Date string.
         subtitle : str
@@ -303,37 +340,162 @@ class DesignAdvisor:
             Deck goal (e.g., "secure pre-seed investment", "inform board").
         additional_guidance : str, optional
             Free-form guidance the user wants the LLM to follow on top of the
-            playbook rules. Used to teach/steer the advisor in-context. Examples:
-            "Use the iceberg metaphor for the risk slide", "Lean into our
-            burgundy palette", "Avoid all 4-card layouts — use 3-card or split".
+            playbook rules.
         reference_archetypes : list[str], optional
             Archetype names from ``inkline.intelligence.template_catalog.ARCHETYPES``
-            that the LLM should consider for this deck. The structured recipes
-            for each are inlined into the system prompt, biasing the LLM toward
-            the named patterns. Use ``list_archetypes()`` to see options.
+            that the LLM should consider for this deck.
 
         Returns
         -------
         list[dict]
             List of slide specs ready for ``export_typst_slides()``.
         """
-        # LLM mode is usable if EITHER an injected caller is present OR an
-        # Anthropic API key is configured.
+        # Partition sections by slide_mode
+        exact_slides = []   # (original_index, slide_spec)
+        llm_sections = []   # (original_index, section) — for auto + guided
+
+        for i, section in enumerate(sections):
+            mode = section.get("slide_mode", "auto")
+            if mode == "exact":
+                # Exact mode: section IS the slide spec — pass through directly
+                stype = section.get("slide_type", "")
+                data = section.get("data", {})
+                if stype and stype in SLIDE_TYPES:
+                    exact_slides.append((i, {"slide_type": stype, "data": data}))
+                else:
+                    log.warning(
+                        "Section %d has slide_mode='exact' but invalid/missing "
+                        "slide_type '%s' — falling back to auto", i, stype,
+                    )
+                    llm_sections.append((i, section))
+            else:
+                llm_sections.append((i, section))
+
+        # If ALL sections are exact, no LLM call needed
+        if not llm_sections:
+            slides = [spec for _, spec in sorted(exact_slides)]
+            # Add title + closing if not already present
+            if not slides or slides[0]["slide_type"] != "title":
+                slides.insert(0, {"slide_type": "title", "data": {
+                    "company": title, "tagline": subtitle, "date": date,
+                }})
+            if contact and (not slides or slides[-1]["slide_type"] != "closing"):
+                slides.append({"slide_type": "closing", "data": contact})
+            return slides
+
+        # LLM mode: send auto + guided sections to LLM
         if self.mode == "llm" and (self.llm_caller is not None or self.api_key):
             try:
-                return self._design_deck_llm(
-                    title, sections, date=date, subtitle=subtitle,
+                llm_only = [s for _, s in llm_sections]
+                llm_slides = self._design_deck_llm(
+                    title, llm_only, date=date, subtitle=subtitle,
                     contact=contact, audience=audience, goal=goal,
                     additional_guidance=additional_guidance,
                     reference_archetypes=reference_archetypes,
                 )
+
+                # Merge: replace LLM-designed slides with exact ones at
+                # their original positions. LLM output is sequential for
+                # the auto/guided sections; exact slides are spliced in.
+                if exact_slides:
+                    llm_slides = self._merge_exact_slides(
+                        llm_slides, exact_slides, llm_sections,
+                    )
+
+                # Post-process: enforce guided mode constraints
+                llm_slides = self._enforce_guided_constraints(
+                    llm_slides, sections,
+                )
+
+                return llm_slides
             except Exception as e:
                 log.warning("LLM mode failed, falling back to rules: %s", e)
 
-        # Fallback: rules-based
-        return self._design_deck_rules(
-            title, sections, date=date, subtitle=subtitle, contact=contact,
+        # Fallback: rules-based (exact slides still honored)
+        rules_sections = [s for _, s in llm_sections]
+        rules_slides = self._design_deck_rules(
+            title, rules_sections, date=date, subtitle=subtitle, contact=contact,
         )
+        if exact_slides:
+            rules_slides = self._merge_exact_slides(
+                rules_slides, exact_slides, llm_sections,
+            )
+        return rules_slides
+
+    @staticmethod
+    def _merge_exact_slides(
+        llm_slides: list[dict],
+        exact_slides: list[tuple[int, dict]],
+        llm_sections: list[tuple[int, dict]],
+    ) -> list[dict]:
+        """Splice exact slides into LLM output at their original positions.
+
+        The LLM only saw auto/guided sections, so its output indices don't
+        account for exact slides. We insert exact slides at the correct
+        positions relative to the original section ordering.
+        """
+        # Build a mapping: original_index → slide_spec
+        result_by_idx: dict[int, dict] = {}
+        for orig_idx, spec in exact_slides:
+            result_by_idx[orig_idx] = spec
+
+        # LLM slides map to llm_sections in order (skip title/closing)
+        llm_content = [s for s in llm_slides if s["slide_type"] not in ("title", "closing")]
+        title_slide = next((s for s in llm_slides if s["slide_type"] == "title"), None)
+        closing_slide = next((s for s in llm_slides if s["slide_type"] == "closing"), None)
+
+        for i, (orig_idx, _) in enumerate(llm_sections):
+            if i < len(llm_content):
+                result_by_idx[orig_idx] = llm_content[i]
+
+        # Reassemble in original order
+        merged = []
+        if title_slide:
+            merged.append(title_slide)
+        for idx in sorted(result_by_idx):
+            merged.append(result_by_idx[idx])
+        if closing_slide:
+            merged.append(closing_slide)
+
+        return merged
+
+    @staticmethod
+    def _enforce_guided_constraints(
+        slides: list[dict],
+        original_sections: list[dict],
+    ) -> list[dict]:
+        """For guided-mode sections, ensure user-specified fields are preserved.
+
+        The LLM may have changed fields the user explicitly set. This method
+        restores them from the original section.
+        """
+        # Map section titles to original sections for matching
+        guided = {
+            s.get("section", s.get("title", "")): s
+            for s in original_sections
+            if s.get("slide_mode") == "guided"
+        }
+        if not guided:
+            return slides
+
+        for slide in slides:
+            data = slide.get("data", {})
+            section_key = data.get("section", data.get("title", ""))
+
+            orig = guided.get(section_key)
+            if not orig:
+                continue
+
+            # Restore user-specified slide_type if provided
+            if "slide_type" in orig and orig["slide_type"] in SLIDE_TYPES:
+                slide["slide_type"] = orig["slide_type"]
+
+            # Restore user-specified data fields
+            user_data = orig.get("data", {})
+            for key, value in user_data.items():
+                data[key] = value
+
+        return slides
 
     # ==================================================================
     # LLM-DRIVEN MODE
@@ -519,9 +681,18 @@ class DesignAdvisor:
         parts.append("\n## Content Sections\n")
         parts.append("Each section below is content that needs to become one (or occasionally two) slides.")
         parts.append("Decide the best slide_type for each, choose action titles, and structure the data.\n")
+        parts.append("SECTION MODES:")
+        parts.append("- `auto` (default): You have full creative control over slide_type and data.")
+        parts.append("- `guided`: The user has specified certain fields (e.g., slide_type, some data")
+        parts.append("  fields like rows, cards, title). You MUST PRESERVE those fields exactly as")
+        parts.append("  provided. Fill in any MISSING fields (e.g., footnote, highlight_index) and")
+        parts.append("  polish the presentation, but DO NOT change user-specified content.")
+        parts.append("  If the user specifies `slide_type: table` with 8 rows, output a table with 8 rows.\n")
 
         for i, section in enumerate(sections):
-            parts.append(f"### Section {i+1}: {section.get('section', section.get('type', 'Untitled'))}")
+            slide_mode = section.get("slide_mode", "auto")
+            mode_tag = f" [MODE: {slide_mode.upper()}]" if slide_mode != "auto" else ""
+            parts.append(f"### Section {i+1}: {section.get('section', section.get('type', 'Untitled'))}{mode_tag}")
             parts.append(f"Original title: {section.get('title', '')}")
             parts.append(f"```json\n{json.dumps(section, indent=2, default=str)}\n```\n")
 
