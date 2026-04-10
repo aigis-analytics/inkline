@@ -151,8 +151,18 @@ def export_typst_slides(
     image_root: Optional[str | Path] = None,
     audit: bool = True,
     audit_visual: bool = True,
+    auto_fix: bool = True,
+    max_overflow_attempts: int = 3,
+    max_visual_attempts: int = 5,
 ) -> Path:
-    """Generate a slide deck PDF from structured slide specifications.
+    """Generate a slide deck PDF with closed-loop quality assurance.
+
+    The pipeline runs two nested loops:
+    - **Inner loop** (deterministic): fixes structural overflow until
+      page count matches slide count.
+    - **Outer loop** (LLM-driven): runs Claude vision audit on every slide,
+      applies targeted fixes for ERROR findings, and re-renders until the
+      visual auditor gives a clean pass.
 
     Parameters
     ----------
@@ -161,40 +171,41 @@ def export_typst_slides(
     output_path : Path
         Where to write the PDF.
     brand : str
-        Brand name (e.g., "minimal" or any user-registered brand).
+        Brand name.
     template : str
-        Slide template (e.g., "consulting", "executive", "newspaper", "brand").
-    title : str
-        Deck title.
-    date : str
-        Date string for footer.
-    subtitle : str
-        Optional subtitle.
+        Slide template.
+    title, date, subtitle : str
+        Deck metadata.
     font_paths : list[Path], optional
         Additional font directories.
+    image_root : Path, optional
+        Root directory for image resolution.
+    audit : bool
+        Enable audit checks (default True).
+    audit_visual : bool
+        Enable LLM visual audit in the outer loop (default True).
+    auto_fix : bool
+        Enable closed-loop auto-fixing (default True).
+    max_overflow_attempts : int
+        Max inner loop iterations for structural overflow (default 3).
+    max_visual_attempts : int
+        Max outer loop iterations for visual quality (default 5).
 
     Returns
     -------
     Path
         Path to the generated PDF.
     """
+    import shutil
+
     from inkline.brands import get_brand
     from inkline.typst.compiler import compile_typst
     from inkline.typst.slide_renderer import DeckSpec, SlideSpec, TypstSlideRenderer
     from inkline.typst.theme_registry import brand_to_typst_theme
 
-    # Pre-render content audit (catches static capacity issues)
-    pre_warnings: list = []
-    if audit:
-        try:
-            from inkline.intelligence.overflow_audit import audit_deck
-            pre_warnings = audit_deck(slides)
-        except Exception as e:
-            log.debug("pre-render audit skipped: %s", e)
-
+    # === PHASE 0: Setup ===
     brand_obj = get_brand(brand)
     theme = brand_to_typst_theme(brand_obj, template)
-
     output_path = Path(output_path)
 
     # Determine root for image resolution
@@ -202,20 +213,16 @@ def export_typst_slides(
     if image_root:
         root = str(image_root)
     else:
-        # Auto-detect: if any slide has image_path or brand has a logo,
-        # use output dir as root so Typst can resolve relative paths
         has_images = any(s.get("data", {}).get("image_path") for s in slides)
         has_logo = bool(theme.get("logo_light_path"))
         if has_images or has_logo:
             root = str(output_path.parent)
 
-    # Copy logo to output directory so Typst can find it
-    import shutil
+    # Copy logo to output directory
     logo_path = theme.get("logo_light_path", "")
     if logo_path:
         logo_src = _ASSETS_DIR / logo_path
         if not logo_src.exists():
-            # Try brands assets directory
             import os
             brands_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "inkline" / "assets"
             logo_src = brands_dir / logo_path
@@ -224,75 +231,185 @@ def export_typst_slides(
             if not logo_target.exists():
                 shutil.copy2(logo_src, logo_target)
 
-    # Auto-render chart images requested by DesignAdvisor via chart_request
-    _auto_render_charts(slides, brand, root or str(output_path.parent))
-
-    deck_spec = DeckSpec(
-        slides=[SlideSpec(slide_type=s["slide_type"], data=s.get("data", {})) for s in slides],
-        title=title,
-        date=date,
-        subtitle=subtitle,
-    )
-
-    renderer = TypstSlideRenderer(theme)
-    source = renderer.render_deck(deck_spec)
-
     # Collect font paths
     all_font_paths = [str(_FONTS_DIR)]
     if font_paths:
         all_font_paths.extend(str(p) for p in font_paths)
 
-    compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
+    # === PHASE 1: Chart rendering (ONE TIME) ===
+    _auto_render_charts(slides, brand, root or str(output_path.parent))
 
-    # Hard gate: verify page count matches slide count (overflow detection)
-    _verify_page_count(output_path, expected=len(slides))
+    # Chart audit
+    pre_warnings: list = []
+    if audit and auto_fix:
+        try:
+            from inkline.intelligence.slide_fixer import audit_charts
+            chart_warnings = audit_charts(slides, root or str(output_path.parent), brand)
+            pre_warnings.extend({"severity": w.get("severity", "info"), "message": w.get("issue", "")}
+                                for w in chart_warnings if isinstance(w, dict))
+        except Exception as e:
+            log.debug("Chart audit skipped: %s", e)
 
-    # Post-render audit — four layers (each catches what the others can't):
-    #   1. Page count vs expected slides (catches layout overflow)
-    #   2. Chart image edge clipping (deterministic PIL pixel scan)
-    #   3. Static content capacity (counts items vs SLIDE_CAPACITY)
-    #   4. LLM visual audit (Claude vision — the real designer's eye)
-    #
-    # Layer 4 is the most powerful: it catches everything the heuristics
-    # miss (rainbow bars, label clipping inside slides, hierarchy issues,
-    # alignment problems). Runs automatically when ANTHROPIC_API_KEY is set
-    # OR when audit_visual=True is passed explicitly.
-    if audit:
+    # === PHASE 2: Pre-render validation & auto-fix ===
+    if auto_fix:
+        try:
+            from inkline.intelligence.slide_fixer import validate_and_fix_slides, equalise_card_heights
+            slides, fix_log = validate_and_fix_slides(slides)
+            slides = equalise_card_heights(slides)
+            if fix_log:
+                log.info("Pre-render fixer applied %d fixes", len(fix_log))
+        except Exception as e:
+            log.debug("Pre-render fixer skipped: %s", e)
+
+    # === PHASE 3: OUTER LOOP (visual quality) ===
+    visual_attempt = 0
+    all_warnings: list = list(pre_warnings)
+    source = None
+
+    def _render_and_compile(slides_list, source_str, force_rerender):
+        """Helper: render Typst source from slides if needed, compile to PDF."""
+        if force_rerender or source_str is None:
+            deck = DeckSpec(
+                slides=[SlideSpec(slide_type=s["slide_type"], data=s.get("data", {})) for s in slides_list],
+                title=title, date=date, subtitle=subtitle,
+            )
+            renderer = TypstSlideRenderer(theme)
+            source_str = renderer.render_deck(deck)
+        compile_typst(source_str, output_path=output_path, root=root, font_paths=all_font_paths)
+        return source_str
+
+    while visual_attempt <= max_visual_attempts:
+        # --- INNER LOOP: structural overflow fixes ---
+        overflow_attempt = 0
+        needs_rerender = True
+
+        while overflow_attempt <= max_overflow_attempts:
+            source = _render_and_compile(slides, source, needs_rerender)
+            actual = _count_pages(output_path)
+            expected = len(slides)
+
+            if actual == expected:
+                break  # No overflow
+
+            if overflow_attempt >= max_overflow_attempts or not auto_fix:
+                _verify_page_count(output_path, expected)
+                break
+
+            # Identify and fix overflow
+            try:
+                from inkline.intelligence.slide_fixer import (
+                    identify_overflow_slides, apply_graduated_fixes,
+                )
+                overflow_indices = identify_overflow_slides(output_path, slides, source)
+                overflow_attempt += 1
+                log.info("Overflow fix attempt %d: slides %s", overflow_attempt, overflow_indices)
+                slides, source, needs_rerender = apply_graduated_fixes(
+                    slides, source, overflow_indices, overflow_attempt, theme,
+                )
+            except Exception as e:
+                log.warning("Overflow fix failed: %s", e)
+                break
+
+        # --- Post-overflow audits ---
+        if not audit:
+            break
+
         try:
             from inkline.intelligence.overflow_audit import (
-                audit_rendered_pdf,
-                audit_chart_image,
-                audit_deck_with_llm,
-                emit_audit_report,
+                audit_rendered_pdf, audit_chart_image,
+                audit_deck_with_llm, emit_audit_report,
             )
-            post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
+        except ImportError:
+            break
 
-            # Audit any embedded chart images for edge clipping
-            seen_images = set()
-            for s in slides:
-                img = s.get("data", {}).get("image_path")
-                if img and img not in seen_images:
-                    seen_images.add(img)
-                    if root:
-                        img_path = Path(root) / img
-                    else:
-                        img_path = output_path.parent / img
-                    if img_path.exists():
-                        post_warnings.extend(audit_chart_image(img_path))
+        post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
 
-            # LLM visual audit — every page reviewed by Claude vision
-            if audit_visual:
-                log.info("Running LLM visual audit on %d slides...", len(slides))
-                post_warnings.extend(audit_deck_with_llm(output_path, slides))
+        # Chart image clipping audit
+        seen_images: set = set()
+        for s in slides:
+            img = s.get("data", {}).get("image_path")
+            if img and img not in seen_images:
+                seen_images.add(img)
+                img_path = Path(root or str(output_path.parent)) / img
+                if img_path.exists():
+                    post_warnings.extend(audit_chart_image(img_path))
 
-            all_warnings = pre_warnings + post_warnings
-            if all_warnings:
-                emit_audit_report(all_warnings)
-        except Exception as e:
-            log.debug("post-render audit skipped: %s", e)
+        # --- LLM Visual Audit (inside outer loop) ---
+        if audit_visual:
+            log.info("Visual audit pass %d: reviewing %d slides...", visual_attempt + 1, len(slides))
+            llm_warnings = audit_deck_with_llm(output_path, slides)
+            post_warnings.extend(llm_warnings)
+
+            errors = [w for w in llm_warnings if w.severity == "error"]
+
+            if not errors or not auto_fix:
+                # ALL CLEAR or auto_fix disabled
+                all_warnings.extend(post_warnings)
+                if not errors:
+                    log.info("Visual audit PASSED — no errors on attempt %d", visual_attempt + 1)
+                break
+
+            if visual_attempt >= max_visual_attempts:
+                all_warnings.extend(post_warnings)
+                log.warning("Visual audit: max attempts (%d) reached, shipping with %d errors",
+                            max_visual_attempts, len(errors))
+                break
+
+            # ERRORS FOUND — fix and retry
+            visual_attempt += 1
+            try:
+                from inkline.intelligence.slide_fixer import fix_from_llm_findings
+                slides, applied = fix_from_llm_findings(slides, errors)
+                if not applied:
+                    all_warnings.extend(post_warnings)
+                    log.info("Visual audit: no actionable fixes for %d errors, shipping", len(errors))
+                    break
+                log.info("Visual audit attempt %d: applied %d fixes, re-rendering",
+                         visual_attempt, len(applied))
+                source = None  # Force full re-render
+                continue
+            except Exception as e:
+                log.warning("Visual audit fix failed: %s", e)
+                all_warnings.extend(post_warnings)
+                break
+        else:
+            all_warnings.extend(post_warnings)
+            break
+
+    # === PHASE 4: Final report ===
+    if all_warnings:
+        try:
+            from inkline.intelligence.overflow_audit import emit_audit_report, AuditWarning
+            # Convert any raw dicts to AuditWarning objects
+            typed_warnings = []
+            for w in all_warnings:
+                if isinstance(w, AuditWarning):
+                    typed_warnings.append(w)
+            if typed_warnings:
+                emit_audit_report(typed_warnings)
+        except Exception:
+            pass
 
     log.info("Typst slide deck written to %s", output_path)
     return output_path
+
+
+def _count_pages(pdf_path: Path) -> int:
+    """Count pages in a PDF. Returns 0 if no reader available."""
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        n = len(doc)
+        doc.close()
+        return n
+    except ImportError:
+        pass
+    try:
+        from pypdf import PdfReader
+        return len(PdfReader(str(pdf_path)).pages)
+    except ImportError:
+        pass
+    return 0
 
 
 def export_typst_document(

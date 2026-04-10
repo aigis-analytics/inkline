@@ -595,6 +595,28 @@ def _render_pdf_pages(pdf_path: Path, out_dir: Path) -> list[Path]:
     return []
 
 
+def extract_page_texts(pdf_path: Path) -> list[str]:
+    """Extract text content from each page of a PDF.
+
+    Returns list of strings, one per page. Empty list if no PDF reader.
+    """
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        texts = [page.get_text() for page in doc]
+        doc.close()
+        return texts
+    except ImportError:
+        pass
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(str(pdf_path))
+        return [page.extract_text() or "" for page in reader.pages]
+    except ImportError:
+        pass
+    return []
+
+
 def _count_pdf_pages(pdf_path: Path) -> int | None:
     """Count pages in a PDF. Returns None if no PDF library available."""
     # Try pypdf first
