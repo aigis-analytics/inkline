@@ -1180,9 +1180,9 @@ class TypstSlideRenderer:
   grid(
     columns: (1.75fr, 1fr),
     gutter: 14pt,
-    // Chart (reduced height to fit slide)
-    block(width: 100%)[
-      #align(center + horizon, image("{image_path}", width: 100%, height: 6.2cm))
+    // Chart — constrained to available slide content area
+    block(width: 100%, height: 6cm)[
+      #align(center + horizon, image("{image_path}", height: 100%, fit: "contain"))
     ],
     // Key takeaways panel with accent left border
     block(

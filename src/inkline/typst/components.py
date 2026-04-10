@@ -55,7 +55,9 @@ def card(
     text_color: str = "#111111",
     radius: int = 3,
 ) -> str:
-    """Content card with optional border."""
+    """Content card with optional border.
+
+"""
     stroke = f"stroke: 0.75pt + {_rgb(border)}," if border else ""
     return f"""block(
       fill: {_rgb(fill)},
