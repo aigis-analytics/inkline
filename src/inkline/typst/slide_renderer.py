@@ -588,20 +588,20 @@ class TypstSlideRenderer:
 )[
   #set text(fill: {_rgb(t['title_fg'])})
 
-  #v(1.6cm)
+  #v(1fr)
   #align(center)[
-    {f'#image("{logo_path}", width: 2cm)#v(0.3cm)' if logo_path else ''}
-    #text(weight: "bold", size: 56pt, font: "{heading_font}", tracking: -1pt)[#upper("{_esc(company)}")]
-    #v(0.3cm)
-    #text(size: 14pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
-    #v(0.8cm)
-    #block(fill: {_rgb(t['accent'])}, inset: (x: 16pt, y: 8pt), radius: 4pt)[
-      #text(weight: "bold", size: 16pt, fill: white)[{_esc(name)}]
+    {f'#image("{logo_path}", width: 1.5cm)#v(0.2cm)' if logo_path else ''}
+    #text(weight: "bold", size: 44pt, font: "{heading_font}", tracking: -1pt)[#upper("{_esc(company)}")]
+    #v(0.2cm)
+    #text(size: 12pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
+    #v(0.6cm)
+    #block(fill: {_rgb(t['accent'])}, inset: (x: 14pt, y: 6pt), radius: 4pt)[
+      #text(weight: "bold", size: 14pt, fill: white)[{_esc(name)}]
     ]
-    #v(0.4cm)
-    #text(size: 11pt, fill: {_rgb(t['muted'])})[{_esc(role)}]
+    #v(0.3cm)
+    #text(size: 10pt, fill: {_rgb(t['muted'])})[{_esc(role)}]
     #v(2pt)
-    #text(size: 11pt, weight: "bold", fill: {_rgb(t['accent2'])})[{_esc(email)}]
+    #text(size: 10pt, weight: "bold", fill: {_rgb(t['accent2'])})[{_esc(email)}]
   ]
 
   #v(1fr)

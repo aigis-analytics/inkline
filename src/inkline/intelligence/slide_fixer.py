@@ -47,7 +47,7 @@ try:
     from inkline.intelligence.layout_selector import SLIDE_CAPACITY
 except ImportError:
     SLIDE_CAPACITY: dict[str, int] = {
-        "content": 6, "table": 6, "bar_chart": 8, "three_card": 3,
+        "content": 6, "table": 10, "bar_chart": 8, "three_card": 3,
         "four_card": 4, "stat": 4, "kpi_strip": 5, "split": 6,
         "timeline": 6, "process_flow": 4, "progress_bars": 6,
         "pyramid": 5, "comparison": 6, "feature_grid": 6,
@@ -81,6 +81,10 @@ def validate_and_fix_slides(
     fixes: list[dict] = []
 
     for i, slide in enumerate(slides):
+        # Skip exact-mode slides — user controls these entirely
+        if slide.get("slide_mode") == "exact":
+            continue
+
         stype = slide.get("slide_type", "")
         data = slide.get("data", {})
         if not data:
@@ -399,7 +403,7 @@ def _fix_source_spacing(
         # Reduce chart height
         new_src = re.sub(r'height: 8\.5cm', 'height: 7cm', new_src)
         new_src = re.sub(r'height: 7\.2cm', 'height: 6cm', new_src)
-        new_src = re.sub(r'height: 6\.5cm', 'height: 5\.5cm', new_src)
+        new_src = re.sub(r'height: 6\.5cm', 'height: 5.5cm', new_src)
 
         if new_src != slide_src:
             source = source[:start] + new_src + source[end:]

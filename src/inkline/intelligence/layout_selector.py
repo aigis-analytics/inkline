@@ -28,7 +28,7 @@ class LayoutDecision:
 # Content capacity per slide type (matches TypstSlideRenderer constants)
 SLIDE_CAPACITY: dict[str, int] = {
     "content": 6,        # bullet points
-    "table": 6,          # data rows (max 6 rows × 6 cols)
+    "table": 10,         # data rows (renderer auto-shrinks font for 7-12 rows)
     "bar_chart": 8,      # bars
     "three_card": 3,     # cards
     "four_card": 4,      # cards
