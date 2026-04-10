@@ -180,8 +180,12 @@ class TypstSlideRenderer:
         # Logo path for title slide
         logo_path = t.get("logo_light_path", "")
 
-        # Use #page(...)[content] (function form) so settings DO NOT leak
-        # to subsequent pages — unlike `set page(...)` which propagates.
+        # Title slide layout matches advisor pitch:
+        # - Large shield left-aligned, vertically centred with company name
+        # - Company name in huge bold uppercase to the right of shield
+        # - Tagline below in bold uppercase
+        # - Horizontal line, then subtitle text
+        # - Footer with date + confidentiality
         return f"""#page(
   fill: {_rgb(title_bg)},
   margin: (top: 1.4cm, bottom: 1.2cm, left: 1.6cm, right: 1.6cm),
@@ -190,42 +194,36 @@ class TypstSlideRenderer:
 )[
   #set text(fill: {_rgb(title_fg)})
 
-  #v(1.4cm)
+  #v(1fr)
 
-  // Logo + company name
+  // Shield + company name — shield is large, left-aligned, name to the right
   #grid(
-    columns: (auto, 1fr),
-    gutter: 20pt,
+    columns: (4.5cm, 1fr),
+    gutter: 16pt,
     align: horizon,
-    {f'image("{logo_path}", width: 3cm),' if logo_path else 'none,'}
-    text(weight: "bold", size: 72pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
+    {f'image("{logo_path}", height: 4cm),' if logo_path else 'none,'}
+    text(weight: "bold", size: 80pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
   )
 
+  #v(0.6cm)
+
+  // Tagline — large bold uppercase, full width
+  #text(weight: "bold", size: 20pt, font: "{heading_font}", fill: {_rgb(title_fg)})[#upper("{_esc(tagline)}")]
+
+  #v(0.5cm)
+  #line(length: 100%, stroke: 0.5pt + {_rgb(t['muted'])})
   #v(0.4cm)
+  {f'#text(size: 11pt, fill: {_rgb(t["muted"])})[{_esc(subtitle)}]#v(4pt)' if subtitle else ''}
+  {f'#text(weight: "bold", size: 11pt, fill: {_rgb(title_fg)})[{_esc(left_footer)}]#v(4pt)' if left_footer else ''}
 
-  // Tagline in uppercase bold
-  #block(width: 19cm)[
-    #text(weight: "bold", size: {18 if subtitle else 22}pt, font: "{heading_font}", fill: {_rgb(title_fg)})[#upper("{_esc(tagline)}")]
-  ]
+  #v(1fr)
 
-  {f'#v(0.3cm){chr(10)}  #line(length: 100%, stroke: 0.5pt + {_rgb(t["muted"])}){chr(10)}  #v(0.3cm){chr(10)}  #block(width: 19cm)[#text(size: 12pt, fill: {_rgb(t["muted"])})[{_esc(subtitle)}]]' if subtitle else ''}
-
-  // Bottom row — confidentiality + date
-  #place(bottom + left, dx: 0cm, dy: 0cm,
-    block(width: 22.2cm)[
-      #grid(
-        columns: (1fr, auto),
-        align: bottom,
-        block[
-          #text(weight: "bold", size: 11pt, fill: {_rgb(title_fg)})[{_esc(left_footer)}]
-          #v(2pt)
-          #text(size: 9pt, fill: {_rgb(t['muted'])})[{_esc(date)}]
-        ],
-        align(right + bottom)[
-          #text(size: 8pt, weight: "bold", tracking: 1pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}]
-        ],
-      )
-    ]
+  // Footer — date + confidentiality
+  #grid(
+    columns: (1fr, auto),
+    align: bottom,
+    text(size: 9pt, fill: {_rgb(t['muted'])})[{_esc(date)}],
+    text(size: 8pt, weight: "bold", tracking: 1pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}],
   )
 ]"""
 
@@ -794,19 +792,28 @@ class TypstSlideRenderer:
             label = _esc(s.get("label", ""))
             desc = _esc(s.get("desc", ""))
 
+            # Auto-scale value font: shorter values get larger text
+            val_len = len(value.replace("\\#", "#").replace("\\$", "$"))
+            if val_len <= 4:
+                val_size = 36
+            elif val_len <= 7:
+                val_size = 28
+            else:
+                val_size = 22
+
             stat_blocks.append(f"""block(
         fill: {_rgb(t['card_fill'])},
         stroke: 0.75pt + {_rgb(t['border'])},
         radius: 4pt,
-        inset: 14pt,
+        inset: 12pt,
         width: 100%,
       )[
         #align(center)[
-          {f'#text(size: 28pt)[{icon}]#v(4pt)' if icon else ''}
-          #text(weight: "bold", size: 36pt, fill: {_rgb(t['accent'])})[{value}]
+          {f'#text(size: 24pt)[{icon}]#v(4pt)' if icon else ''}
+          #text(weight: "bold", size: {val_size}pt, fill: {_rgb(t['accent'])})[{value}]
           #v(4pt)
-          #text(weight: "bold", size: 10pt, fill: {_rgb(t['muted'])})[#upper("{label}")]
-          {f'#v(2pt)#text(size: 9pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
+          #text(weight: "bold", size: 9pt, fill: {_rgb(t['muted'])})[#upper("{label}")]
+          {f'#v(2pt)#text(size: 8pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
         ]
       ]""")
 
