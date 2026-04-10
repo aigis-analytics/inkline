@@ -202,11 +202,27 @@ def export_typst_slides(
     if image_root:
         root = str(image_root)
     else:
-        # Auto-detect: if any slide has image_path, use output dir as root
-        for s in slides:
-            if s.get("data", {}).get("image_path"):
-                root = str(output_path.parent)
-                break
+        # Auto-detect: if any slide has image_path or brand has a logo,
+        # use output dir as root so Typst can resolve relative paths
+        has_images = any(s.get("data", {}).get("image_path") for s in slides)
+        has_logo = bool(theme.get("logo_light_path"))
+        if has_images or has_logo:
+            root = str(output_path.parent)
+
+    # Copy logo to output directory so Typst can find it
+    import shutil
+    logo_path = theme.get("logo_light_path", "")
+    if logo_path:
+        logo_src = _ASSETS_DIR / logo_path
+        if not logo_src.exists():
+            # Try brands assets directory
+            import os
+            brands_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "inkline" / "assets"
+            logo_src = brands_dir / logo_path
+        if logo_src.exists():
+            logo_target = output_path.parent / logo_path
+            if not logo_target.exists():
+                shutil.copy2(logo_src, logo_target)
 
     # Auto-render chart images requested by DesignAdvisor via chart_request
     _auto_render_charts(slides, brand, root or str(output_path.parent))

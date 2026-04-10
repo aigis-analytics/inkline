@@ -157,6 +157,14 @@ def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:
     if "desc" in tpl:
         theme["desc"] = tpl["desc"]
 
+    # If the brand has a non-white background (e.g., cream/off-white), use it
+    # as the title slide background too — the brand's own color scheme takes
+    # priority over the template's dark title default.
+    if brand.background.upper() not in ("#FFFFFF", "#FFF"):
+        theme["title_bg"] = brand.background
+        theme["title_fg"] = brand.text  # dark text on light bg
+        theme["bg"] = brand.background  # content slides match
+
     return theme
 
 
