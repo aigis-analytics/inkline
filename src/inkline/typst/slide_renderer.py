@@ -293,17 +293,16 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(14pt)
 
-  // Cards fill remaining vertical space between title and footer
-  block(height: 1fr, width: 100%)[
-    #grid(
-      columns: (1fr, 1fr, 1fr),
-      rows: (100%,),
-      gutter: 14pt,
-      {cards_str}
-    )
-  ]
+  v(1fr)
+
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 14pt,
+    {cards_str}
+  )
+
+  v(1fr)
 
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
@@ -336,17 +335,16 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(14pt)
 
-  // Cards fill remaining vertical space
-  block(height: 1fr, width: 100%)[
-    #grid(
-      columns: (1fr, 1fr),
-      rows: (1fr, 1fr),
-      gutter: 14pt,
-      {cards_str}
-    )
-  ]
+  v(1fr)
+
+  grid(
+    columns: (1fr, 1fr),
+    gutter: 14pt,
+    {cards_str}
+  )
+
+  v(1fr)
 
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
@@ -1049,7 +1047,6 @@ class TypstSlideRenderer:
         radius: 4pt,
         inset: 12pt,
         width: 100%,
-        height: 100%,
       )[
         #grid(
           columns: (auto, 1fr),
@@ -1078,15 +1075,15 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(10pt)
 
-  // Feature grid fills remaining space
-  block(height: 1fr, width: 100%)[
-    #grid(
-      columns: (1fr, 1fr, 1fr),
-      rows: (1fr, 1fr),
-      gutter: 10pt,
-      {cells_str}
-    )
-  ]
+  v(1fr)
+
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 10pt,
+    {cells_str}
+  )
+
+  v(1fr)
 
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""

@@ -315,18 +315,25 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
                     ax.annotate(p["label"], (p["x"], p["y"]), fontsize=7.5,
                                 color=muted, textcoords="offset points", xytext=(5, 5))
 
-        # Highlighted points — larger, bolder, accent colour, star marker
+        # Highlighted points — large filled circle, bold label, accent colour
         if highlighted:
             hx = [p["x"] for p in highlighted]
             hy = [p["y"] for p in highlighted]
-            hs = [p.get("size", 200) for p in highlighted]
-            ax.scatter(hx, hy, c=accent, s=hs, alpha=1.0, marker="*",
-                       edgecolors=accent, linewidth=1.5, zorder=10)
+            hs = [p.get("size", 300) for p in highlighted]
+            # Outer glow ring
+            ax.scatter(hx, hy, c="none", s=[s * 2 for s in hs], alpha=0.15,
+                       edgecolors=accent, linewidth=2, zorder=9)
+            # Main dot
+            ax.scatter(hx, hy, c=accent, s=hs, alpha=1.0, marker="o",
+                       edgecolors="white", linewidth=2, zorder=10)
             for p in highlighted:
                 if p.get("label"):
-                    ax.annotate(p["label"], (p["x"], p["y"]),
-                                fontsize=11, fontweight="bold", color=accent,
-                                textcoords="offset points", xytext=(8, 8))
+                    ax.annotate(
+                        p["label"], (p["x"], p["y"]),
+                        fontsize=12, fontweight="bold", color=accent,
+                        textcoords="offset points", xytext=(10, 10),
+                        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=accent, alpha=0.9),
+                    )
 
     if data.get("x_label"):
         ax.set_xlabel(data["x_label"], color=text_color, fontsize=10)

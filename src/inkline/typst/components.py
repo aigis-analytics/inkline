@@ -65,7 +65,6 @@ def card(
       radius: {radius}pt,
       inset: 14pt,
       width: 100%,
-      height: 100%,
     )[
       {body}
     ]"""
