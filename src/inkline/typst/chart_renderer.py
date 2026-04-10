@@ -297,16 +297,36 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
 
     for i, (group_name, pts) in enumerate(groups.items()):
         color = colors[i % len(colors)]
-        xs = [p["x"] for p in pts]
-        ys = [p["y"] for p in pts]
-        sizes = [p.get("size", 60) for p in pts]
-        ax.scatter(xs, ys, c=color, s=sizes, alpha=0.7, label=group_name if group_name != "default" else None, edgecolors="white", linewidth=0.5)
 
-        # Label points
-        for p in pts:
-            if p.get("label"):
-                ax.annotate(p["label"], (p["x"], p["y"]), fontsize=8, color=text_color,
-                            textcoords="offset points", xytext=(5, 5))
+        # Separate highlighted vs regular points
+        regular = [p for p in pts if not p.get("highlight")]
+        highlighted = [p for p in pts if p.get("highlight")]
+
+        # Regular points
+        if regular:
+            xs = [p["x"] for p in regular]
+            ys = [p["y"] for p in regular]
+            sizes = [p.get("size", 50) for p in regular]
+            ax.scatter(xs, ys, c=color, s=sizes, alpha=0.6,
+                       label=group_name if group_name != "default" else None,
+                       edgecolors="white", linewidth=0.5)
+            for p in regular:
+                if p.get("label"):
+                    ax.annotate(p["label"], (p["x"], p["y"]), fontsize=7.5,
+                                color=muted, textcoords="offset points", xytext=(5, 5))
+
+        # Highlighted points — larger, bolder, accent colour, star marker
+        if highlighted:
+            hx = [p["x"] for p in highlighted]
+            hy = [p["y"] for p in highlighted]
+            hs = [p.get("size", 200) for p in highlighted]
+            ax.scatter(hx, hy, c=accent, s=hs, alpha=1.0, marker="*",
+                       edgecolors=accent, linewidth=1.5, zorder=10)
+            for p in highlighted:
+                if p.get("label"):
+                    ax.annotate(p["label"], (p["x"], p["y"]),
+                                fontsize=11, fontweight="bold", color=accent,
+                                textcoords="offset points", xytext=(8, 8))
 
     if data.get("x_label"):
         ax.set_xlabel(data["x_label"], color=text_color, fontsize=10)

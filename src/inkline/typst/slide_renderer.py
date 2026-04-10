@@ -1163,27 +1163,27 @@ class TypstSlideRenderer:
   v(10pt)
 
   grid(
-    columns: (1.75fr, 1fr),
-    rows: (6.5cm,),
-    gutter: 14pt,
-    // Chart — sized to fill the grid row
+    columns: (2.2fr, 1fr),
+    rows: (7.5cm,),
+    gutter: 12pt,
+    // Chart — fills available height, wider allocation
     block(width: 100%, height: 100%)[
-      #align(center + horizon, image("{image_path}", height: 100%, fit: "contain"))
+      #align(center + horizon, image("{image_path}", height: 95%, width: 95%, fit: "contain"))
     ],
     // Key takeaways panel with accent left border
     block(
       fill: {_rgb(t['card_fill'])},
       stroke: (left: 4pt + {_rgb(t['accent'])}),
-      inset: 12pt,
+      inset: 10pt,
       width: 100%,
+      height: 100%,
     )[
-      #text(weight: "bold", size: 10pt, tracking: 1pt, fill: {_rgb(t['accent'])})[#upper("Key takeaways")]
-      #v(8pt)
-      #text(size: 9pt, fill: {_rgb(t['text'])})[
+      #text(weight: "bold", size: 9pt, tracking: 1pt, fill: {_rgb(t['accent'])})[#upper("Key takeaways")]
+      #v(6pt)
+      #text(size: 8.5pt, fill: {_rgb(t['text'])})[
         {bullets_str}
       ]
-      #v(6pt)
-      #text(size: 7.5pt, style: "italic", fill: {_rgb(t['muted'])})[{caption}]
+      {f'#v(4pt)#text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{caption}]' if caption else ''}
     ],
   )
 }}"""

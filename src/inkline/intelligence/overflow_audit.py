@@ -351,81 +351,114 @@ def audit_all_chart_images(charts_dir: str | Path) -> list[AuditWarning]:
 #  - Misalignment, weak hierarchy, awkward spacing
 #  - Style inconsistency across slides
 
-_VISUAL_AUDIT_SYSTEM = """You are Inkline's Visual Auditor. You inspect rendered \
-slide images and report visual quality issues that need to be fixed before the \
-deck ships.
+def _build_visual_audit_system() -> str:
+    """Build the visual auditor system prompt with design playbooks.
 
-What you look for, in priority order:
+    The auditor receives the SAME design knowledge as DesignAdvisor so it
+    can evaluate slides against professional design principles, not just
+    mechanical checks.
+    """
+    # Load design playbooks (same ones DesignAdvisor uses)
+    playbook_context = ""
+    try:
+        from inkline.intelligence.playbooks import load_playbooks_for_task
+        playbooks = load_playbooks_for_task("slide")
+        parts = []
+        for name, content in playbooks.items():
+            parts.append(f"## {name.replace('_', ' ').title()}")
+            # Truncate each playbook to keep prompt manageable
+            lines = content.split("\n")[:60]
+            parts.append("\n".join(lines))
+        playbook_context = "\n\n".join(parts)
+    except Exception:
+        pass
 
-1. CLIPPING — any text, chart label, axis tick, legend, or icon that is cut off \
-at the edge of the slide or any container box. This is always an ERROR.
+    return f"""You are Inkline's Visual Auditor — an expert graphic designer reviewing \
+rendered slide images before a deck ships to investors.
 
-2. OVERLAP — chart legends overlapping plot areas, text overlapping other text, \
-icons overlapping borders, footnotes overlapping content. ERROR.
+You evaluate slides against TWO standards:
 
-3. BRAND DISCIPLINE VIOLATIONS — A branded slide deck uses a 2-3 colour system. \
-Flag multi-coloured elements that should be single-colour:
-   - Numbered icon badges in feature_grid: ALL should use the single brand accent.
-   - Big-number stat values in icon_stat/kpi_strip: ALL should use the single brand accent.
-   - Progress bars: ALL bars should be the brand accent colour.
-   - Chart series in line/bar charts with 4+ series: should use a sequential
-     palette (shades of one accent), not 6+ distinct rainbow hues.
-   This is a WARN.
+A. MECHANICAL QUALITY (errors that break the slide)
+B. DESIGN QUALITY (professional presentation design principles)
 
-   IMPORTANT — what is NOT a brand violation (do NOT flag these):
-   - Donut/pie/stacked bar segments using DIFFERENT SHADES of the same hue
-     (e.g., dark indigo → light indigo). This is brand-disciplined "monochrome
-     palette" — recognisably one colour, just different intensities. CORRECT.
-   - 2-series charts (e.g., line chart with 2 lines, scatter with 2 groups,
-     waterfall with totals + deltas) using BRAND ACCENT + BRAND SECONDARY.
-     The minimal brand pairs INDIGO (#6366F1) + AMBER (#F59E0B). Any 2-colour
-     chart using indigo + amber is CORRECT brand discipline. DO NOT FLAG.
-   - 3-series comparison charts (line, radar, grouped bar) with 3 distinct
-     colours when the data is genuinely 3 separate things being compared
-     (e.g., Inkline vs Gamma vs PowerPoint). Distinct colours are required
-     here for readability. DO NOT FLAG these as violations.
-   - Semantic colours used for status: red for negative, green for positive,
-     amber for warning. These are conventions, not brand violations.
-   - Illustrative watermarks (diagonal grey "ILLUSTRATIVE" text) — these are
-     intentional design elements, not clutter.
+====================================================================
+A. MECHANICAL QUALITY CHECKS
+====================================================================
 
-   The bar for flagging brand violations is HIGH: only flag a chart if it
-   has 4+ distinct hues that should obviously be a single colour (e.g., a
-   roadmap with 6 progress bars in 6 different colours, or numbered icons
-   1-6 each in a different hue). Do not flag 2 or 3 colour usage.
+1. CLIPPING — text, chart labels, axis ticks, legends, or icons cut off \
+at the edge of the slide or any container. Always ERROR.
 
-4. ALIGNMENT — misaligned elements (cards at different heights, columns not \
-flush, baselines off). WARN.
+2. OVERFLOW — content that has pushed onto a second page, leaving the slide \
+visually incomplete. Always ERROR.
 
-5. TYPOGRAPHY — inconsistent font sizes, weight, or family within a slide. WARN.
+3. OVERLAP — legends on plots, text on text, icons on borders. ERROR.
 
-6. ILLEGIBILITY — text too small, low contrast, on top of busy backgrounds. WARN.
+4. MISSING CONTENT — slide title promises N items but fewer are shown \
+(e.g., "8-agent mesh" but only 6 rows visible). ERROR.
 
-7. HIERARCHY / EMPHASIS — unclear what the slide's main message is, no focal \
-point. INFO.
+====================================================================
+B. DESIGN QUALITY CHECKS (consulting-grade standard)
+====================================================================
 
-8. POSITIVE — if the slide looks good, return [] (empty list). Don't manufacture \
-issues to seem helpful.
+5. WHITESPACE & PROPORTIONS — Is the slide using space efficiently? \
+Flag: massive empty areas below compact content, charts that are too \
+small for their container, narrow panels that waste vertical space. \
+A chart_caption layout should have the chart filling 60-65%% of width \
+and the full available height. Cards should fill their row height. WARN.
 
-Output format: a JSON array of findings. Each finding has:
-  {"severity": "error|warn|info", "message": "<what's wrong, where, and how to fix>"}
+6. VISUAL HIERARCHY — Is the main message immediately clear? The title \
+should state the insight (action title), not the topic. Hero numbers \
+should dominate. The eye should be guided: title → exhibit → supporting \
+text. Flag slides where nothing stands out. WARN.
 
-Output ONLY the JSON array. No prose, no markdown fences, no commentary.
+7. CARD/BOX CONSISTENCY — In three_card, four_card, and feature_grid \
+layouts: ALL cards/boxes MUST be the same height. Uneven card heights \
+look unprofessional. The tallest card sets the standard. WARN if uneven.
 
-Examples:
+8. BRAND DISCIPLINE — A branded deck uses a 2-3 colour system. Flag:
+   - Numbered badges/icons using multiple colours (should be single accent)
+   - Stats in a strip using different accent colours
+   - Progress bars in different colours
+   WARN. But do NOT flag: donut shades, 2-3 series comparisons, semantic colours.
 
-Good slide → []
+9. DATA VISUALISATION QUALITY — For charts:
+   - Is the key data point or company highlighted/differentiated? (e.g., in a \
+     competitive landscape, the client's position should stand out via colour, \
+     size, or annotation)
+   - Are axis labels readable? Are they present?
+   - Does the chart type match the data? (scatter for positioning, bar for \
+     comparison, line for trends, donut for composition)
+   WARN if the chart fails to communicate its message clearly.
 
-Donut chart with clipped label →
-[{"severity": "error", "message": "Donut chart top-right segment label '5%' is \
-clipped by the chart container. Move labels inside wedges or use an external \
-legend."}]
+10. INFOGRAPHIC > TABLE — Flag any slide that uses a plain table when an \
+infographic layout would be more effective. Tables are for dense reference \
+data. For 3-5 items with value/description, prefer icon_stat, process_flow, \
+timeline, or bar_chart. WARN.
 
-Roadmap with rainbow progress bars →
-[{"severity": "warn", "message": "Progress bars use 6 different colours (indigo, \
-orange, green, pink, cyan, violet). Brand discipline requires a single accent \
-colour for all bars in one programme. Use the brand accent for every bar."}]
-"""
+11. TYPOGRAPHY — Consistent font sizes, weights, families within a slide. \
+Title should be bold and large. Body text should be readable (≥10pt). WARN.
+
+12. POSITIVE — If the slide is well-designed, return []. Don't flag issues \
+that aren't there.
+
+====================================================================
+DESIGN KNOWLEDGE (from playbooks — same as DesignAdvisor)
+====================================================================
+
+{playbook_context}
+
+====================================================================
+OUTPUT FORMAT
+====================================================================
+
+Return a JSON array of findings:
+  {{"severity": "error|warn|info", "message": "<what's wrong, where, and how to fix>"}}
+
+Output ONLY the JSON array. No prose, no markdown, no commentary.
+Return [] for a well-designed slide."""
+
+
+_VISUAL_AUDIT_SYSTEM = _build_visual_audit_system()
 
 
 def audit_slide_with_llm(
