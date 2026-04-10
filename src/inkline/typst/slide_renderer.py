@@ -201,8 +201,8 @@ class TypstSlideRenderer:
     columns: (4.5cm, 1fr),
     gutter: 16pt,
     align: horizon,
-    {f'image("{logo_path}", height: 4cm),' if logo_path else 'none,'}
-    text(weight: "bold", size: 80pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
+    {f'image("{logo_path}", height: 3.5cm),' if logo_path else 'none,'}
+    text(weight: "bold", size: 72pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
   )
 
   #v(0.6cm)
@@ -638,25 +638,27 @@ class TypstSlideRenderer:
         if n == 0:
             return self._content_slide(d)
 
-        # Build milestone nodes
+        # Build milestone nodes — support optional 'size' for bubble sizing
         nodes = []
         for i, m in enumerate(milestones):
             date = _esc(m.get("date", ""))
             label = _esc(m.get("label", ""))
             desc = _esc(m.get("desc", ""))
-            # Alternate above/below for visual rhythm
-            is_above = i % 2 == 0
+            # Bubble size: default 14pt, or scaled from milestone 'size' field
+            bubble_size = m.get("size", 14)
+            bubble_pt = f"{bubble_size}pt"
+            # All bubbles use accent colour, with opacity increasing
+            opacity = 0.4 + (0.6 * i / max(n - 1, 1))  # 0.4 to 1.0
             node = f"""align(center)[
         #text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[{date}]
-        #v(2pt)
+        #v(4pt)
         #block(
-          fill: {_rgb(t['accent']) if i == n - 1 else _rgb(t['card_fill'])},
-          stroke: 0.75pt + {_rgb(t['border'])},
+          fill: {_rgb(t['accent'])}.transparentize({int((1-opacity)*100)}%),
           radius: 50%,
-          width: 12pt,
-          height: 12pt,
+          width: {bubble_pt},
+          height: {bubble_pt},
         )[]
-        #v(2pt)
+        #v(4pt)
         #text(size: 9pt, weight: "bold", fill: {_rgb(t['text'])})[{label}]
         {f'#v(1pt)#text(size: 8pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
       ]"""
