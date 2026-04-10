@@ -40,6 +40,68 @@ _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 _FONTS_DIR = _ASSETS_DIR / "fonts"
 
 
+def _auto_render_charts(
+    slides: list[dict[str, Any]],
+    brand: str,
+    root: str,
+) -> None:
+    """Auto-render chart images requested via chart_request in slide data.
+
+    When DesignAdvisor (LLM mode) picks a chart/chart_caption/dashboard slide,
+    it embeds a ``chart_request`` dict with ``chart_type`` and ``chart_data``.
+    This function renders those charts via matplotlib before Typst compilation,
+    so the image files exist when the compiler needs them.
+    """
+    charts_to_render = []
+    for slide in slides:
+        data = slide.get("data", {})
+        chart_req = data.get("chart_request")
+        image_path = data.get("image_path")
+        if chart_req and image_path:
+            full_path = Path(root) / image_path
+            if not full_path.exists():
+                charts_to_render.append((slide, chart_req, full_path))
+
+    if not charts_to_render:
+        return
+
+    try:
+        from inkline.typst.chart_renderer import render_chart_for_brand
+    except ImportError:
+        log.warning("matplotlib not available — cannot auto-render %d chart(s)", len(charts_to_render))
+        return
+
+    # Determine chart dimensions based on slide type
+    CHART_SIZES = {
+        "chart_caption": (7.0, 3.0),
+        "dashboard": (6.5, 3.4),
+        "chart": (9.0, 4.5),
+    }
+    default_size = (7.0, 3.5)
+
+    for slide, chart_req, full_path in charts_to_render:
+        chart_type = chart_req.get("chart_type", "")
+        chart_data = chart_req.get("chart_data", {})
+        if not chart_type or not chart_data:
+            log.warning("Skipping chart_request with missing type or data: %s", full_path.name)
+            continue
+
+        w, h = CHART_SIZES.get(slide["slide_type"], default_size)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            render_chart_for_brand(
+                chart_type, chart_data, str(full_path),
+                brand_name=brand, width=w, height=h,
+            )
+            log.info("Auto-rendered chart: %s (%s)", full_path.name, chart_type)
+        except Exception as e:
+            log.warning("Failed to auto-render chart %s: %s", full_path.name, e)
+            # Remove the image_path so the slide doesn't reference a missing file
+            slide["data"].pop("image_path", None)
+            slide["data"].pop("chart_request", None)
+
+
 def export_typst_slides(
     slides: list[dict[str, Any]],
     output_path: str | Path,
@@ -97,6 +159,22 @@ def export_typst_slides(
     brand_obj = get_brand(brand)
     theme = brand_to_typst_theme(brand_obj, template)
 
+    output_path = Path(output_path)
+
+    # Determine root for image resolution
+    root = None
+    if image_root:
+        root = str(image_root)
+    else:
+        # Auto-detect: if any slide has image_path, use output dir as root
+        for s in slides:
+            if s.get("data", {}).get("image_path"):
+                root = str(output_path.parent)
+                break
+
+    # Auto-render chart images requested by DesignAdvisor via chart_request
+    _auto_render_charts(slides, brand, root or str(output_path.parent))
+
     deck_spec = DeckSpec(
         slides=[SlideSpec(slide_type=s["slide_type"], data=s.get("data", {})) for s in slides],
         title=title,
@@ -111,19 +189,6 @@ def export_typst_slides(
     all_font_paths = [str(_FONTS_DIR)]
     if font_paths:
         all_font_paths.extend(str(p) for p in font_paths)
-
-    output_path = Path(output_path)
-
-    # Determine root for image resolution
-    root = None
-    if image_root:
-        root = str(image_root)
-    else:
-        # Auto-detect: if any slide has image_path, use output dir as root
-        for s in slides:
-            if s.get("data", {}).get("image_path"):
-                root = str(output_path.parent)
-                break
 
     compile_typst(source, output_path=output_path, root=root, font_paths=all_font_paths)
 

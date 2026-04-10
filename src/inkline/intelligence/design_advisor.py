@@ -157,17 +157,81 @@ WRITING RULES
 - Footnotes: optional, one short line, source attribution or caveat.
 
 ====================================================================
-CHART REQUESTS
+CHART REQUESTS (auto-rendered by Inkline)
 ====================================================================
 When a slide should embed a chart (chart, chart_caption, dashboard types),
-you do NOT generate the image. The caller generates it via Inkline's
-chart_renderer (matplotlib). You request a chart by setting:
-  "image_path": "<chart_name>.png"
-And in your section data, indicate which chart_type to render via a hint.
-The caller handles the rendering.
+you request the chart by adding a "chart_request" field to the slide data.
+Inkline's chart_renderer (matplotlib) will auto-render it before compilation.
 
-For deck.image_path values, just use a simple filename (e.g. "growth.png",
-"funnel.png") — the caller will resolve the path.
+HOW TO REQUEST A CHART:
+1. Set "image_path" to a simple filename (e.g. "market_growth.png")
+2. Add a "chart_request" dict with:
+   - "chart_type": one of: line_chart, area_chart, scatter, waterfall, donut,
+     pie, stacked_bar, grouped_bar, heatmap, radar, gauge
+   - "chart_data": the data dict for that chart type (see below)
+
+Example — donut chart on a dashboard slide:
+  {
+    "slide_type": "dashboard",
+    "data": {
+      "title": "Revenue by segment",
+      "image_path": "revenue_donut.png",
+      "chart_request": {
+        "chart_type": "donut",
+        "chart_data": {
+          "segments": [
+            {"label": "Enterprise", "value": 60},
+            {"label": "Mid-Market", "value": 30},
+            {"label": "SMB", "value": 10}
+          ],
+          "center_label": "Revenue\nMix"
+        }
+      },
+      "stats": [{"value": "$5.2M", "label": "Total ARR"}],
+      "bullets": ["Enterprise drives 60% of revenue"]
+    }
+  }
+
+Example — bar chart on a chart_caption slide:
+  {
+    "slide_type": "chart_caption",
+    "data": {
+      "title": "Market sizing",
+      "image_path": "market_bars.png",
+      "chart_request": {
+        "chart_type": "grouped_bar",
+        "chart_data": {
+          "categories": ["2024", "2025", "2026"],
+          "series": [
+            {"name": "TAM", "values": [8.5, 10, 12]},
+            {"name": "SAM", "values": [1.5, 2, 2.5]}
+          ],
+          "y_label": "$ Billion"
+        }
+      },
+      "caption": "DD market growing at 7.8% CAGR",
+      "bullets": ["Energy DD is $1-2B of the $10B+ total"]
+    }
+  }
+
+CHART DATA FORMATS (by chart_type):
+- line_chart / area_chart: {x: [...], series: [{name, values}], x_label?, y_label?}
+- waterfall: {items: [{label, value, total?}]}
+- donut / pie: {segments: [{label, value}], center_label?}
+- stacked_bar / grouped_bar: {categories: [...], series: [{name, values}], y_label?}
+- radar: {axes: [...], series: [{name, values}]}
+- gauge: {value: 0-100, label?}
+- scatter: {points: [{x, y, label?, size?}], x_label?, y_label?}
+- heatmap: {x_labels: [...], y_labels: [...], values: [[...]]}
+
+RULES:
+- ONLY use chart_request with data that is EXPLICITLY in the input sections.
+  DO NOT invent data points.
+- If input data contains "illustrative": true, add it to chart_data — the
+  renderer will add a watermark automatically.
+- Use charts when they genuinely add visual value. Don't force a chart when
+  a table or icon_stat would be clearer.
+- Prefer donut/waterfall/radar for small datasets, line/area for trends.
 
 ====================================================================
 """
