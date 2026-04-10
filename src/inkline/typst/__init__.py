@@ -52,7 +52,7 @@ def export_typst_slides(
     font_paths: Optional[list[str | Path]] = None,
     image_root: Optional[str | Path] = None,
     audit: bool = True,
-    audit_visual: bool = False,
+    audit_visual: bool = True,
 ) -> Path:
     """Generate a slide deck PDF from structured slide specifications.
 
