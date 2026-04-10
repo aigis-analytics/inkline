@@ -228,8 +228,7 @@ def export_typst_slides(
             logo_src = brands_dir / logo_path
         if logo_src.exists():
             logo_target = output_path.parent / logo_path
-            if not logo_target.exists():
-                shutil.copy2(logo_src, logo_target)
+            shutil.copy2(logo_src, logo_target)  # Always copy (may have changed)
 
     # Collect font paths
     all_font_paths = [str(_FONTS_DIR)]
