@@ -201,7 +201,7 @@ class TypstSlideRenderer:
     columns: (4.5cm, 1fr),
     gutter: 16pt,
     align: horizon,
-    {f'image("{logo_path}", height: 3.5cm),' if logo_path else 'none,'}
+    {f'image("{logo_path}", height: 4.2cm),' if logo_path else 'none,'}
     text(weight: "bold", size: 72pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
   )
 
@@ -638,18 +638,24 @@ class TypstSlideRenderer:
         if n == 0:
             return self._content_slide(d)
 
-        # Build milestone nodes — support optional 'size' for bubble sizing
-        nodes = []
+        # Build milestone nodes — bubbles bottom-aligned on timeline
+        # Structure: date label above, bubble centred on line, text below
+        max_bubble = max((m.get("size", 14) for m in milestones), default=14)
+
+        above_nodes = []  # date + bubble (above the line)
+        below_nodes = []  # label + desc (below the line)
+
         for i, m in enumerate(milestones):
             date = _esc(m.get("date", ""))
             label = _esc(m.get("label", ""))
             desc = _esc(m.get("desc", ""))
-            # Bubble size: default 14pt, or scaled from milestone 'size' field
             bubble_size = m.get("size", 14)
             bubble_pt = f"{bubble_size}pt"
-            # All bubbles use accent colour, with opacity increasing
-            opacity = 0.4 + (0.6 * i / max(n - 1, 1))  # 0.4 to 1.0
-            node = f"""align(center)[
+            opacity = 0.4 + (0.6 * i / max(n - 1, 1))
+
+            # Above: date + spacer + bubble (bubble bottom-aligned)
+            above_nodes.append(f"""align(center)[
+        #v(1fr)
         #text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[{date}]
         #v(4pt)
         #block(
@@ -658,14 +664,17 @@ class TypstSlideRenderer:
           width: {bubble_pt},
           height: {bubble_pt},
         )[]
-        #v(4pt)
+      ]""")
+
+            # Below: label + desc (top-aligned)
+            below_nodes.append(f"""align(center)[
         #text(size: 9pt, weight: "bold", fill: {_rgb(t['text'])})[{label}]
         {f'#v(1pt)#text(size: 8pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
-      ]"""
-            nodes.append(node)
+      ]""")
 
         cols = ", ".join(["1fr"] * n)
-        nodes_str = ",\n    ".join(nodes)
+        above_str = ",\n    ".join(above_nodes)
+        below_str = ",\n    ".join(below_nodes)
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
@@ -676,14 +685,25 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(1fr)
 
-  // Timeline line
-  place(center + horizon, line(length: 85%, stroke: 2pt + {_rgb(t['border'])}))
+  // Above timeline: dates + bubbles (bottom-aligned to line)
+  block(height: {max_bubble + 30}pt, width: 100%)[
+    #grid(
+      columns: ({cols}),
+      rows: (100%,),
+      gutter: 4pt,
+      {above_str}
+    )
+  ]
 
-  // Milestone nodes
+  // Timeline line
+  line(length: 100%, stroke: 2pt + {_rgb(t['border'])})
+
+  // Below timeline: labels + descriptions (top-aligned)
+  v(6pt)
   grid(
     columns: ({cols}),
     gutter: 4pt,
-    {nodes_str}
+    {below_str}
   )
 
   v(1fr)
