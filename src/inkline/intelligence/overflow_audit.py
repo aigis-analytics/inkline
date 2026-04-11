@@ -536,7 +536,17 @@ def audit_slide_with_llm(
     data_context = ""
     if slide_data:
         import json as _json
-        data_context = f"\n\nOriginal slide data:\n```json\n{_json.dumps(slide_data, indent=2, default=str)[:500]}\n```"
+        data_context = (
+            f"\n\nOriginal slide data (what was INTENDED to render):\n"
+            f"```json\n{_json.dumps(slide_data, indent=2, default=str)[:800]}\n```\n\n"
+            f"CRITICAL: Compare the rendered image against the intended data above.\n"
+            f"- If the data specifies different sizes (e.g., size: 40 vs size: 130), "
+            f"verify the rendered elements are VISUALLY different sizes.\n"
+            f"- If the data specifies N items, verify N items are visible.\n"
+            f"- If values/numbers in the data don't match what's rendered, flag as ERROR.\n"
+            f"- If elements that should be visually distinct (different sizes, colours, "
+            f"emphasis) render as identical, flag as ERROR."
+        )
 
     user_text = (
         f"Audit this rendered slide image (slide_index={slide_index}, "
