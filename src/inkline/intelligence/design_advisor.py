@@ -890,51 +890,75 @@ class DesignAdvisor:
         findings: list[dict],
         original_sections: Optional[list[dict[str, Any]]] = None,
     ) -> list[dict[str, Any]]:
-        """Use LLM to revise slides based on auditor text feedback."""
+        """Revise ONLY the specific slides flagged by the auditor.
+
+        Sends only affected slides to the LLM, then splices results
+        back into the original list. Unflagged slides are never touched.
+        """
+        # Identify which slides are flagged (0-based indices)
+        flagged_indices = set()
+        for f in findings:
+            idx = f["slide_index"] - 1  # Convert 1-based to 0-based
+            if 0 <= idx < len(slides):
+                flagged_indices.add(idx)
+
+        if not flagged_indices:
+            return slides
+
+        # Extract only the flagged slides
+        flagged_slides = [(i, slides[i]) for i in sorted(flagged_indices)]
+
         system_prompt = self._build_system_prompt()
 
-        # Build user prompt — CONSTRAINED revision, not full rewrite
         parts = [
-            "CRITICAL: You are making MINIMAL TARGETED FIXES to existing slides.",
-            "DO NOT rewrite slide content. DO NOT change company names, numbers,",
-            "or factual data. ONLY fix the specific issues the auditor flagged.",
-            "Keep ALL slides that aren't mentioned in the objections EXACTLY as-is.",
+            "Fix ONLY the specific issues listed below. Return the revised slides as JSON.",
+            "DO NOT change company names, numbers, or factual data.",
+            "DO NOT add new image_path references.",
+            "Only adjust layout, text formatting, or slide_type if needed.",
             "",
-            "The Visual Auditor found these issues:\n",
+            "Issues to fix:\n",
         ]
 
         for f in findings:
-            parts.append(f"- Slide {f['slide_index']} [{f['severity']}]: {f['message']}")
+            idx = f["slide_index"] - 1
+            if idx in flagged_indices:
+                parts.append(f"- Slide {f['slide_index']} [{f['severity']}]: {f['message']}")
 
-        parts.append("\nCurrent slide specs (return ALL of these, fixing ONLY the flagged ones):")
-        parts.append(f"```json\n{json.dumps(slides, indent=2, default=str)[:8000]}\n```")
+        parts.append(f"\nSlides to revise ({len(flagged_slides)} of {len(slides)}):")
+        for i, s in flagged_slides:
+            parts.append(f"\n// Slide {i+1}:")
+            parts.append(json.dumps(s, indent=2, default=str)[:1500])
 
-        parts.append("\nRules:")
-        parts.append("- Return the COMPLETE list of slides (same count)")
-        parts.append("- Only modify slides specifically mentioned in the objections")
-        parts.append("- Preserve all existing text, numbers, and content verbatim")
-        parts.append("- Only change slide_type or layout structure if explicitly requested")
-        parts.append("- Return inside ```json ... ``` markers.")
+        parts.append("\nReturn ONLY the revised slides as a JSON array (same count as above).")
+        parts.append("Return inside ```json ... ``` markers.")
 
         user_prompt = "\n".join(parts)
 
-        if self.llm_caller is not None:
-            content = self.llm_caller(system_prompt, user_prompt)
-        else:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_key)
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=8192,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            content = response.content[0].text
+        try:
+            if self.llm_caller is not None:
+                content = self.llm_caller(system_prompt, user_prompt)
+            else:
+                import anthropic
+                client = anthropic.Anthropic(api_key=self.api_key)
+                response = client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                content = response.content[0].text
 
-        revised = self._parse_llm_response(content, "", "", "", None)
-        if len(revised) == len(slides):
-            return revised
-        # If count doesn't match, return original (LLM may have dropped slides)
+            revised = self._parse_llm_response(content, "", "", "", None)
+
+            # Splice revised slides back into the original list
+            if len(revised) == len(flagged_slides):
+                result = list(slides)
+                for (orig_idx, _), new_slide in zip(flagged_slides, revised):
+                    result[orig_idx] = new_slide
+                return result
+        except Exception as e:
+            log.warning("LLM slide revision failed: %s", e)
+
         return slides
 
     # ==================================================================
