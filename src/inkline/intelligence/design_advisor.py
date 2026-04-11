@@ -837,16 +837,33 @@ class DesignAdvisor:
         if not redesign_proposals and not other_findings:
             return slides
 
-        # Apply direct redesign proposals (Auditor provided complete specs)
-        # NEVER modify exact-mode slides
+        # Separate slides by mode:
+        # - exact/guided: auditor suggestions stored for HITL, NOT auto-applied
+        # - auto: auditor proposals can be auto-applied
         modified = list(slides)
         accepted_count = 0
-        exact_indices = {i for i, s in enumerate(slides) if s.get("slide_mode") == "exact"}
+        protected_indices = {
+            i for i, s in enumerate(slides)
+            if s.get("slide_mode") in ("exact", "guided")
+        }
+        hitl_suggestions: list[dict] = []
 
         for proposal in redesign_proposals:
             idx = proposal["slide_index"] - 1  # Convert 1-based to 0-based
-            if idx in exact_indices:
-                continue  # Never touch exact-mode slides
+            if idx in protected_indices:
+                # Store as suggestion for HITL review, don't auto-apply
+                hitl_suggestions.append({
+                    "slide_index": idx + 1,
+                    "current_type": modified[idx].get("slide_type", ""),
+                    "proposed_type": proposal["proposed"].get("slide_type", ""),
+                    "reason": proposal["reason"],
+                    "proposed_redesign": proposal["proposed"],
+                    "status": "pending_review",
+                })
+                log.info("Suggestion stored for HITL: slide %d (%s → %s)",
+                         idx + 1, modified[idx].get("slide_type", ""),
+                         proposal["proposed"].get("slide_type", ""))
+                continue  # Don't auto-apply
             if 0 <= idx < len(modified):
                 proposed = proposal["proposed"]
                 old_type = modified[idx].get("slide_type", "")
@@ -872,17 +889,58 @@ class DesignAdvisor:
                     except Exception:
                         pass
 
-        # For non-redesign findings, use LLM to decide how to respond
-        if other_findings and (self.llm_caller is not None or self.api_key):
+        # For non-redesign findings on auto-mode slides, use LLM to revise
+        auto_findings = [
+            f for f in other_findings
+            if (f["slide_index"] - 1) not in protected_indices
+        ]
+        # Store findings on protected slides as suggestions
+        for f in other_findings:
+            if (f["slide_index"] - 1) in protected_indices:
+                hitl_suggestions.append({
+                    "slide_index": f["slide_index"],
+                    "message": f["message"],
+                    "severity": f["severity"],
+                    "status": "pending_review",
+                })
+
+        if auto_findings and (self.llm_caller is not None or self.api_key):
             try:
-                modified = self._revise_via_llm(modified, other_findings, original_sections)
+                modified = self._revise_via_llm(modified, auto_findings, original_sections)
             except Exception as e:
                 log.warning("LLM revision failed: %s", e)
 
+        # Save HITL suggestions to file
+        if hitl_suggestions:
+            self._save_suggestions(hitl_suggestions)
+
         if accepted_count:
-            log.info("Design dialogue: accepted %d redesign proposals", accepted_count)
+            log.info("Design dialogue: accepted %d proposals, %d stored for HITL",
+                     accepted_count, len(hitl_suggestions))
 
         return modified
+
+    def _save_suggestions(self, suggestions: list[dict]) -> None:
+        """Save HITL suggestions to suggestions.json alongside the output."""
+        import os
+        suggestions_path = Path(os.environ.get(
+            "INKLINE_SUGGESTIONS_PATH",
+            Path.home() / ".config" / "inkline" / "suggestions.json",
+        ))
+        # Append to existing suggestions
+        existing = []
+        if suggestions_path.exists():
+            try:
+                existing = json.loads(suggestions_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = []
+
+        existing.extend(suggestions)
+        suggestions_path.write_text(
+            json.dumps(existing, indent=2, default=str, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        log.info("Saved %d HITL suggestions to %s", len(suggestions), suggestions_path)
 
     def _revise_via_llm(
         self,
