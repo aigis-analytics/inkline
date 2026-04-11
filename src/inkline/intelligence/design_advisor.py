@@ -838,11 +838,15 @@ class DesignAdvisor:
             return slides
 
         # Apply direct redesign proposals (Auditor provided complete specs)
+        # NEVER modify exact-mode slides
         modified = list(slides)
         accepted_count = 0
+        exact_indices = {i for i, s in enumerate(slides) if s.get("slide_mode") == "exact"}
 
         for proposal in redesign_proposals:
             idx = proposal["slide_index"] - 1  # Convert 1-based to 0-based
+            if idx in exact_indices:
+                continue  # Never touch exact-mode slides
             if 0 <= idx < len(modified):
                 proposed = proposal["proposed"]
                 old_type = modified[idx].get("slide_type", "")
@@ -889,25 +893,28 @@ class DesignAdvisor:
         """Use LLM to revise slides based on auditor text feedback."""
         system_prompt = self._build_system_prompt()
 
-        # Build user prompt with current slides + review feedback
+        # Build user prompt — CONSTRAINED revision, not full rewrite
         parts = [
-            "You previously designed these slides. The Visual Auditor has reviewed",
-            "the rendered deck and has these objections:\n",
+            "CRITICAL: You are making MINIMAL TARGETED FIXES to existing slides.",
+            "DO NOT rewrite slide content. DO NOT change company names, numbers,",
+            "or factual data. ONLY fix the specific issues the auditor flagged.",
+            "Keep ALL slides that aren't mentioned in the objections EXACTLY as-is.",
+            "",
+            "The Visual Auditor found these issues:\n",
         ]
 
         for f in findings:
             parts.append(f"- Slide {f['slide_index']} [{f['severity']}]: {f['message']}")
 
-        parts.append("\nCurrent slide specs:")
-        for i, s in enumerate(slides):
-            stype = s.get("slide_type", "")
-            title = s.get("data", {}).get("title", "")
-            parts.append(f"  {i+1}. [{stype}] {title}")
+        parts.append("\nCurrent slide specs (return ALL of these, fixing ONLY the flagged ones):")
+        parts.append(f"```json\n{json.dumps(slides, indent=2, default=str)[:8000]}\n```")
 
-        parts.append("\nFor each objection, revise the affected slide spec.")
-        parts.append("Return ONLY the revised slides as a JSON array.")
-        parts.append("Keep slides that don't need changes as-is.")
-        parts.append("Return inside ```json ... ``` markers.")
+        parts.append("\nRules:")
+        parts.append("- Return the COMPLETE list of slides (same count)")
+        parts.append("- Only modify slides specifically mentioned in the objections")
+        parts.append("- Preserve all existing text, numbers, and content verbatim")
+        parts.append("- Only change slide_type or layout structure if explicitly requested")
+        parts.append("- Return inside ```json ... ``` markers.")
 
         user_prompt = "\n".join(parts)
 

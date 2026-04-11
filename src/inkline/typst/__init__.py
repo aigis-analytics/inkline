@@ -341,8 +341,9 @@ def export_typst_slides(
             post_warnings.extend(llm_warnings)
 
             errors = [w for w in llm_warnings if w.severity == "error"]
-            warns = [w for w in llm_warnings if w.severity == "warn"]
-            actionable = errors + warns  # Both errors AND warnings feed back
+            # Send errors to dialogue; warnings logged but don't trigger revision
+            # (30+ warnings per deck would overwhelm the revision LLM)
+            actionable = errors
 
             if not actionable or not auto_fix:
                 all_warnings.extend(post_warnings)
@@ -367,6 +368,8 @@ def export_typst_slides(
                 )
                 if revised != slides:
                     slides = revised
+                    # Re-render any new chart_request entries
+                    _auto_render_charts(slides, brand, root or str(output_path.parent))
                     source = None  # Force full re-render
                     log.info("Design dialogue round %d: DesignAdvisor revised slides",
                              visual_attempt)

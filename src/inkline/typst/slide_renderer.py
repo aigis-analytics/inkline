@@ -1231,6 +1231,7 @@ def _esc(text: str) -> str:
     """Escape special Typst characters."""
     if not text:
         return ""
+    text = str(text)  # Ensure string (LLM may return int for step numbers)
     return (
         text
         .replace("\\", "\\\\")
