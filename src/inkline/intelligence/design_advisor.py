@@ -361,7 +361,7 @@ class DesignAdvisor:
                 stype = section.get("slide_type", "")
                 data = section.get("data", {})
                 if stype and stype in SLIDE_TYPES:
-                    exact_slides.append((i, {"slide_type": stype, "data": data}))
+                    exact_slides.append((i, {"slide_type": stype, "data": data, "slide_mode": "exact"}))
                 else:
                     log.warning(
                         "Section %d has slide_mode='exact' but invalid/missing "
@@ -485,6 +485,9 @@ class DesignAdvisor:
             orig = guided.get(section_key)
             if not orig:
                 continue
+
+            # Mark as guided so the visual auditor stores suggestions for HITL
+            slide["slide_mode"] = "guided"
 
             # Restore user-specified slide_type if provided
             if "slide_type" in orig and orig["slide_type"] in SLIDE_TYPES:
