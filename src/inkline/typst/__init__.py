@@ -333,42 +333,59 @@ def export_typst_slides(
                 if img_path.exists():
                     post_warnings.extend(audit_chart_image(img_path))
 
-        # --- LLM Visual Audit (inside outer loop) ---
+        # --- TWO-AGENT DESIGN DIALOGUE ---
         if audit_visual:
-            log.info("Visual audit pass %d: reviewing %d slides...", visual_attempt + 1, len(slides))
-            llm_warnings = audit_deck_with_llm(output_path, slides)
+            log.info("Design dialogue round %d: auditing %d slides...",
+                     visual_attempt + 1, len(slides))
+            llm_warnings = audit_deck_with_llm(output_path, slides, brand=brand)
             post_warnings.extend(llm_warnings)
 
             errors = [w for w in llm_warnings if w.severity == "error"]
+            warns = [w for w in llm_warnings if w.severity == "warn"]
+            actionable = errors + warns  # Both errors AND warnings feed back
 
-            if not errors or not auto_fix:
-                # ALL CLEAR or auto_fix disabled
+            if not actionable or not auto_fix:
                 all_warnings.extend(post_warnings)
                 if not errors:
-                    log.info("Visual audit PASSED — no errors on attempt %d", visual_attempt + 1)
+                    log.info("Design dialogue PASSED — no errors on round %d",
+                             visual_attempt + 1)
                 break
 
             if visual_attempt >= max_visual_attempts:
                 all_warnings.extend(post_warnings)
-                log.warning("Visual audit: max attempts (%d) reached, shipping with %d errors",
-                            max_visual_attempts, len(errors))
+                log.warning("Design dialogue: max rounds (%d) reached, shipping",
+                            max_visual_attempts)
                 break
 
-            # ERRORS FOUND — fix and retry
+            # FINDINGS FOUND — DesignAdvisor reviews and revises
             visual_attempt += 1
             try:
-                from inkline.intelligence.slide_fixer import fix_from_llm_findings
-                slides, applied = fix_from_llm_findings(slides, errors)
-                if not applied:
-                    all_warnings.extend(post_warnings)
-                    log.info("Visual audit: no actionable fixes for %d errors, shipping", len(errors))
-                    break
-                log.info("Visual audit attempt %d: applied %d fixes, re-rendering",
-                         visual_attempt, len(applied))
-                source = None  # Force full re-render
-                continue
+                from inkline.intelligence.design_advisor import DesignAdvisor
+                advisor = DesignAdvisor(brand=brand, template=template, mode="llm")
+                revised = advisor.revise_slides_from_review(
+                    slides, actionable,
+                )
+                if revised != slides:
+                    slides = revised
+                    source = None  # Force full re-render
+                    log.info("Design dialogue round %d: DesignAdvisor revised slides",
+                             visual_attempt)
+                    continue
+                else:
+                    # No changes made — try slide_fixer as fallback
+                    from inkline.intelligence.slide_fixer import fix_from_llm_findings
+                    slides, applied = fix_from_llm_findings(slides, errors)
+                    if applied:
+                        source = None
+                        log.info("Design dialogue round %d: fixer applied %d fixes",
+                                 visual_attempt, len(applied))
+                        continue
+                    else:
+                        all_warnings.extend(post_warnings)
+                        log.info("Design dialogue: no further improvements possible")
+                        break
             except Exception as e:
-                log.warning("Visual audit fix failed: %s", e)
+                log.warning("Design dialogue revision failed: %s", e)
                 all_warnings.extend(post_warnings)
                 break
         else:

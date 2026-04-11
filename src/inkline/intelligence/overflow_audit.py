@@ -351,14 +351,16 @@ def audit_all_chart_images(charts_dir: str | Path) -> list[AuditWarning]:
 #  - Misalignment, weak hierarchy, awkward spacing
 #  - Style inconsistency across slides
 
-def _build_visual_audit_system() -> str:
-    """Build the visual auditor system prompt with design playbooks.
+def _build_visual_audit_system(brand: str = "") -> str:
+    """Build the visual auditor system prompt with FULL design context.
 
-    The auditor receives the SAME design knowledge as DesignAdvisor so it
-    can evaluate slides against professional design principles, not just
-    mechanical checks.
+    The auditor receives the SAME design knowledge as DesignAdvisor:
+    - Full playbooks (untruncated)
+    - Full SLIDE_TYPE_GUIDE (all slide types + data schemas)
+    - Learned patterns for the brand
+    This ensures equal authority in the design dialogue.
     """
-    # Load design playbooks (same ones DesignAdvisor uses)
+    # Load design playbooks — FULL content, not truncated
     playbook_context = ""
     try:
         from inkline.intelligence.playbooks import load_playbooks_for_task
@@ -366,12 +368,27 @@ def _build_visual_audit_system() -> str:
         parts = []
         for name, content in playbooks.items():
             parts.append(f"## {name.replace('_', ' ').title()}")
-            # Truncate each playbook to keep prompt manageable
-            lines = content.split("\n")[:60]
-            parts.append("\n".join(lines))
+            parts.append(content)  # FULL content, no truncation
         playbook_context = "\n\n".join(parts)
     except Exception:
         pass
+
+    # Load SLIDE_TYPE_GUIDE so auditor knows what alternatives exist
+    slide_type_guide = ""
+    try:
+        from inkline.intelligence.design_advisor import SLIDE_TYPE_GUIDE
+        slide_type_guide = SLIDE_TYPE_GUIDE
+    except Exception:
+        pass
+
+    # Load learned patterns for this brand
+    pattern_context = ""
+    if brand:
+        try:
+            from inkline.intelligence.pattern_memory import format_patterns_for_prompt
+            pattern_context = format_patterns_for_prompt(brand)
+        except Exception:
+            pass
 
     return f"""You are Inkline's Visual Auditor — an expert graphic designer reviewing \
 rendered slide images before a deck ships to investors.
@@ -448,17 +465,34 @@ DESIGN KNOWLEDGE (from playbooks — same as DesignAdvisor)
 {playbook_context}
 
 ====================================================================
-OUTPUT FORMAT
+AVAILABLE SLIDE TYPES (for redesign proposals)
 ====================================================================
 
-Return a JSON array of findings:
-  {{"severity": "error|warn|info", "message": "<what's wrong, where, and how to fix>"}}
+{slide_type_guide}
+
+{pattern_context}
+
+====================================================================
+OUTPUT FORMAT — STRUCTURED PROPOSALS
+====================================================================
+
+Return a JSON array of findings. Each finding has:
+  {{
+    "severity": "error|warn|info",
+    "category": "clipping|overflow|overlap|missing_content|whitespace|hierarchy|card_consistency|brand|data_viz|layout_change|typography|positive",
+    "message": "<what's wrong and how to fix>",
+    "proposed_redesign": null or {{"slide_type": "...", "data": {{...}}}}
+  }}
+
+IMPORTANT: For "layout_change" findings (table→infographic), include a
+"proposed_redesign" with a COMPLETE slide spec using the recommended type.
+Use the SLIDE TYPE CATALOGUE above to construct valid data schemas.
 
 Output ONLY the JSON array. No prose, no markdown, no commentary.
 Return [] for a well-designed slide."""
 
 
-_VISUAL_AUDIT_SYSTEM = _build_visual_audit_system()
+_VISUAL_AUDIT_SYSTEM = _build_visual_audit_system()  # default (no brand)
 
 
 def audit_slide_with_llm(
@@ -466,6 +500,8 @@ def audit_slide_with_llm(
     *,
     slide_index: int = -1,
     slide_type: str = "",
+    slide_data: dict | None = None,
+    brand: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-20250514",
 ) -> list[AuditWarning]:
@@ -493,16 +529,27 @@ def audit_slide_with_llm(
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    # Use brand-specific system prompt if brand is provided
+    system_prompt = _build_visual_audit_system(brand) if brand else _VISUAL_AUDIT_SYSTEM
+
+    # Include slide data context so auditor knows what content was intended
+    data_context = ""
+    if slide_data:
+        import json as _json
+        data_context = f"\n\nOriginal slide data:\n```json\n{_json.dumps(slide_data, indent=2, default=str)[:500]}\n```"
+
     user_text = (
         f"Audit this rendered slide image (slide_index={slide_index}, "
-        f"slide_type='{slide_type}'). Return JSON array of findings only."
+        f"slide_type='{slide_type}').{data_context}\n\n"
+        f"Return JSON array of findings. For layout_change suggestions, "
+        f"include a proposed_redesign with a complete slide spec."
     )
 
     try:
         response = client.messages.create(
             model=model,
-            max_tokens=1024,
-            system=_VISUAL_AUDIT_SYSTEM,
+            max_tokens=2048,
+            system=system_prompt,
             messages=[{
                 "role": "user",
                 "content": [
@@ -563,6 +610,7 @@ def audit_deck_with_llm(
     pdf_path: str | Path,
     slides: list[dict],
     *,
+    brand: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-20250514",
     page_dir: str | Path | None = None,
@@ -593,10 +641,13 @@ def audit_deck_with_llm(
     warnings: list[AuditWarning] = []
     for i, png in enumerate(page_pngs):
         slide_type = slides[i].get("slide_type", "?") if i < len(slides) else "?"
+        slide_data = slides[i].get("data", {}) if i < len(slides) else {}
         page_warnings = audit_slide_with_llm(
             png,
             slide_index=i + 1,
             slide_type=slide_type,
+            slide_data=slide_data,
+            brand=brand,
             api_key=api_key,
             model=model,
         )

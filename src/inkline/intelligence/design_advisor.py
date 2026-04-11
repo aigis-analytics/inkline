@@ -643,6 +643,16 @@ class DesignAdvisor:
                 parts.append(f"  n_items: {recipe['n_items']}")
                 parts.append("")
 
+        # Inject learned patterns for this brand
+        try:
+            from inkline.intelligence.pattern_memory import format_patterns_for_prompt
+            pattern_text = format_patterns_for_prompt(self.brand)
+            if pattern_text:
+                parts.append("")
+                parts.append(pattern_text)
+        except Exception:
+            pass
+
         return "\n".join(parts)
 
     def _build_user_prompt(
@@ -757,6 +767,168 @@ class DesignAdvisor:
             raise ValueError("LLM returned no valid slides")
 
         return validated
+
+    # ==================================================================
+    # TWO-AGENT DESIGN DIALOGUE — Revision from Auditor feedback
+    # ==================================================================
+
+    def revise_slides_from_review(
+        self,
+        slides: list[dict[str, Any]],
+        review_findings: list,
+        original_sections: Optional[list[dict[str, Any]]] = None,
+    ) -> list[dict[str, Any]]:
+        """Receive Visual Auditor's review and revise slides accordingly.
+
+        For each finding:
+        - If Auditor proposes a redesign: evaluate it, accept or modify
+        - If Auditor flags a mechanical issue: apply the fix
+        - If Auditor makes a subjective suggestion: use LLM to decide
+
+        Parameters
+        ----------
+        slides : list[dict]
+            Current slide specs.
+        review_findings : list
+            Auditor findings (AuditWarning objects or dicts with
+            severity, category, message, proposed_redesign).
+        original_sections : list[dict], optional
+            Original section data for context.
+
+        Returns
+        -------
+        list[dict]
+            Revised slide specs.
+        """
+        # Separate findings with proposed redesigns from text-only findings
+        redesign_proposals = []
+        other_findings = []
+
+        for finding in review_findings:
+            if hasattr(finding, "severity"):
+                severity = finding.severity
+                msg = finding.message
+                proposed = getattr(finding, "proposed_redesign", None)
+                slide_idx = getattr(finding, "slide_index", -1)
+            elif isinstance(finding, dict):
+                severity = finding.get("severity", "info")
+                msg = finding.get("message", "")
+                proposed = finding.get("proposed_redesign")
+                slide_idx = finding.get("slide_index", -1)
+            else:
+                continue
+
+            if severity not in ("error", "warn"):
+                continue
+
+            if proposed and isinstance(proposed, dict) and proposed.get("slide_type"):
+                redesign_proposals.append({
+                    "slide_index": slide_idx,
+                    "proposed": proposed,
+                    "reason": msg,
+                })
+            else:
+                other_findings.append({
+                    "slide_index": slide_idx,
+                    "message": msg,
+                    "severity": severity,
+                })
+
+        if not redesign_proposals and not other_findings:
+            return slides
+
+        # Apply direct redesign proposals (Auditor provided complete specs)
+        modified = list(slides)
+        accepted_count = 0
+
+        for proposal in redesign_proposals:
+            idx = proposal["slide_index"] - 1  # Convert 1-based to 0-based
+            if 0 <= idx < len(modified):
+                proposed = proposal["proposed"]
+                old_type = modified[idx].get("slide_type", "")
+                new_type = proposed.get("slide_type", "")
+
+                if new_type in SLIDE_TYPES:
+                    modified[idx] = {
+                        "slide_type": new_type,
+                        "data": proposed.get("data", modified[idx].get("data", {})),
+                    }
+                    accepted_count += 1
+                    log.info(
+                        "Design revision: slide %d %s → %s (%s)",
+                        idx + 1, old_type, new_type, proposal["reason"][:50],
+                    )
+
+                    # Record in pattern memory
+                    try:
+                        from inkline.intelligence.pattern_memory import record_accepted_redesign
+                        record_accepted_redesign(
+                            self.brand, old_type, new_type, proposal["reason"][:100],
+                        )
+                    except Exception:
+                        pass
+
+        # For non-redesign findings, use LLM to decide how to respond
+        if other_findings and (self.llm_caller is not None or self.api_key):
+            try:
+                modified = self._revise_via_llm(modified, other_findings, original_sections)
+            except Exception as e:
+                log.warning("LLM revision failed: %s", e)
+
+        if accepted_count:
+            log.info("Design dialogue: accepted %d redesign proposals", accepted_count)
+
+        return modified
+
+    def _revise_via_llm(
+        self,
+        slides: list[dict[str, Any]],
+        findings: list[dict],
+        original_sections: Optional[list[dict[str, Any]]] = None,
+    ) -> list[dict[str, Any]]:
+        """Use LLM to revise slides based on auditor text feedback."""
+        system_prompt = self._build_system_prompt()
+
+        # Build user prompt with current slides + review feedback
+        parts = [
+            "You previously designed these slides. The Visual Auditor has reviewed",
+            "the rendered deck and has these objections:\n",
+        ]
+
+        for f in findings:
+            parts.append(f"- Slide {f['slide_index']} [{f['severity']}]: {f['message']}")
+
+        parts.append("\nCurrent slide specs:")
+        for i, s in enumerate(slides):
+            stype = s.get("slide_type", "")
+            title = s.get("data", {}).get("title", "")
+            parts.append(f"  {i+1}. [{stype}] {title}")
+
+        parts.append("\nFor each objection, revise the affected slide spec.")
+        parts.append("Return ONLY the revised slides as a JSON array.")
+        parts.append("Keep slides that don't need changes as-is.")
+        parts.append("Return inside ```json ... ``` markers.")
+
+        user_prompt = "\n".join(parts)
+
+        if self.llm_caller is not None:
+            content = self.llm_caller(system_prompt, user_prompt)
+        else:
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.api_key)
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            content = response.content[0].text
+
+        revised = self._parse_llm_response(content, "", "", "", None)
+        if len(revised) == len(slides):
+            return revised
+        # If count doesn't match, return original (LLM may have dropped slides)
+        return slides
 
     # ==================================================================
     # RULES-BASED MODE (fallback)
