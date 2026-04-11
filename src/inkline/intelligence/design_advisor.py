@@ -841,9 +841,16 @@ class DesignAdvisor:
         if not redesign_proposals and not other_findings:
             return slides
 
-        # Separate slides by mode:
-        # - exact/guided: auditor suggestions stored for HITL, NOT auto-applied
-        # - auto: auditor proposals can be auto-applied
+        # Authority model based on slide_mode:
+        #
+        # ERRORS (clipping, overflow, missing content, truncation):
+        #   → Always fix, even on exact/guided slides.
+        #     These are mechanical failures that break the user's intent.
+        #
+        # DESIGN SUGGESTIONS (layout_change, infographic, whitespace):
+        #   → Auto-apply on auto slides
+        #   → Store for HITL on exact/guided slides
+        #
         modified = list(slides)
         accepted_count = 0
         protected_indices = {
@@ -855,7 +862,7 @@ class DesignAdvisor:
         for proposal in redesign_proposals:
             idx = proposal["slide_index"] - 1  # Convert 1-based to 0-based
             if idx in protected_indices:
-                # Store as suggestion for HITL review, don't auto-apply
+                # Design redesigns on protected slides → HITL only
                 hitl_suggestions.append({
                     "slide_index": idx + 1,
                     "current_type": modified[idx].get("slide_type", ""),
@@ -893,14 +900,25 @@ class DesignAdvisor:
                     except Exception:
                         pass
 
-        # For non-redesign findings on auto-mode slides, use LLM to revise
-        auto_findings = [
-            f for f in other_findings
-            if (f["slide_index"] - 1) not in protected_indices
-        ]
-        # Store findings on protected slides as suggestions
+        # Split non-redesign findings by severity:
+        # - ERRORS on protected slides → still fix (mechanical failures)
+        # - WARNINGS on protected slides → store for HITL
+        # - Everything on auto slides → fix
+        fixable_findings = []
         for f in other_findings:
-            if (f["slide_index"] - 1) in protected_indices:
+            idx = f["slide_index"] - 1
+            is_protected = idx in protected_indices
+            is_error = f["severity"] == "error"
+
+            if not is_protected:
+                # Auto slides: fix everything
+                fixable_findings.append(f)
+            elif is_error:
+                # Protected slide with error: still fix (broken = not respecting intent)
+                fixable_findings.append(f)
+                log.info("Fixing error on protected slide %d: %s", f["slide_index"], f["message"][:60])
+            else:
+                # Protected slide with warning: HITL suggestion
                 hitl_suggestions.append({
                     "slide_index": f["slide_index"],
                     "message": f["message"],
@@ -908,9 +926,9 @@ class DesignAdvisor:
                     "status": "pending_review",
                 })
 
-        if auto_findings and (self.llm_caller is not None or self.api_key):
+        if fixable_findings and (self.llm_caller is not None or self.api_key):
             try:
-                modified = self._revise_via_llm(modified, auto_findings, original_sections)
+                modified = self._revise_via_llm(modified, fixable_findings, original_sections)
             except Exception as e:
                 log.warning("LLM revision failed: %s", e)
 
