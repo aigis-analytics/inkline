@@ -81,14 +81,17 @@ class TypstSlideRenderer:
                 exists = (Path(self._image_root) / image_path).exists()
             else:
                 exists = Path(image_path).exists()
+            if not exists:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Image not found, using placeholder: %s", image_path
+                )
 
         if exists:
             args = ", ".join(f'{k.replace("_", "-")}: {v}' for k, v in kwargs.items())
             return f'image("{image_path}", {args})' if args else f'image("{image_path}")'
 
         # Typst-native placeholder: colored rect with text
-        import logging
-        logging.getLogger(__name__).warning("Image not found, using placeholder: %s", image_path)
         t = self.t
         label = image_path or "Chart not available"
         return (

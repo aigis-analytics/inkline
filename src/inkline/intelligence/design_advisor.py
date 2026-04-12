@@ -276,6 +276,10 @@ class DesignAdvisor:
         Model to use for LLM calls.
     """
 
+    #: Default LLM bridge URL. Override via env var ``INKLINE_BRIDGE_URL``
+    #: (e.g. ``http://host.docker.internal:8082`` from inside Docker).
+    DEFAULT_BRIDGE_URL = "http://localhost:8082"
+
     def __init__(
         self,
         brand: str = "minimal",
@@ -284,6 +288,7 @@ class DesignAdvisor:
         api_key: str | None = None,
         model: str = "claude-sonnet-4-20250514",
         llm_caller: Optional["LLMCaller"] = None,
+        bridge_url: str | None = None,
     ):
         self.brand = brand
         self.template = template
@@ -291,6 +296,78 @@ class DesignAdvisor:
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.model = model
         self.llm_caller = llm_caller
+        # Bridge URL: kwarg > env var > class default
+        self.bridge_url = (
+            bridge_url
+            or os.environ.get("INKLINE_BRIDGE_URL", "")
+            or self.DEFAULT_BRIDGE_URL
+        )
+
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+        """Route an LLM call: injected caller → bridge → Anthropic SDK.
+
+        Priority:
+        1. ``self.llm_caller`` — injected custom caller (e.g. test mocks)
+        2. LLM bridge at ``self.bridge_url`` — uses Claude Max subscription
+        3. Anthropic SDK with ``self.api_key`` / ``ANTHROPIC_API_KEY``
+        """
+        if self.llm_caller is not None:
+            log.info(
+                "DesignAdvisor LLM (injected caller): %d sys / %d user chars",
+                len(system_prompt), len(user_prompt),
+            )
+            return self.llm_caller(system_prompt, user_prompt)
+
+        # Try bridge (short connect timeout so failures are fast)
+        try:
+            import requests as _req
+            log.info(
+                "DesignAdvisor LLM bridge %s (%d sys / %d user chars)...",
+                self.bridge_url, len(system_prompt), len(user_prompt),
+            )
+            resp = _req.post(
+                f"{self.bridge_url}/prompt",
+                json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
+                timeout=(5, 240),  # 5s connect, 240s read
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("response"):
+                log.info(
+                    "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
+                    len(data["response"]), data.get("source", "?"),
+                )
+                return data["response"]
+        except Exception as e:
+            log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
+
+        # Anthropic SDK fallback
+        try:
+            import anthropic
+        except ImportError as exc:
+            raise RuntimeError(
+                "Inkline intelligence requires the 'anthropic' package. "
+                "Install it with: pip install inkline[intelligence]"
+            ) from exc
+
+        if not self.api_key:
+            raise RuntimeError(
+                "No LLM available: bridge unreachable and ANTHROPIC_API_KEY not set. "
+                "Set ANTHROPIC_API_KEY or start the LLM bridge, or use mode='rules'."
+            )
+
+        client = anthropic.Anthropic(api_key=self.api_key)
+        log.info(
+            "DesignAdvisor Anthropic API (%s): %d sys / %d user chars",
+            self.model, len(system_prompt), len(user_prompt),
+        )
+        response = client.messages.create(
+            model=self.model,
+            max_tokens=8192,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return response.content[0].text
 
     def design_deck(
         self,
@@ -520,14 +597,13 @@ class DesignAdvisor:
     ) -> list[dict[str, Any]]:
         """Use an LLM to design the optimal slide deck.
 
-        Routing order:
-          1. ``self.llm_caller`` (if the caller injected one) — any callable
-             ``(system, user) -> str``. Use this for Claude Code SDK, Claude
-             Max session, Aigis llm_bridge, or any non-Anthropic provider.
-          2. Public Anthropic SDK using ``self.api_key`` (or
-             ``ANTHROPIC_API_KEY`` env var). Costs go on the API key's account.
+        Routing order (handled by ``_call_llm``):
+          1. ``self.llm_caller`` — injected custom caller (test mocks, custom providers)
+          2. LLM bridge at ``self.bridge_url`` (default ``INKLINE_BRIDGE_URL`` env var
+             or ``localhost:8082``) — Claude Max subscription, no API spend
+          3. Anthropic SDK using ``self.api_key`` / ``ANTHROPIC_API_KEY`` env var
         """
-        # Build prompts (shared by both routing branches)
+        # Build prompts
         system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
         user_prompt = self._build_user_prompt(
             title, sections, date=date, subtitle=subtitle,
@@ -535,28 +611,7 @@ class DesignAdvisor:
             additional_guidance=additional_guidance,
         )
 
-        if self.llm_caller is not None:
-            log.info(
-                "DesignAdvisor LLM (via injected caller): %d chars system, %d chars user",
-                len(system_prompt), len(user_prompt),
-            )
-            content = self.llm_caller(system_prompt, user_prompt)
-        else:
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=self.api_key)
-            log.info(
-                "DesignAdvisor LLM (Anthropic SDK %s): %d chars system, %d chars user",
-                self.model, len(system_prompt), len(user_prompt),
-            )
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=8192,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            content = response.content[0].text
-
+        content = self._call_llm(system_prompt, user_prompt)
         slides = self._parse_llm_response(content, title, date, subtitle, contact)
         log.info("DesignAdvisor LLM: planned %d slides for '%s'", len(slides), title)
         return slides
@@ -1044,19 +1099,7 @@ class DesignAdvisor:
         user_prompt = "\n".join(parts)
 
         try:
-            if self.llm_caller is not None:
-                content = self.llm_caller(system_prompt, user_prompt)
-            else:
-                import anthropic
-                client = anthropic.Anthropic(api_key=self.api_key)
-                response = client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}],
-                )
-                content = response.content[0].text
-
+            content = self._call_llm(system_prompt, user_prompt)
             revised = self._parse_llm_response(content, "", "", "", None)
 
             # Splice revised slides back into the original list

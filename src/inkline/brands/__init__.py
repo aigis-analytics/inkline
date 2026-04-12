@@ -133,6 +133,7 @@ class BaseBrand:
     # ── Assets (resolved via user asset dirs + package assets) ───────
     logo_dark_path: str = ""    # Logo for dark backgrounds
     logo_light_path: str = ""   # Logo for light backgrounds
+    shield_path: str = ""       # Icon/shield for corner placement (optional)
     font_files: list[str] = field(default_factory=list)
 
     # ── Document metadata ────────────────────────────────────────────
