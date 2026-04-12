@@ -12,7 +12,7 @@ Usage::
 
     # Smart slides from structured data
     slides = advisor.design_deck(
-        title="Project Corsair DD Summary",
+        title="Q4 Strategy Review",
         sections=[
             {"type": "executive_summary", "metrics": {...}, "narrative": "..."},
             {"type": "financial_overview", "table_data": {...}},

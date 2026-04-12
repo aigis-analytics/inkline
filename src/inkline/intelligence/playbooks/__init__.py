@@ -39,6 +39,7 @@ PLAYBOOK_REGISTRY: Dict[str, str] = {
     "typography": "typography.md",
     "visual_libraries": "visual_libraries.md",
     "template_catalog": "template_catalog.md",
+    "design_md_styles": "__generated__",  # Dynamic: loaded from design_md_styles module
 }
 
 # Convenience list of playbook names
@@ -71,6 +72,17 @@ def load_playbook(name: str) -> str:
             f"Unknown playbook '{name}'. "
             f"Available playbooks: {', '.join(PLAYBOOK_NAMES)}"
         )
+
+    # Dynamic playbook: design_md_styles catalog
+    if PLAYBOOK_REGISTRY[name] == "__generated__":
+        try:
+            from inkline.intelligence.design_md_styles import get_playbook_text
+            content = get_playbook_text()
+            log.debug("Loaded dynamic playbook '%s' (%d chars)", name, len(content))
+            return content
+        except Exception as exc:
+            log.warning("Failed to generate dynamic playbook '%s': %s", name, exc)
+            return ""
 
     filepath = PLAYBOOKS_DIR / PLAYBOOK_REGISTRY[name]
     if not filepath.exists():
@@ -157,6 +169,7 @@ def get_playbook_summary() -> str:
         "typography": "Font selection, pairing rules, type scales for slides and documents",
         "visual_libraries": "Reference catalogue of open-source chart libraries and design systems",
         "template_catalog": "16 named slide archetype recipes (iceberg, pinwheel, hexagonal, ladder, waffle, etc.) with structural coordinates, plus a queryable index of 771 real templates from SlideModel + Genspark",
+        "design_md_styles": "27 curated design systems from getdesign.md (Stripe, Vercel, Apple, etc.) — color palettes, typography, style tags for matching company aesthetics",
     }
 
     lines = ["Available Design Playbooks:", ""]

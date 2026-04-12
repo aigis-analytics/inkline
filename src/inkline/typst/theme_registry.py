@@ -102,6 +102,13 @@ SLIDE_TEMPLATES: dict[str, dict] = {
     },
 }
 
+# Merge design.md styles (dmd_stripe, dmd_vercel, etc.) into SLIDE_TEMPLATES
+try:
+    from inkline.intelligence.design_md_styles import DESIGN_MD_TEMPLATES
+    SLIDE_TEMPLATES.update(DESIGN_MD_TEMPLATES)
+except Exception:
+    pass  # Non-blocking: design_md_styles is optional
+
 
 def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:
     """Generate a Typst theme dict from a BaseBrand instance.

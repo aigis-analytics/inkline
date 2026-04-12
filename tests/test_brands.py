@@ -50,8 +50,8 @@ def test_minimal_is_always_available():
 
 def test_minimal_palette():
     brand = get_brand("minimal")
-    assert brand.primary == "#1F2328"
-    assert brand.background == "#FFFFFF"
+    assert brand.primary == "#6366F1"
+    assert brand.background == "#FAFAFA"
 
 
 # ── Registry API ────────────────────────────────────────────────────────

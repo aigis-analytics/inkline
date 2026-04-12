@@ -1227,11 +1227,19 @@ class TypstSlideRenderer:
 }}"""
 
 
-def _esc(text: str) -> str:
-    """Escape special Typst characters."""
+def _esc(text) -> str:
+    """Escape special Typst characters.
+
+    Handles non-string types gracefully (dicts, lists, numbers)
+    by converting to string first.
+    """
     if not text:
         return ""
-    text = str(text)  # Ensure string (LLM may return int for step numbers)
+    if isinstance(text, dict):
+        # Flatten dict to a readable string: "key: value, key2: value2"
+        text = ", ".join(f"{k}: {v}" for k, v in text.items())
+    elif not isinstance(text, str):
+        text = str(text)
     return (
         text
         .replace("\\", "\\\\")

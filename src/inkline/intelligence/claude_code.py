@@ -12,7 +12,7 @@ Usage::
     from inkline.intelligence.claude_code import build_claude_code_caller
 
     caller = build_claude_code_caller(model="sonnet")
-    advisor = DesignAdvisor(brand="aigis", llm_caller=caller, mode="llm")
+    advisor = DesignAdvisor(brand="minimal", llm_caller=caller, mode="llm")
     slides = advisor.design_deck(title="Q1 review", sections=[...])
 
 The caller is a plain ``Callable[[system, user], str]`` so it satisfies the

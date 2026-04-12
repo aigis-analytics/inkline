@@ -3,11 +3,13 @@
 **Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
 Inkline turns structured data or Markdown into publication-quality, brand-consistent
-output. It ships with 90 built-in themes, 20 slide layouts, 11 chart types, a 1-brand
+output. It ships with 90 built-in themes, 37 slide templates (10 curated + 27 from
+[getdesign.md](https://getdesign.md)), 20 slide layouts, 11 chart types, a 1-brand
 public registry (extensible via plugins), an LLM-driven design advisor with a
 pluggable caller (Anthropic SDK or Claude Code subprocess — no API key required),
-a 771-template archetype catalog, and a two-layer audit (structural + Claude vision)
-that keeps content inside the slide frame and on-brand.
+8 design playbooks (chart selection, typography, color theory, etc.), a 771-template
+archetype catalog, and a two-layer audit (structural + Claude vision) that keeps
+content inside the slide frame and on-brand.
 
 ```bash
 pip install inkline                # core: Markdown → HTML
@@ -75,7 +77,7 @@ from inkline.intelligence import DesignAdvisor
 
 advisor = DesignAdvisor(brand="minimal", template="consulting", mode="llm")
 slides = advisor.design_deck(
-    title="Project Corsair DD",
+    title="Q4 Strategy Review",
     sections=[
         {"type": "executive_summary", "metrics": {...}, "narrative": "..."},
         {"type": "financials", "table_data": {...}},
@@ -177,6 +179,28 @@ MyCorpBrand = BaseBrand(
 `line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
 `stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`
 
+## Slide templates (37)
+
+10 built-in templates plus 27 design system styles from [getdesign.md](https://getdesign.md):
+
+**Built-in:** `executive`, `minimalism`, `newspaper`, `investor`, `consulting`,
+`pitch`, `dark`, `editorial`, `boardroom`, `brand`
+
+**Design.md styles:** `dmd_stripe`, `dmd_vercel`, `dmd_notion`, `dmd_apple`,
+`dmd_spotify`, `dmd_tesla`, `dmd_airbnb`, `dmd_coinbase`, `dmd_shopify`,
+`dmd_figma`, `dmd_framer`, `dmd_cursor`, `dmd_warp`, `dmd_supabase`,
+`dmd_uber`, `dmd_ferrari`, `dmd_bmw`, `dmd_mongodb`, `dmd_intercom`,
+`dmd_webflow`, `dmd_miro`, `dmd_posthog`, `dmd_raycast`, `dmd_revolut`,
+`dmd_superhuman`, `dmd_zapier`, `dmd_claude`
+
+Each `dmd_*` template extracts color palettes, typography, and visual style from
+the company's design system spec and applies them as theme overrides.
+
+```python
+# Use Stripe's design system aesthetic
+export_typst_slides(slides=slides, brand="minimal", template="dmd_stripe")
+```
+
 ## Overflow audit
 
 Inkline enforces content limits per slide layout and runs an audit at export time:
@@ -220,7 +244,8 @@ src/inkline/
     ├── layout_selector.py
     ├── chart_advisor.py
     ├── overflow_audit.py
-    └── playbooks/           # design rules, colour theory, typography
+    ├── playbooks/           # design rules, colour theory, typography
+    └── design_md_styles/    # 27 curated design systems (getdesign.md)
 ```
 
 ## Documentation

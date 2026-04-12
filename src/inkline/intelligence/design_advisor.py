@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 # Type alias for the pluggable LLM caller. Any function that takes a system
 # prompt + user prompt and returns the model's text response can be plugged in
 # here — no Anthropic SDK dependency required. This is the integration point
-# for Claude Code SDK, Claude Max sessions, Aigis's llm_bridge, OpenAI, or any
+# for Claude Code SDK, Claude Max sessions, custom LLM bridges, OpenAI, or any
 # other LLM provider.
 LLMCaller = Callable[[str, str], str]
 
@@ -620,6 +620,14 @@ class DesignAdvisor:
             parts.append(f"## {name.replace('_', ' ').title()}")
             parts.append(content)
             parts.append("")
+
+        # Include design.md style catalog (27 curated design systems)
+        try:
+            from inkline.intelligence.design_md_styles import get_playbook_text
+            parts.append(get_playbook_text())
+            parts.append("")
+        except Exception:
+            pass  # Non-blocking: design_md_styles is optional
 
         # Optional: inline structured archetype recipes the caller pinned
         if reference_archetypes:

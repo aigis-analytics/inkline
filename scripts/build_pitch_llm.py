@@ -25,11 +25,11 @@ OUT.mkdir(parents=True, exist_ok=True)
 BRAND = "minimal"
 TEMPLATE = "pitch"  # The new "pitch" template — bold hero stats, clean white
 
-# Source key from Aigis env if available
+# Ensure ANTHROPIC_API_KEY is set (via environment variable or .env file)
 if not os.environ.get("ANTHROPIC_API_KEY"):
-    aigis_env = Path("/mnt/d/aigis-agents-v2/.env")
-    if aigis_env.exists():
-        for line in aigis_env.read_text().splitlines():
+    env_file = Path.home() / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
             if line.startswith("ANTHROPIC_API_KEY="):
                 os.environ["ANTHROPIC_API_KEY"] = line.split("=", 1)[1].strip()
                 break
