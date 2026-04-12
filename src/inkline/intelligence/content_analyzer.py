@@ -110,6 +110,18 @@ def _infer_content_type(section: dict) -> ContentType:
         return ContentType.TIME_SERIES
     if section.get("items") and section.get("values"):
         return ContentType.COMPARISON
+    # Dict-item pattern detection — classify by key shapes
+    items = section.get("items", [])
+    if items and isinstance(items[0], dict):
+        item_keys = set(items[0].keys())
+        if {"title", "body"} <= item_keys or {"name", "body"} <= item_keys or {"name", "detail"} <= item_keys:
+            return ContentType.COMPARISON  # Card-shaped → three_card/four_card/feature_grid
+        if {"date", "label"} <= item_keys or {"timing", "label"} <= item_keys:
+            return ContentType.FLOW  # Timeline
+        if {"risk", "severity"} <= item_keys or {"action", "priority"} <= item_keys:
+            return ContentType.RISK
+        if {"label", "value"} <= item_keys or {"label", "pct"} <= item_keys:
+            return ContentType.RANKING  # bar_chart or progress_bars
     if section.get("narrative") and len(section.get("narrative", "").split()) > 50:
         return ContentType.NARRATIVE
     if section.get("rag") or section.get("risk"):

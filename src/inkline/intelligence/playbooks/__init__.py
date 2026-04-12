@@ -149,6 +149,47 @@ def load_playbooks_for_task(task_type: str) -> Dict[str, str]:
     return result
 
 
+def load_playbook_summary(name: str, max_chars: int = 4000) -> str:
+    """Load a condensed version of a playbook, trimming bulk reference material.
+
+    For ``template_catalog``: strips the 771-entry manifest (section 6+),
+    keeping only the 16 archetype recipes, decision matrix, and rules.
+    For ``slide_layouts``: includes rules and decision trees, skips the
+    verbose formatting reference tables (section 5+).
+    For other playbooks: truncates to ``max_chars``.
+
+    Parameters
+    ----------
+    name : str
+        Playbook name.
+    max_chars : int
+        Maximum character length for the returned text.
+
+    Returns
+    -------
+    str
+        Condensed playbook text.
+    """
+    text = load_playbook(name)
+
+    if name == "template_catalog":
+        # Drop section 6 "Catalog manifests" (the 771-entry bulk index) onward
+        cutoff = text.find("\n## 6. Catalog manifests")
+        if cutoff > 0:
+            text = text[:cutoff].rstrip()
+    elif name == "slide_layouts":
+        # Drop section 5 "Formatting Standards" onward (verbose reference tables)
+        cutoff = text.find("\n## 5. Formatting Standards")
+        if cutoff > 0:
+            text = text[:cutoff].rstrip()
+
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+        text += "\n\n... [condensed — full playbook available via load_playbook()]"
+
+    return text
+
+
 def get_playbook_summary() -> str:
     """Return a brief summary of all available playbooks.
 

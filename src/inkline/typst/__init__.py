@@ -138,6 +138,29 @@ def _auto_render_charts(
             slide["data"].pop("chart_request", None)
 
 
+def _preflight_images(slides: list, root: str) -> None:
+    """Validate image paths before rendering; log warnings for missing files.
+
+    Slides with missing image_path are left as-is — the renderer will
+    substitute a Typst-native placeholder at render time.
+    """
+    from pathlib import Path
+    root_path = Path(root)
+    image_slide_types = {"chart", "chart_caption", "dashboard"}
+    for slide in slides:
+        if slide.get("slide_type") not in image_slide_types:
+            continue
+        image_path = slide.get("data", {}).get("image_path", "")
+        if not image_path:
+            continue
+        full = root_path / image_path
+        if not full.exists():
+            log.warning(
+                "Pre-flight: image '%s' not found for %s slide — renderer will use placeholder",
+                image_path, slide["slide_type"],
+            )
+
+
 def export_typst_slides(
     slides: list[dict[str, Any]],
     output_path: str | Path,
@@ -260,6 +283,9 @@ def export_typst_slides(
         except Exception as e:
             log.debug("Pre-render fixer skipped: %s", e)
 
+    # === PHASE 2b: Pre-flight image validation ===
+    _preflight_images(slides, root or str(output_path.parent))
+
     # === PHASE 3: OUTER LOOP (visual quality) ===
     visual_attempt = 0
     all_warnings: list = list(pre_warnings)
@@ -272,7 +298,7 @@ def export_typst_slides(
                 slides=[SlideSpec(slide_type=s["slide_type"], data=s.get("data", {})) for s in slides_list],
                 title=title, date=date, subtitle=subtitle,
             )
-            renderer = TypstSlideRenderer(theme)
+            renderer = TypstSlideRenderer(theme, image_root=root)
             source_str = renderer.render_deck(deck)
         compile_typst(source_str, output_path=output_path, root=root, font_paths=all_font_paths)
         return source_str

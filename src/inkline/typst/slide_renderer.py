@@ -68,8 +68,36 @@ class TypstSlideRenderer:
     MAX_PYRAMID_TIERS = 6
     MAX_COMPARISON_ROWS = 8
 
-    def __init__(self, theme: dict):
+    def __init__(self, theme: dict, image_root: str | None = None):
         self.t = theme
+        self._image_root = image_root
+
+    def _image_markup(self, image_path: str, **kwargs) -> str:
+        """Return Typst image markup, or a placeholder if the file is missing."""
+        from pathlib import Path
+        exists = False
+        if image_path:
+            if self._image_root:
+                exists = (Path(self._image_root) / image_path).exists()
+            else:
+                exists = Path(image_path).exists()
+
+        if exists:
+            args = ", ".join(f'{k.replace("_", "-")}: {v}' for k, v in kwargs.items())
+            return f'image("{image_path}", {args})' if args else f'image("{image_path}")'
+
+        # Typst-native placeholder: colored rect with text
+        import logging
+        logging.getLogger(__name__).warning("Image not found, using placeholder: %s", image_path)
+        t = self.t
+        label = image_path or "Chart not available"
+        return (
+            f'block(fill: {_rgb(t["card_fill"])}, stroke: 1pt + {_rgb(t["border"])}, '
+            f'width: 100%, height: 100%, radius: 4pt)['
+            f'#align(center + horizon, text(size: 9pt, fill: {_rgb(t["muted"])}, style: "italic")['
+            f'"Chart not available\\n{label}"'
+            f'])]'
+        )
 
     # Slide types that use #page(...)[content] (function form) which
     # starts its own page — no #pagebreak() needed before them.
@@ -233,7 +261,7 @@ class TypstSlideRenderer:
         t = self.t
         section = d.get("section", "")
         title = d.get("title", "")
-        items = d.get("items", [])[:self.MAX_BULLETS]
+        items = _ensure_string_items(d.get("items", []))[:self.MAX_BULLETS]
         footnote = d.get("footnote", "")
 
         bullets = "\n    ".join(f"- {_esc(item)}" for item in items)
@@ -430,9 +458,9 @@ class TypstSlideRenderer:
         section = d.get("section", "")
         title = d.get("title", "")
         left_title = d.get("left_title", "")
-        left_items = d.get("left_items", [])
+        left_items = _ensure_string_items(d.get("left_items", []))
         right_title = d.get("right_title", "")
-        right_items = d.get("right_items", [])
+        right_items = _ensure_string_items(d.get("right_items", []))
 
         left_bullets = "\n      ".join(f"- {_esc(item)}" for item in left_items[:self.MAX_BULLETS])
         right_bullets = "\n      ".join(f"- {_esc(item)}" for item in right_items[:self.MAX_BULLETS])
@@ -497,7 +525,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(14pt)
 
-  align(center, image("{image_path}", width: 90%, height: 8.5cm))
+  align(center, {self._image_markup(image_path, width="90%", height="8.5cm")})
 
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
@@ -1163,7 +1191,7 @@ class TypstSlideRenderer:
     gutter: 14pt,
     // Left: chart image (compact to fit alongside dense right column)
     block(width: 100%)[
-      #align(center + horizon, image("{image_path}", width: 100%, height: 6.2cm))
+      #align(center + horizon, {self._image_markup(image_path, width="100%", height="6.2cm")})
     ],
     // Right: stats stack + bullets (capped at 3 bullets)
     block(width: 100%)[
@@ -1206,7 +1234,7 @@ class TypstSlideRenderer:
     gutter: 12pt,
     // Chart — fills available height, wider allocation
     block(width: 100%, height: 100%)[
-      #align(center + horizon, image("{image_path}", height: 95%, width: 95%, fit: "contain"))
+      #align(center + horizon, {self._image_markup(image_path, height="95%", width="95%", fit='"contain"')})
     ],
     // Key takeaways panel with accent left border
     block(
@@ -1236,8 +1264,15 @@ def _esc(text) -> str:
     if not text:
         return ""
     if isinstance(text, dict):
-        # Flatten dict to a readable string: "key: value, key2: value2"
-        text = ", ".join(f"{k}: {v}" for k, v in text.items())
+        # Use semicolons (not commas) to avoid breaking Typst grid arguments
+        name = text.get("title") or text.get("name") or text.get("well") or text.get("action") or text.get("risk") or ""
+        detail = text.get("body") or text.get("detail") or text.get("value") or text.get("status") or ""
+        if name and detail:
+            text = f"{name} — {detail}"
+        elif name:
+            text = name
+        else:
+            text = "; ".join(f"{k}: {v}" for k, v in text.items())
     elif not isinstance(text, str):
         text = str(text)
     return (
@@ -1249,3 +1284,30 @@ def _esc(text) -> str:
         .replace("<", "\\<")
         .replace(">", "\\>")
     )
+
+
+def _ensure_string_items(items: list) -> list:
+    """Normalize a list of mixed str/dict items into plain strings.
+
+    Extracts meaningful display strings from dict items using common
+    key patterns (title/body, name/detail, risk/severity, etc.).
+    """
+    result = []
+    for item in items:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            name = item.get("title") or item.get("name") or item.get("well") or item.get("action") or item.get("risk") or ""
+            detail = item.get("body") or item.get("detail") or item.get("value") or item.get("status") or ""
+            severity = item.get("severity") or item.get("priority") or ""
+            if name and detail:
+                result.append(f"{name} — {detail}")
+            elif name and severity:
+                result.append(f"{name} [{severity}]")
+            elif name:
+                result.append(name)
+            else:
+                result.append("; ".join(f"{k}: {v}" for k, v in item.items()))
+        else:
+            result.append(str(item))
+    return result

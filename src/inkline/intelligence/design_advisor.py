@@ -565,11 +565,18 @@ class DesignAdvisor:
         self,
         reference_archetypes: Optional[list[str]] = None,
     ) -> str:
-        """Build the system prompt with playbook context."""
-        from inkline.intelligence.playbooks import load_playbooks_for_task
+        """Build the system prompt with playbook context.
 
-        # Load slide-relevant playbooks
-        playbooks = load_playbooks_for_task("slide")
+        Uses tiered loading to keep the system prompt under ~30K chars:
+        - slide_layouts: full text (layout rules are essential)
+        - SLIDE_TYPE_GUIDE: full text (critical for JSON output format)
+        - template_catalog, typography, color_theory: condensed summaries
+        """
+        from inkline.intelligence.playbooks import load_playbook, load_playbook_summary
+
+        # Tiered playbook loading — full for core, summary for bulk reference
+        CORE_PLAYBOOKS = ["slide_layouts"]
+        SUMMARY_PLAYBOOKS = ["template_catalog", "typography", "color_theory"]
 
         parts = [
             "You are Inkline's DesignAdvisor — an expert graphic designer and visual storyteller.",
@@ -615,11 +622,25 @@ class DesignAdvisor:
             "",
         ]
 
-        for name, content in playbooks.items():
-            # Include full playbook — these are specifically curated for this task
-            parts.append(f"## {name.replace('_', ' ').title()}")
-            parts.append(content)
-            parts.append("")
+        # Core playbooks: include full text
+        for name in CORE_PLAYBOOKS:
+            try:
+                content = load_playbook(name)
+                parts.append(f"## {name.replace('_', ' ').title()}")
+                parts.append(content)
+                parts.append("")
+            except Exception as e:
+                log.warning("Failed to load core playbook '%s': %s", name, e)
+
+        # Summary playbooks: condensed to reduce token count
+        for name in SUMMARY_PLAYBOOKS:
+            try:
+                content = load_playbook_summary(name, max_chars=4000)
+                parts.append(f"## {name.replace('_', ' ').title()} (summary)")
+                parts.append(content)
+                parts.append("")
+            except Exception as e:
+                log.warning("Failed to load summary playbook '%s': %s", name, e)
 
         # Include design.md style catalog (27 curated design systems)
         try:
@@ -1133,18 +1154,23 @@ class DesignAdvisor:
             "content": self._build_content_slide,
             "three_card": lambda s, l, t: self._build_card_slide(s, l, t, 3, layout.highlight_index),
             "four_card": lambda s, l, t: self._build_card_slide(s, l, t, 4, layout.highlight_index),
+            "feature_grid": lambda s, l, t: self._build_card_slide(s, l, t, 6, -1),
             "stat": self._build_stat_slide,
             "kpi_strip": self._build_kpi_slide,
             "table": self._build_table_slide,
             "split": self._build_split_slide,
             "bar_chart": self._build_bar_chart_slide,
             "chart": self._build_chart_slide,
+            "timeline": self._build_timeline_slide,
         }
         builder = builders.get(slide_type, self._build_content_slide)
         return builder(section, section_label, section_title)
 
     def _build_content_slide(self, section: dict, label: str, title: str) -> dict:
         items = section.get("items", [])
+        # Normalize dict items to strings
+        if items and isinstance(items[0], dict):
+            items = self._dict_items_to_strings(items)
         if not items and section.get("cards"):
             items = [f"*{c.get('title', '')}* -- {c.get('body', '')}" for c in section["cards"]]
         if not items and section.get("left"):
@@ -1158,10 +1184,21 @@ class DesignAdvisor:
     def _build_card_slide(self, section: dict, label: str, title: str, n: int, highlight: int) -> dict:
         cards = section.get("cards", [])
         if not cards and section.get("items"):
-            cards = [{"title": item, "body": ""} for item in section["items"][:n]]
+            raw = section["items"]
+            if raw and isinstance(raw[0], dict):
+                # Dict items — extract title/body from known key patterns
+                cards = self._dict_items_to_cards(raw[:n])
+            else:
+                cards = [{"title": item, "body": ""} for item in raw[:n]]
         if not cards and section.get("metrics"):
             cards = [{"title": k, "body": str(v)} for k, v in list(section["metrics"].items())[:n]]
-        slide_type = "three_card" if n == 3 else "four_card"
+        # Map n to slide type
+        if n <= 3:
+            slide_type = "three_card"
+        elif n == 4:
+            slide_type = "four_card"
+        else:
+            slide_type = "feature_grid"
         data: dict[str, Any] = {"section": label, "title": title or label, "cards": cards[:n], "footnote": section.get("footnote", "")}
         if highlight >= 0:
             data["highlight_index"] = highlight
@@ -1209,3 +1246,56 @@ class DesignAdvisor:
 
     def _build_chart_slide(self, section: dict, label: str, title: str) -> dict:
         return {"slide_type": "chart", "data": {"section": label, "title": title or label, "image_path": section.get("image_path", ""), "footnote": section.get("footnote", "")}}
+
+    def _build_timeline_slide(self, section: dict, label: str, title: str) -> dict:
+        """Build a timeline slide from dict items with date/label keys."""
+        items = section.get("items", [])
+        milestones = []
+        for item in items:
+            if isinstance(item, dict):
+                date = item.get("date") or item.get("timing") or item.get("year") or ""
+                lbl = item.get("label") or item.get("name") or item.get("title") or ""
+                desc = item.get("description") or item.get("body") or item.get("detail") or ""
+                milestones.append({"date": str(date), "label": str(lbl), "description": str(desc)})
+            else:
+                milestones.append({"date": "", "label": str(item), "description": ""})
+        return {"slide_type": "timeline", "data": {"section": label, "title": title or label, "milestones": milestones, "footnote": section.get("footnote", "")}}
+
+    @staticmethod
+    def _dict_items_to_cards(items: list) -> list:
+        """Convert a list of dict items to card dicts with title/body keys."""
+        cards = []
+        for item in items:
+            if not isinstance(item, dict):
+                cards.append({"title": str(item), "body": ""})
+                continue
+            card_title = item.get("title") or item.get("name") or item.get("well") or item.get("action") or item.get("risk") or ""
+            card_body = item.get("body") or item.get("detail") or item.get("value") or item.get("status") or ""
+            severity = item.get("severity") or item.get("priority") or ""
+            if severity and not card_body:
+                card_body = f"Severity: {severity}"
+            cards.append({"title": str(card_title), "body": str(card_body)})
+        return cards
+
+    @staticmethod
+    def _dict_items_to_strings(items: list) -> list:
+        """Convert a list of dict items to display strings."""
+        result = []
+        for item in items:
+            if isinstance(item, str):
+                result.append(item)
+            elif isinstance(item, dict):
+                name = item.get("title") or item.get("name") or item.get("well") or item.get("action") or item.get("risk") or ""
+                detail = item.get("body") or item.get("detail") or item.get("value") or item.get("status") or ""
+                severity = item.get("severity") or item.get("priority") or ""
+                if name and detail:
+                    result.append(f"{name} — {detail}")
+                elif name and severity:
+                    result.append(f"{name} [{severity}]")
+                elif name:
+                    result.append(name)
+                else:
+                    result.append("; ".join(f"{k}: {v}" for k, v in item.items()))
+            else:
+                result.append(str(item))
+        return result

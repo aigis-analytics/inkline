@@ -103,31 +103,56 @@ def select_layout(analysis: ContentAnalysis, context: dict[str, Any] | None = No
             slide_type="chart", rationale="Time series → line chart slide",
         ))
 
-    # Comparison / ranking
-    if ct in (ContentType.COMPARISON, ContentType.RANKING):
+    # Comparison / ranking — including dict-item cards
+    if ct == ContentType.COMPARISON:
         if analysis.data_points <= 3:
             return _with_capacity(LayoutDecision(
                 slide_type="three_card", num_columns=3, highlight_index=1,
-                rationale="2-3 comparison items → three card with highlight",
+                rationale="2-3 comparison/card items → three card with highlight",
+            ))
+        if analysis.data_points == 4:
+            return _with_capacity(LayoutDecision(
+                slide_type="four_card", num_columns=2,
+                rationale="4 card items → 2x2 grid",
+            ))
+        if analysis.data_points <= 6:
+            return _with_capacity(LayoutDecision(
+                slide_type="feature_grid", num_columns=3,
+                rationale="5-6 card items → feature grid (3×2)",
+            ))
+        return _with_capacity(LayoutDecision(
+            slide_type="bar_chart", rationale="7+ comparison items → bar chart",
+        ))
+
+    if ct == ContentType.RANKING:
+        if analysis.data_points <= 3:
+            return _with_capacity(LayoutDecision(
+                slide_type="three_card", num_columns=3, highlight_index=1,
+                rationale="2-3 ranking items → three card",
             ))
         if analysis.data_points <= 4:
             return _with_capacity(LayoutDecision(
                 slide_type="four_card", num_columns=2,
-                rationale="4 items → 2x2 grid",
+                rationale="4 ranking items → 2x2 grid",
             ))
         return _with_capacity(LayoutDecision(
-            slide_type="bar_chart", rationale="5+ comparison items → bar chart",
+            slide_type="bar_chart", rationale="5+ ranking items → bar chart",
         ))
 
-    # Risk / RAG
+    # Risk / RAG — including dict-item risk patterns
     if ct == ContentType.RISK:
         if analysis.has_rag_status:
             return _with_capacity(LayoutDecision(
                 slide_type="three_card", num_columns=3,
                 rationale="RAG assessment → three cards (R/A/G)",
             ))
+        if analysis.data_points <= 3:
+            return _with_capacity(LayoutDecision(
+                slide_type="three_card", num_columns=3,
+                rationale="Risk dict items → three card layout",
+            ))
         return _with_capacity(LayoutDecision(
-            slide_type="table", rationale="Risk data without RAG → risk table",
+            slide_type="split", rationale="Risk data without RAG → split layout",
         ))
 
     # Positioning
@@ -137,8 +162,12 @@ def select_layout(analysis: ContentAnalysis, context: dict[str, Any] | None = No
             rationale="Competitive positioning → 2x2 matrix",
         ))
 
-    # Flow
+    # Flow — dict timeline items use timeline slide, plain flow uses chart
     if ct == ContentType.FLOW:
+        if analysis.data_points > 0:
+            return _with_capacity(LayoutDecision(
+                slide_type="timeline", rationale="Timeline/flow dict items → timeline slide",
+            ))
         return _with_capacity(LayoutDecision(
             slide_type="chart", rationale="Process flow → waterfall/timeline chart",
         ))
