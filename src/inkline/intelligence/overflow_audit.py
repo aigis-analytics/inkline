@@ -510,7 +510,10 @@ def audit_slide_with_llm(
     Returns AuditWarning objects with Claude's findings. If no API key
     is available, returns empty silently.
     """
-    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    # Visual audit requires an EXPLICITLY supplied api_key — never auto-read
+    # ANTHROPIC_API_KEY from the environment, as that would silently burn API
+    # credits on every slide render. Pass api_key only when the caller
+    # deliberately opts into paid vision calls.
     if not api_key:
         return []
 
@@ -634,7 +637,8 @@ def audit_deck_with_llm(
     if not pdf_path.exists():
         return []
 
-    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    # Visual audit requires an EXPLICITLY supplied api_key — never auto-read
+    # ANTHROPIC_API_KEY from the environment to avoid silently burning credits.
     if not api_key:
         return []
 
