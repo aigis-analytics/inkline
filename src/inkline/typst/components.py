@@ -215,6 +215,10 @@ def data_table(
         body_size = min(body_size, 9)
         header_size = min(header_size, 9)
         inset = min(inset, 6)
+    elif n_cols >= 5:
+        body_size = min(body_size, 9)
+        header_size = min(header_size, 9)
+        inset = min(inset, 5)
 
     # Build header cells (comma-separated, with Typst escaping)
     header_cells = ",\n    ".join(

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from inkline.typst.components import (
+    _esc_content,
     _rgb,
     accent_bar,
     bar_row,
@@ -448,11 +449,13 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
-  {slide_title(title, t['text'])}
-  v(14pt)
+  text(weight: "bold", size: 18pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
+  v(10pt)
 
   {table_markup}
 
@@ -1269,7 +1272,7 @@ class TypstSlideRenderer:
             charts = charts[:4]
             while len(charts) < 4:
                 charts.append({})
-            cells = ",\n    ".join(_chart_cell(c, height="4.5cm") for c in charts)
+            cells = ",\n    ".join(_chart_cell(c, height="4.0cm") for c in charts)
             grid_body = f"""grid(
     columns: (1fr, 1fr),
     rows: (auto, auto),
@@ -1283,8 +1286,8 @@ class TypstSlideRenderer:
             bottom = charts[1:4]
             n_bot = max(len(bottom), 1)
             bot_cols = "(" + ", ".join(["1fr"] * n_bot) + ",)"
-            top_cell = _chart_cell(top[0], height="4.5cm") if top else "block(width: 100%)[]"
-            bot_cells = ",\n      ".join(_chart_cell(c, height="3.5cm") for c in bottom)
+            top_cell = _chart_cell(top[0], height="4.2cm") if top else "block(width: 100%)[]"
+            bot_cells = ",\n      ".join(_chart_cell(c, height="3.2cm") for c in bottom)
             bot_grid = f"""grid(
       columns: {bot_cols},
       gutter: 10pt,
@@ -1315,10 +1318,12 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
-  {slide_title(title, t['text'])}
+  text(weight: "bold", size: 18pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
   v(8pt)
 
   {grid_body}
