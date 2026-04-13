@@ -459,7 +459,23 @@ timeline, or bar_chart. WARN.
 11. TYPOGRAPHY — Consistent font sizes, weights, families within a slide. \
 Title should be bold and large. Body text should be readable (≥10pt). WARN.
 
-12. POSITIVE — If the slide is well-designed, return []. Don't flag issues \
+12. AXIS ELIMINATION — For bar charts, waterfall, and donut charts: if the \
+slide shows both axis labels AND direct value labels on every bar/segment, \
+the axis is redundant. Flag as WARN with suggestion to drop the axis. \
+Exception: keep axes on multi-series line charts and scatter plots.
+
+13. LEGEND NECESSITY — If a donut, pie, or bar chart has a separate legend \
+box AND the segments/bars are large enough to hold embedded labels, flag as \
+WARN. Embedded labels (on the arc, above the bar, inside the segment) are \
+always preferred over a detached legend box.
+
+14. INSIGHT TITLE — If the slide title is a neutral topic label (e.g., \
+"Revenue Overview", "Market Data", "Financials") rather than an action title \
+stating the analytical conclusion, flag as WARN. A professional action title \
+states the insight: "Revenue grew 34%% YoY driven by enterprise segment". \
+Exception: title slides and section dividers are exempt.
+
+15. POSITIVE — If the slide is well-designed, return []. Don't flag issues \
 that aren't there.
 
 ====================================================================

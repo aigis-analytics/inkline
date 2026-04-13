@@ -172,6 +172,9 @@ def render_chart(
         "sidebar_profile": _render_infographic_sidebar_profile,
         "metaphor_backdrop": _render_infographic_metaphor_backdrop,
         "chart_row": _render_infographic_chart_row,
+        # Institutional exhibit types
+        "marimekko": _render_marimekko,
+        "entity_flow": _render_entity_flow,
     }
 
     renderer = renderers.get(chart_type)
@@ -2192,4 +2195,346 @@ def _render_infographic_chart_row(data, *, colors, accent, bg, text_color, muted
                     pass
 
     fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 17. Marimekko / proportional mosaic chart
+# ---------------------------------------------------------------------------
+
+def _render_marimekko(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Marimekko / mosaic chart — column widths AND heights encode data values.
+
+    Both dimensions carry information simultaneously:
+    - Column width  = top-level category share (e.g. financing source size)
+    - Cell height   = sub-category proportion within the column
+    No axes, no gridlines, no legend — all labels embedded inside cells.
+
+    data:
+        columns: list of {
+            label: str,
+            value: float,               # drives column width
+            segments: list of {label: str, value: float}  # drive cell height
+        }
+        title: str  (optional — rendered as a bold headline above chart)
+        total_label: str  (optional — shown in top-left corner, e.g. "USD 2.9tn")
+
+    Example::
+
+        {
+            "title": "Financing needs 2025–2028",
+            "total_label": "USD 2.9tn total",
+            "columns": [
+                {"label": "Hyperscaler Capex", "value": 1400,
+                 "segments": [{"label": "Cash flows", "value": 1400}]},
+                {"label": "Private Credit",    "value": 800,
+                 "segments": [{"label": "Private credit", "value": 800}]},
+                {"label": "Other Capital",     "value": 500,
+                 "segments": [{"label": "PE / VC", "value": 350},
+                               {"label": "Corp debt", "value": 150}]},
+            ]
+        }
+    """
+    import textwrap
+    import numpy as np
+    from matplotlib.patches import FancyBboxPatch
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+    ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+
+    columns = data.get("columns", [])
+    title = data.get("title", "")
+    total_label = data.get("total_label", "")
+
+    if not columns:
+        fig.tight_layout()
+        return fig
+
+    # Reserve top margin: title uses top band, column headers sit just below title
+    # Layout (y coords):  1.0 = top edge
+    #   title         : 0.97 (text anchor)
+    #   total_label   : 0.91
+    #   col_headers   : 0.87 (text anchor, va=top)
+    #   chart_top     : 0.82  ← top of mosaic rectangle area
+    #   chart_bottom  : 0.04
+    if title:
+        chart_top = 0.82
+        total_label_y = 0.91
+        col_header_y = 0.86
+    else:
+        chart_top = 0.90
+        total_label_y = 0.94
+        col_header_y = 0.93
+    chart_bottom = 0.04
+
+    # Compute column widths proportional to column values
+    col_values = [max(c.get("value", 0), 0) for c in columns]
+    total_val = sum(col_values) or 1
+    col_widths = [v / total_val for v in col_values]
+
+    # Color ramp — darker for larger columns (chroma-as-hierarchy)
+    # Sort columns by value to assign darkest color to biggest
+    sorted_indices = sorted(range(len(columns)), key=lambda i: col_values[i], reverse=True)
+    col_color_map = {}
+    n_cols = len(columns)
+    for rank, idx in enumerate(sorted_indices):
+        col_color_map[idx] = colors[rank % len(colors)] if colors else accent
+
+    gap = 0.004  # thin gap between columns
+    x_cursor = 0.0
+
+    for col_idx, (col, col_w) in enumerate(zip(columns, col_widths)):
+        col_w_actual = max(col_w - gap, 0.01)
+        col_x = x_cursor
+        segments = col.get("segments", [])
+        if not segments:
+            segments = [{"label": col.get("label", ""), "value": col.get("value", 1)}]
+
+        seg_vals = [max(s.get("value", 0), 0) for s in segments]
+        seg_total = sum(seg_vals) or 1
+        seg_heights = [v / seg_total * (chart_top - chart_bottom) for v in seg_vals]
+
+        base_color = col_color_map[col_idx]
+        # Shade segments within column (lighter for smaller segments)
+        n_segs = len(segments)
+
+        y_cursor = chart_bottom
+        for seg_idx, (seg, seg_h) in enumerate(zip(segments, seg_heights)):
+            seg_h_actual = max(seg_h - gap, 0.005)
+
+            # Lighten color for sub-segments (first/largest = darkest)
+            lightness_factor = 1.0 - seg_idx * (0.25 / max(n_segs - 1, 1))
+            seg_color = _lighten_color(base_color, 1.0 - (1.0 - lightness_factor) * 0.5)
+
+            rect = _plt.Rectangle(
+                (col_x, y_cursor), col_w_actual, seg_h_actual,
+                facecolor=seg_color, edgecolor=bg, linewidth=1.0, zorder=2,
+            )
+            ax.add_patch(rect)
+
+            # Embedded label: bold value + small label
+            cx = col_x + col_w_actual / 2
+            cy = y_cursor + seg_h_actual / 2
+
+            seg_label = textwrap.fill(seg.get("label", ""), 14)
+            seg_val = seg.get("value", 0)
+            val_str = _format_compact(seg_val)
+
+            # Only show label if cell is tall enough
+            if seg_h_actual > 0.08:
+                ax.text(cx, cy + 0.025, val_str, ha="center", va="center",
+                        fontsize=10, fontweight="bold", color="white",
+                        zorder=4, alpha=0.95)
+            if seg_h_actual > 0.12:
+                ax.text(cx, cy - 0.04, seg_label, ha="center", va="center",
+                        fontsize=7.5, color="white", alpha=0.85, zorder=4,
+                        multialignment="center")
+
+            y_cursor += seg_h_actual + gap
+
+        # Column header label — sits in the band between chart_top and col_header_y
+        col_label = textwrap.fill(col.get("label", ""), 16)
+        ax.text(col_x + col_w_actual / 2, col_header_y,
+                col_label, ha="center", va="top",
+                fontsize=7.5, color=text_color, zorder=5,
+                multialignment="center")
+
+        x_cursor += col_w
+
+    # Title and total label above the column header band
+    if title:
+        ax.text(0.0, 0.97, title, ha="left", va="top",
+                fontsize=11, fontweight="bold", color=text_color, zorder=6)
+    if total_label:
+        ax.text(0.0, total_label_y, total_label, ha="left", va="top",
+                fontsize=8, color=muted, zorder=6, style="italic")
+
+    fig.tight_layout(rect=[0, 0, 1, 1])
+    return fig
+
+
+def _format_compact(value: float) -> str:
+    """Format a number compactly: 1400 → '1,400', 1400000 → '1.4M'."""
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"{value:,.0f}"
+    return f"{value:.0f}"
+
+
+def _lighten_color(hex_color: str, factor: float) -> str:
+    """Lighten a hex color by interpolating toward white. factor=1.0 = unchanged."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) != 6:
+        return f"#{hex_color}"
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    r2 = int(r + (255 - r) * (1 - factor))
+    g2 = int(g + (255 - g) * (1 - factor))
+    b2 = int(b + (255 - b) * (1 - factor))
+    return f"#{r2:02x}{g2:02x}{b2:02x}"
+
+
+# ---------------------------------------------------------------------------
+# 18. Entity / structure flow diagram
+# ---------------------------------------------------------------------------
+
+def _render_entity_flow(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Entity / legal structure / org chart with inline connector labels.
+
+    Renders rectangular nodes connected by arrows, with relationship text
+    floating on the connector lines. Node prominence uses a tiered gray palette:
+    - focal nodes (tier=1): darkest fill (brand primary)
+    - intermediary (tier=2): mid-gray
+    - peripheral/external (tier=3): light gray
+
+    data:
+        nodes: list of {
+            id: str,
+            label: str,
+            sublabel: str  (optional),
+            tier: int  (1=focal, 2=intermediary, 3=peripheral),
+            x: float, y: float  (0–1 normalized grid positions)
+        }
+        edges: list of {
+            from: str,
+            to: str,
+            label: str  (optional — floats on connector line)
+            style: "solid" | "dashed"  (default "solid")
+        }
+        title: str  (optional)
+
+    Example::
+
+        {
+            "title": "GPU Financing Structure",
+            "nodes": [
+                {"id": "equity", "label": "Equity Owner",  "tier": 3, "x": 0.1,  "y": 0.7},
+                {"id": "spv",    "label": "SPV / GPUCo",   "tier": 1, "x": 0.45, "y": 0.7},
+                {"id": "lender", "label": "Lenders",       "tier": 1, "x": 0.45, "y": 0.25},
+                {"id": "enduser","label": "End User",       "tier": 3, "x": 0.82, "y": 0.7},
+                {"id": "gpu",    "label": "GPU Provider",  "tier": 2, "x": 0.82, "y": 0.25},
+            ],
+            "edges": [
+                {"from": "equity",  "to": "spv",    "label": "Equity 20–30%"},
+                {"from": "lender",  "to": "spv",    "label": "Loan 70–80% LTC"},
+                {"from": "spv",     "to": "enduser","label": "5-year contract"},
+                {"from": "gpu",     "to": "spv",    "label": "GPU supply",  "style": "dashed"},
+            ]
+        }
+    """
+    import textwrap
+    import numpy as np
+    from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+    ax.axis("off")
+    ax.set_xlim(-0.12, 1.12)   # wider padding prevents edge label clipping
+    ax.set_ylim(-0.08, 1.12)
+
+    nodes_data = data.get("nodes", [])
+    edges_data = data.get("edges", [])
+    title = data.get("title", "")
+
+    # Tier color palette: 1=focal (dark), 2=intermediary (mid), 3=peripheral (light)
+    tier_colors = {
+        1: colors[0] if colors else accent,
+        2: muted,
+        3: "#D1D5DB",  # light gray
+    }
+    tier_text = {1: "white", 2: text_color, 3: text_color}
+
+    # Build node lookup
+    node_map = {n["id"]: n for n in nodes_data}
+    BOX_W, BOX_H = 0.17, 0.12
+
+    # Draw edges first (behind nodes)
+    for edge in edges_data:
+        src = node_map.get(edge.get("from", ""))
+        dst = node_map.get(edge.get("to", ""))
+        if not src or not dst:
+            continue
+
+        x1, y1 = src.get("x", 0), src.get("y", 0)
+        x2, y2 = dst.get("x", 0), dst.get("y", 0)
+        style = edge.get("style", "solid")
+
+        # Adjust endpoints to box edges
+        dx, dy = x2 - x1, y2 - y1
+        dist = (dx**2 + dy**2) ** 0.5 or 1
+        # Start from edge of source box
+        sx = x1 + (BOX_W / 2) * (dx / dist)
+        sy = y1 + (BOX_H / 2) * (dy / dist)
+        # End at edge of destination box
+        ex = x2 - (BOX_W / 2) * (dx / dist)
+        ey = y2 - (BOX_H / 2) * (dy / dist)
+
+        linestyle = "--" if style == "dashed" else "-"
+        ax.annotate(
+            "", xy=(ex, ey), xytext=(sx, sy),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                color=muted,
+                lw=1.5,
+                linestyle=linestyle,
+                connectionstyle="arc3,rad=0.0",
+            ),
+            zorder=2,
+        )
+
+        # Inline connector label (midpoint of edge)
+        if edge.get("label"):
+            mx, my = (sx + ex) / 2, (sy + ey) / 2
+            # Clamp midpoint inside visible range to prevent clipping
+            mx = max(-0.08, min(1.08, mx))
+            my = max(-0.04, min(1.08, my))
+            lbl = textwrap.fill(edge["label"], 14)  # tighter wrap to avoid overflow
+            ax.text(mx, my, lbl, ha="center", va="center",
+                    fontsize=7, color=text_color, zorder=5,
+                    bbox=dict(facecolor=bg, edgecolor="none", alpha=0.90, pad=2.0),
+                    multialignment="center", clip_on=False)
+
+    # Draw nodes
+    for node in nodes_data:
+        nx, ny = node.get("x", 0.5), node.get("y", 0.5)
+        tier = node.get("tier", 2)
+        fill = tier_colors.get(tier, "#D1D5DB")
+        fg = tier_text.get(tier, text_color)
+        is_dashed = tier == 3  # peripheral nodes get dashed border
+
+        box = FancyBboxPatch(
+            (nx - BOX_W / 2, ny - BOX_H / 2), BOX_W, BOX_H,
+            boxstyle="round,pad=0.01",
+            facecolor=fill,
+            edgecolor=muted if not is_dashed else muted,
+            linewidth=1.5 if tier == 1 else 1.0,
+            linestyle="--" if is_dashed else "-",
+            zorder=3,
+        )
+        ax.add_patch(box)
+
+        label = node.get("label", "")
+        sublabel = node.get("sublabel", "")
+        ax.text(nx, ny + (0.015 if sublabel else 0), textwrap.fill(label, 14),
+                ha="center", va="center",
+                fontsize=8.5 if tier == 1 else 8,
+                fontweight="bold" if tier == 1 else "normal",
+                color=fg, zorder=4, multialignment="center")
+        if sublabel:
+            ax.text(nx, ny - 0.03, textwrap.fill(sublabel, 18),
+                    ha="center", va="center",
+                    fontsize=6.5, color=fg, alpha=0.80, zorder=4,
+                    multialignment="center")
+
+    # Title
+    if title:
+        ax.text(0.5, 1.06, title, ha="center", va="top",
+                fontsize=11, fontweight="bold", color=text_color, zorder=6)
+
+    fig.tight_layout(rect=[0, 0, 1, 1])
     return fig

@@ -649,7 +649,7 @@ class DesignAdvisor:
         from inkline.intelligence.playbooks import load_playbook, load_playbook_summary
 
         # Tiered playbook loading — full for core, summary for bulk reference
-        CORE_PLAYBOOKS = ["slide_layouts"]
+        CORE_PLAYBOOKS = ["slide_layouts", "professional_exhibit_design"]
         SUMMARY_PLAYBOOKS = ["template_catalog", "typography", "color_theory"]
 
         from inkline.intelligence.vishwakarma import VISHWAKARMA_SYSTEM_PREAMBLE

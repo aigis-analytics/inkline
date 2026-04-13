@@ -39,6 +39,7 @@ PLAYBOOK_REGISTRY: Dict[str, str] = {
     "typography": "typography.md",
     "visual_libraries": "visual_libraries.md",
     "template_catalog": "template_catalog.md",
+    "professional_exhibit_design": "professional_exhibit_design.md",
     "design_md_styles": "__generated__",  # Dynamic: loaded from design_md_styles module
 }
 
@@ -132,10 +133,10 @@ def load_playbooks_for_task(task_type: str) -> Dict[str, str]:
         Mapping of playbook name to its Markdown content.
     """
     task_playbooks = {
-        "chart": ["chart_selection", "color_theory"],
-        "slide": ["slide_layouts", "template_catalog", "typography", "color_theory"],
+        "chart": ["chart_selection", "color_theory", "professional_exhibit_design"],
+        "slide": ["slide_layouts", "template_catalog", "typography", "color_theory", "professional_exhibit_design"],
         "document": ["document_design", "typography", "color_theory"],
-        "infographic": ["infographic_styles", "template_catalog", "color_theory", "typography"],
+        "infographic": ["infographic_styles", "template_catalog", "color_theory", "typography", "professional_exhibit_design"],
         "full": PLAYBOOK_NAMES,
     }
 
@@ -209,8 +210,9 @@ def get_playbook_summary() -> str:
         "color_theory": "Colour palette selection, accessibility (WCAG), and the 60-30-10 rule",
         "typography": "Font selection, pairing rules, type scales for slides and documents",
         "visual_libraries": "Reference catalogue of open-source chart libraries and design systems",
-        "template_catalog": "16 named slide archetype recipes (iceberg, pinwheel, hexagonal, ladder, waffle, etc.) with structural coordinates, plus a queryable index of 771 real templates from SlideModel + Genspark",
-        "design_md_styles": "27 curated design systems from getdesign.md (Stripe, Vercel, Apple, etc.) — color palettes, typography, style tags for matching company aesthetics",
+        "template_catalog": "16 named slide archetype recipes (iceberg, pinwheel, hexagonal, ladder, waffle, etc.) with structural coordinates, plus a queryable index of 771 curated templates",
+        "professional_exhibit_design": "Institutional-grade exhibit design patterns: axis elimination, legend embedding, 3-color discipline, insight headlines, Marimekko/entity-flow/divergent-bar, and 11 density techniques",
+        "design_md_styles": "27 curated design systems (Stripe, Vercel, Apple, Spotify, etc.) — color palettes, typography, style tags for matching company aesthetics",
     }
 
     lines = ["Available Design Playbooks:", ""]
