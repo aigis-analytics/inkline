@@ -206,6 +206,16 @@ def data_table(
     else:
         body_size, header_size, inset = 8, 8, 4
 
+    # Auto-shrink: many columns → narrower cells need smaller font
+    if n_cols >= 8:
+        body_size = min(body_size, 8)
+        header_size = min(header_size, 8)
+        inset = min(inset, 5)
+    elif n_cols >= 6:
+        body_size = min(body_size, 9)
+        header_size = min(header_size, 9)
+        inset = min(inset, 6)
+
     # Build header cells (comma-separated, with Typst escaping)
     header_cells = ",\n    ".join(
         f'table.cell(fill: {_rgb(header_fill)})[#text(fill: {_rgb(header_text)}, weight: "bold", size: {header_size}pt)[{_esc_content(h)}]]'

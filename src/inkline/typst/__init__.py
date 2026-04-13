@@ -310,6 +310,7 @@ def export_typst_slides(
         overflow_attempt = 0
         needs_rerender = True
 
+        prev_actual = None
         while overflow_attempt <= max_overflow_attempts:
             source = _render_and_compile(slides, source, needs_rerender)
             actual = _count_pages(output_path)
@@ -320,6 +321,18 @@ def export_typst_slides(
             if actual == 0:
                 log.debug("Page count unavailable (no PDF reader installed) — skipping overflow detection")
                 break  # Can't detect overflow without a PDF reader
+
+            # Anti-runaway: if page count grew since last attempt, fixes are
+            # making things worse (e.g. split halves each still overflow).
+            # Accept the current state rather than spiralling further.
+            if prev_actual is not None and actual >= prev_actual:
+                log.warning(
+                    "Overflow anti-runaway: page count grew %d→%d, stopping fix loop",
+                    prev_actual, actual,
+                )
+                _verify_page_count(output_path, expected)
+                break
+            prev_actual = actual
 
             if overflow_attempt >= max_overflow_attempts or not auto_fix:
                 _verify_page_count(output_path, expected)

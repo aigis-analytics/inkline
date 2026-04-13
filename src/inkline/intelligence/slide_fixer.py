@@ -375,9 +375,11 @@ def apply_graduated_fixes(
     5+ Aggressive combo   — content reduction + type downgrade together
     """
     if attempt == 1:
-        return _fix_content_reduction(slides, source, overflow_indices)
-    elif attempt == 2:
+        # Font/spacing first — non-destructive, preserves all content.
+        # Wide tables (many columns) and dense slides often fit after shrinking.
         return _fix_source_spacing(slides, source, overflow_indices)
+    elif attempt == 2:
+        return _fix_content_reduction(slides, source, overflow_indices)
     elif attempt == 3:
         # Type downgrade before split: converts chart_caption/split/dashboard etc.
         # to a simpler layout WITHOUT adding slides. Always safer than splitting.
@@ -473,13 +475,17 @@ def _fix_source_spacing(
         # Reduce spacing
         new_src = re.sub(r'v\(14pt\)', 'v(6pt)', slide_src)
         new_src = re.sub(r'v\(10pt\)', 'v(4pt)', new_src)
-        # Reduce body text size
+        # Reduce body text size (two-step: first pass 12→10→9, second pass 9.5→8)
         new_src = re.sub(r'size: 12pt', 'size: 10pt', new_src)
         new_src = re.sub(r'size: 11pt', 'size: 9.5pt', new_src)
         new_src = re.sub(r'size: 10\.5pt', 'size: 9pt', new_src)
+        new_src = re.sub(r'size: 10pt', 'size: 9pt', new_src)
+        new_src = re.sub(r'size: 9\.5pt', 'size: 8pt', new_src)
+        new_src = re.sub(r'size: 9pt', 'size: 7\.5pt', new_src)
         # Reduce card padding
         new_src = re.sub(r'inset: 14pt', 'inset: 10pt', new_src)
         new_src = re.sub(r'inset: 12pt', 'inset: 8pt', new_src)
+        new_src = re.sub(r'inset: 10pt', 'inset: 7pt', new_src)
         # Reduce chart height
         new_src = re.sub(r'height: 8\.5cm', 'height: 7cm', new_src)
         new_src = re.sub(r'height: 7\.2cm', 'height: 6cm', new_src)
