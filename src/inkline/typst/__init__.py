@@ -457,8 +457,9 @@ def export_typst_slides(
     # === PHASE 2b: Pre-flight image validation ===
     _preflight_images(slides, root or str(output_path.parent))
 
-    # === PHASE 3: OUTER LOOP (visual quality) ===
-    visual_attempt = 0
+    # === PHASE 3: Overflow fix loop (deterministic, NO LLM redesigns) ===
+    # Only structural fixes here. Visual redesigns live in the Archon phase.
+    # This prevents "overflow bouncing" where LLM redesigns create new overflows.
     all_warnings: list = list(pre_warnings)
     source = None
 
@@ -474,83 +475,80 @@ def export_typst_slides(
         compile_typst(source_str, output_path=output_path, root=root, font_paths=all_font_paths)
         return source_str
 
-    while visual_attempt <= max_visual_attempts:
-        # --- INNER LOOP: structural overflow fixes ---
-        overflow_attempt = 0
-        needs_rerender = True
+    overflow_attempt = 0
+    needs_rerender = True
+    prev_actual = None
 
-        prev_actual = None
-        while overflow_attempt <= max_overflow_attempts:
-            source = _render_and_compile(slides, source, needs_rerender)
-            actual = _count_pages(output_path)
-            expected = len(slides)
+    while overflow_attempt <= max_overflow_attempts:
+        source = _render_and_compile(slides, source, needs_rerender)
+        actual = _count_pages(output_path)
+        expected = len(slides)
 
-            if actual == expected:
-                break  # No overflow
-            if actual == 0:
-                log.debug("Page count unavailable (no PDF reader installed) — skipping overflow detection")
-                break  # Can't detect overflow without a PDF reader
+        if actual == expected:
+            break  # No overflow
+        if actual == 0:
+            log.debug("Page count unavailable (no PDF reader installed) — skipping overflow detection")
+            break  # Can't detect overflow without a PDF reader
 
-            # Anti-runaway: if page count grew since last attempt, fixes are
-            # making things worse (e.g. split halves each still overflow).
-            # Accept the current state rather than spiralling further.
-            if prev_actual is not None and actual >= prev_actual:
-                log.warning(
-                    "Overflow anti-runaway: page count grew %d→%d, stopping fix loop",
-                    prev_actual, actual,
-                )
-                _verify_page_count(output_path, expected)
-                break
-            prev_actual = actual
+        # Anti-runaway: if page count grew since last attempt, fixes are
+        # making things worse. Accept current state and move on.
+        if prev_actual is not None and actual >= prev_actual:
+            log.warning(
+                "Overflow anti-runaway: page count grew %d→%d, stopping fix loop",
+                prev_actual, actual,
+            )
+            _verify_page_count(output_path, expected)
+            break
+        prev_actual = actual
 
-            if overflow_attempt >= max_overflow_attempts or not auto_fix:
-                _verify_page_count(output_path, expected)
-                break
-
-            # Identify and fix overflow
-            try:
-                from inkline.intelligence.slide_fixer import (
-                    identify_overflow_slides, apply_graduated_fixes,
-                )
-                overflow_indices = identify_overflow_slides(output_path, slides, source)
-                overflow_attempt += 1
-                log.info("Overflow fix attempt %d: slides %s", overflow_attempt, overflow_indices)
-                slides, source, needs_rerender = apply_graduated_fixes(
-                    slides, source, overflow_indices, overflow_attempt, theme,
-                )
-            except Exception as e:
-                log.warning("Overflow fix failed: %s", e)
-                break
-
-        # Re-identify any slides that still overflow after inner loop maxed out.
-        # (Indices must be fresh — earlier passes may have split/added slides.)
-        persistent_overflow_indices: list[int] = []
-        if audit and auto_fix:
-            final_actual = _count_pages(output_path)
-            if 0 < final_actual != len(slides):
-                try:
-                    from inkline.intelligence.slide_fixer import identify_overflow_slides
-                    persistent_overflow_indices = identify_overflow_slides(output_path, slides, source or "")
-                    log.info("Persistent overflow after inner loop: slides %s", persistent_overflow_indices)
-                except Exception:
-                    pass
-
-        # --- Post-overflow audits ---
-        if not audit:
+        if overflow_attempt >= max_overflow_attempts or not auto_fix:
+            _verify_page_count(output_path, expected)
             break
 
+        # Identify and fix overflow (deterministic fixer only)
+        try:
+            from inkline.intelligence.slide_fixer import (
+                identify_overflow_slides, apply_graduated_fixes,
+            )
+            overflow_indices = identify_overflow_slides(output_path, slides, source)
+            overflow_attempt += 1
+            log.info("Overflow fix attempt %d: slides %s", overflow_attempt, overflow_indices)
+            slides, source, needs_rerender = apply_graduated_fixes(
+                slides, source, overflow_indices, overflow_attempt, theme,
+            )
+        except Exception as e:
+            log.warning("Overflow fix failed: %s", e)
+            break
+
+    # === PHASE 4: Archon final review (ONE pass — no loop back to overflow) ===
+    # Full quality gate: visual fidelity, narrative fidelity, storytelling
+    # quality, and commercial viability. Runs ONCE after the deck is locked.
+    # Any errors trigger a single targeted revision, then the deck ships.
+    if audit:
         try:
             from inkline.intelligence.overflow_audit import (
                 audit_rendered_pdf, audit_chart_image,
-                audit_deck_with_llm, emit_audit_report,
+                audit_deck_with_llm,
             )
         except ImportError:
-            break
+            log.debug("overflow_audit not available — skipping Archon review")
+            audit = False
+
+    if audit:
+        # Re-identify persistent overflow (structural info for Archon)
+        persistent_overflow_indices: list[int] = []
+        final_actual = _count_pages(output_path)
+        if 0 < final_actual != len(slides):
+            try:
+                from inkline.intelligence.slide_fixer import identify_overflow_slides
+                persistent_overflow_indices = identify_overflow_slides(output_path, slides, source or "")
+                log.info("Archon: persistent overflow slides %s", persistent_overflow_indices)
+            except Exception:
+                pass
 
         post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
 
-        # If the inner loop maxed out with specific overflow slides, inject
-        # per-slide ERROR warnings so the visual dialogue knows which slides to fix.
+        # Inject per-slide overflow errors so Archon knows which slides to redesign
         if persistent_overflow_indices:
             try:
                 from inkline.intelligence.overflow_audit import AuditWarning
@@ -559,7 +557,7 @@ def export_typst_slides(
                         stype = slides[idx].get("slide_type", "unknown")
                         stitle = slides[idx].get("data", {}).get("title", "")[:50]
                         post_warnings.append(AuditWarning(
-                            slide_index=idx + 1,  # 1-based to match audit_deck_with_llm convention
+                            slide_index=idx + 1,
                             slide_type=stype,
                             severity="error",
                             message=(
@@ -581,43 +579,33 @@ def export_typst_slides(
                 if img_path.exists():
                     post_warnings.extend(audit_chart_image(img_path))
 
-        # --- TWO-AGENT DESIGN DIALOGUE ---
-        if audit:
-            log.info("Design dialogue round %d: auditing %d slides...",
-                     visual_attempt + 1, len(slides))
-            llm_warnings = audit_deck_with_llm(
-                output_path, slides, brand=brand, source_narrative=source_narrative,
-            )
-            post_warnings.extend(llm_warnings)
+        # --- Archon visual + narrative audit (parallel per-slide) ---
+        log.info("Archon review: auditing %d slides (parallel vision calls)...", len(slides))
+        llm_warnings = audit_deck_with_llm(
+            output_path, slides, brand=brand, source_narrative=source_narrative,
+        )
+        post_warnings.extend(llm_warnings)
+        all_warnings.extend(post_warnings)
 
-            llm_errors = [w for w in llm_warnings if w.severity == "error"]
-            # Structural errors (e.g. overflow page count) also trigger revision
-            structural_errors = [w for w in post_warnings if getattr(w, "severity", "") == "error"
-                                  and w not in llm_warnings]
-            errors = llm_errors + structural_errors
-            # Send errors to dialogue; warnings logged but don't trigger revision
-            # (30+ warnings per deck would overwhelm the revision LLM)
-            actionable = errors
+        # Collect actionable errors
+        llm_errors = [w for w in llm_warnings if w.severity == "error"]
+        structural_errors = [
+            w for w in post_warnings
+            if getattr(w, "severity", "") == "error" and w not in llm_warnings
+        ]
+        actionable = llm_errors + structural_errors
 
-            if not actionable or not auto_fix:
-                all_warnings.extend(post_warnings)
-                if not actionable:
-                    log.info("Design dialogue PASSED — no errors on round %d",
-                             visual_attempt + 1)
-                break
-
-            if visual_attempt >= max_visual_attempts:
-                all_warnings.extend(post_warnings)
-                log.warning("Design dialogue: max rounds (%d) reached, shipping",
-                            max_visual_attempts)
-                break
-
-            # FINDINGS FOUND — DesignAdvisor reviews and revises
-            visual_attempt += 1
+        if not actionable:
+            log.info("Archon review PASSED — deck is clean")
+        elif not auto_fix:
+            log.info("Archon review: %d errors found (auto_fix=False, shipping as-is)",
+                     len(actionable))
+        else:
+            # Single targeted revision pass — no loop, no overflow re-check
+            log.info("Archon review: %d errors found — applying targeted revision", len(actionable))
             try:
                 from inkline.intelligence.design_advisor import DesignAdvisor
                 advisor = DesignAdvisor(brand=brand, template=template, mode="llm")
-                # Pass source narrative so DesignAdvisor preserves key content when redesigning
                 source_sections = (
                     [{"narrative": source_narrative}] if source_narrative else None
                 )
@@ -626,33 +614,24 @@ def export_typst_slides(
                 )
                 if revised != slides:
                     slides = revised
-                    # Re-render any new chart_request entries + degrade any still-missing
                     _auto_render_charts(slides, brand, root or str(output_path.parent))
                     slides = _degrade_placeholder_slides(slides, root or str(output_path.parent))
-                    source = None  # Force full re-render
-                    log.info("Design dialogue round %d: DesignAdvisor revised slides",
-                             visual_attempt)
-                    continue
+                    # Re-render and compile final PDF
+                    source = None
+                    source = _render_and_compile(slides, source, True)
+                    log.info("Archon revision applied — final PDF rendered")
                 else:
-                    # No changes made — try slide_fixer as fallback
+                    # DesignAdvisor made no changes — try fixer as fallback
                     from inkline.intelligence.slide_fixer import fix_from_llm_findings
-                    slides, applied = fix_from_llm_findings(slides, errors)
+                    slides, applied = fix_from_llm_findings(slides, actionable)
                     if applied:
                         source = None
-                        log.info("Design dialogue round %d: fixer applied %d fixes",
-                                 visual_attempt, len(applied))
-                        continue
+                        source = _render_and_compile(slides, source, True)
+                        log.info("Archon fixer applied %d fixes — final PDF rendered", len(applied))
                     else:
-                        all_warnings.extend(post_warnings)
-                        log.info("Design dialogue: no further improvements possible")
-                        break
+                        log.info("Archon: no changes possible — shipping current version")
             except Exception as e:
-                log.warning("Design dialogue revision failed: %s", e)
-                all_warnings.extend(post_warnings)
-                break
-        else:
-            all_warnings.extend(post_warnings)
-            break
+                log.warning("Archon revision failed: %s — shipping current version", e)
 
     # === PHASE 4: Final report ===
     if all_warnings:

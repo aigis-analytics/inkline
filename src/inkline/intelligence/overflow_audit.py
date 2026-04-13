@@ -768,11 +768,15 @@ def audit_deck_with_llm(
     # auditing them wastes API calls.
     audit_pngs = page_pngs[:len(slides)]
 
-    warnings: list[AuditWarning] = []
-    for i, png in enumerate(audit_pngs):
+    # Audit slides in parallel — each slide is an independent vision call.
+    # max_workers=5: enough to saturate the bridge's throughput without
+    # overwhelming it (bridge may serialize internally anyway, but concurrent
+    # connections prevent head-of-line blocking on slow slides).
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _audit_one(i: int, png: Path) -> tuple[int, list[AuditWarning]]:
         slide_type = slides[i].get("slide_type", "?") if i < len(slides) else "?"
         slide_data = slides[i].get("data", {}) if i < len(slides) else {}
-        # Per-slide source_section takes precedence over global narrative
         slide_source = slide_data.get("source_section", "") or source_narrative
         page_warnings = audit_slide_with_llm(
             png,
@@ -785,7 +789,26 @@ def audit_deck_with_llm(
             model=model,
             bridge_url=bridge_url,
         )
-        warnings.extend(page_warnings)
+        return (i, page_warnings)
+
+    results: dict[int, list[AuditWarning]] = {}
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(_audit_one, i, png): i for i, png in enumerate(audit_pngs)}
+        for future in as_completed(futures):
+            try:
+                idx, page_warnings = future.result()
+                results[idx] = page_warnings
+                log.info("Archon audit: slide %d/%d done (%d warnings)",
+                         idx + 1, len(audit_pngs), len(page_warnings))
+            except Exception as e:
+                idx = futures[future]
+                log.warning("Archon audit: slide %d failed: %s", idx + 1, e)
+                results[idx] = []
+
+    # Flatten in slide order
+    warnings: list[AuditWarning] = []
+    for i in range(len(audit_pngs)):
+        warnings.extend(results.get(i, []))
 
     return warnings
 

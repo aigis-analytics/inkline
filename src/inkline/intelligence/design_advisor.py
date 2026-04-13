@@ -646,26 +646,427 @@ class DesignAdvisor:
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
-        """Use an LLM to design the optimal slide deck.
+        """Use an LLM to design the optimal slide deck (two-phase approach).
+
+        Phase 1 — Plan (fast, ~3K sys + ~6K user):
+          LLM creates a deck outline: slide types, action titles, source refs.
+          This is a small, fast call that fits comfortably within bridge timeout.
+
+        Phase 2 — Per-slide design (full system prompt, one call per slide):
+          Each slide is designed individually from its plan entry + source section.
+          The full _build_system_prompt() is used (bridge caches it across calls).
+          Slides are designed sequentially; parallelism can be toggled via
+          the ``_parallel_slide_design`` flag if the bridge supports concurrency.
 
         Routing order (handled by ``_call_llm``):
           1. ``self.llm_caller`` — injected custom caller (test mocks, custom providers)
-          2. LLM bridge at ``self.bridge_url`` (default ``INKLINE_BRIDGE_URL`` env var
-             or ``localhost:8082``) — Claude Max subscription, no API spend
+          2. LLM bridge at ``self.bridge_url`` — Claude Max subscription, no API spend
           3. Anthropic SDK using ``self.api_key`` / ``ANTHROPIC_API_KEY`` env var
         """
-        # Build prompts
-        system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
-        user_prompt = self._build_user_prompt(
-            title, sections, date=date, subtitle=subtitle,
-            contact=contact, audience=audience, goal=goal,
+        # === PHASE 1: Plan deck structure ===
+        log.info("DesignAdvisor Phase 1: planning deck structure (%d sections)...", len(sections))
+        plan = self._plan_deck_llm(
+            title, sections, goal=goal, audience=audience,
             additional_guidance=additional_guidance,
+        )
+        log.info("DesignAdvisor Phase 1: plan has %d slides", len(plan))
+        for i, entry in enumerate(plan):
+            log.info("  [%2d] %-22s — %s", i + 1,
+                     entry.get("slide_type", "?"),
+                     str(entry.get("title", ""))[:55])
+
+        # === PHASE 2: Design each slide from its plan entry ===
+        # Build source section lookup (1-based index, matching plan's source_index)
+        section_lookup: dict[int, dict] = {i + 1: s for i, s in enumerate(sections)}
+
+        # Deterministic slides never need an LLM call
+        _DETERMINISTIC = {"title", "closing", "section_divider"}
+
+        def _make_deterministic(entry: dict) -> dict:
+            stype = entry.get("slide_type", "")
+            if stype == "title":
+                return {"slide_type": "title", "data": {
+                    "title": title, "subtitle": subtitle, "date": date,
+                }}
+            elif stype == "closing":
+                return {"slide_type": "closing", "data": contact or {}}
+            elif stype == "section_divider":
+                return {"slide_type": "section_divider", "data": {
+                    "title": entry.get("title", ""),
+                }}
+            return {}  # Should not happen
+
+        def _design_one(idx: int, entry: dict) -> tuple[int, dict]:
+            stype = entry.get("slide_type", "content")
+            if stype in _DETERMINISTIC:
+                return (idx, _make_deterministic(entry))
+            src_idx = entry.get("source_index", 0)
+            source_section = section_lookup.get(src_idx, {}).get("narrative", "")
+            slide = self._design_slide_from_plan(
+                entry, source_section,
+                title=title, date=date, subtitle=subtitle,
+                contact=contact, audience=audience, goal=goal,
+                reference_archetypes=reference_archetypes,
+            )
+            return (idx, slide)
+
+        slides: list[dict] = [{}] * len(plan)
+
+        # Sequential execution by default (bridge may not support concurrency).
+        # Set _parallel_slide_design=True to use ThreadPoolExecutor(max_workers=3).
+        if getattr(self, "_parallel_slide_design", False):
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                futures = {pool.submit(_design_one, i, e): i for i, e in enumerate(plan)}
+                for future in as_completed(futures):
+                    try:
+                        idx, slide = future.result()
+                        slides[idx] = slide
+                        log.info("DesignAdvisor Phase 2: [%2d/%d] %s — %s",
+                                 idx + 1, len(plan),
+                                 slide.get("slide_type", "?"),
+                                 str(slide.get("data", {}).get("title", ""))[:40])
+                    except Exception as e:
+                        plan_idx = futures[future]
+                        log.warning("DesignAdvisor Phase 2: slide %d failed (%s), using fallback",
+                                    plan_idx + 1, e)
+                        ent = plan[plan_idx]
+                        slides[plan_idx] = {"slide_type": "content", "data": {
+                            "title": ent.get("title", f"Slide {plan_idx + 1}"),
+                            "items": ent.get("key_points", []),
+                        }}
+        else:
+            for i, entry in enumerate(plan):
+                try:
+                    _, slide = _design_one(i, entry)
+                    slides[i] = slide
+                    log.info("DesignAdvisor Phase 2: [%2d/%d] %s — %s",
+                             i + 1, len(plan),
+                             slide.get("slide_type", "?"),
+                             str(slide.get("data", {}).get("title", ""))[:40])
+                except Exception as e:
+                    log.warning("DesignAdvisor Phase 2: slide %d failed (%s), using fallback",
+                                i + 1, e)
+                    slides[i] = {"slide_type": "content", "data": {
+                        "title": entry.get("title", f"Slide {i + 1}"),
+                        "items": entry.get("key_points", []),
+                    }}
+
+        # Validate slide types
+        validated = []
+        for slide in slides:
+            if not isinstance(slide, dict) or not slide:
+                continue
+            stype = slide.get("slide_type", "")
+            if stype not in SLIDE_TYPES:
+                log.warning("Unknown slide type from LLM: %s, skipping", stype)
+                continue
+            if "data" not in slide:
+                slide["data"] = {}
+            validated.append(slide)
+
+        if not validated:
+            raise ValueError("LLM returned no valid slides")
+
+        log.info("DesignAdvisor LLM (2-phase): designed %d slides for '%s'",
+                 len(validated), title)
+        return validated
+
+    # ------------------------------------------------------------------
+    # Phase 1 helpers — deck planning
+    # ------------------------------------------------------------------
+
+    def _build_plan_system_prompt(self) -> str:
+        """Minimal system prompt for the deck planning phase (~3K chars).
+
+        The planner only needs to know slide types and structural rules.
+        Design aesthetics are applied in the per-slide phase.
+        """
+        return "\n".join([
+            "You are a presentation architect. Given structured content sections,",
+            "produce a concise deck plan — an ordered outline of slides.",
+            "",
+            "SLIDE TYPES AVAILABLE:",
+            "  title, section_divider, closing",
+            "  content, split, three_card, four_card, stat, kpi_strip",
+            "  table, bar_chart, multi_chart, comparison",
+            "  icon_stat, progress_bars, timeline, process_flow",
+            "  image_full, quote_block",
+            "  infographic_bar_race, infographic_treemap, infographic_waterfall,",
+            "  infographic_scatter, infographic_heat_map, infographic_funnel,",
+            "  infographic_gauge, infographic_donut, infographic_iceberg,",
+            "  infographic_waffle, infographic_pyramid, infographic_marimekko,",
+            "  infographic_sankey, infographic_bubble, infographic_pareto,",
+            "  infographic_sidebar_callout, infographic_metaphor_diagram",
+            "",
+            "PLANNING RULES:",
+            "- Always start with a title slide (source_index=0)",
+            "- Always end with a closing slide (source_index=0)",
+            "- Add section_divider slides to separate major themes",
+            "- Each source section typically becomes 1-2 slides",
+            "- Use action titles: state the conclusion, not just the topic",
+            "- Vary slide types for visual interest",
+            "- Multi-metric data → stat/kpi_strip/bar_chart",
+            "- Tabular data → table",
+            "- Process/steps → process_flow or timeline",
+            "- Comparisons → comparison or split",
+            "- DO NOT invent facts — key_points must come only from source sections",
+            "",
+            "OUTPUT FORMAT — return a JSON array, each entry:",
+            '  {"slide_type": "...", "title": "...", "source_index": N,',
+            '   "key_points": ["..."], "notes": "..."}',
+            "",
+            "- source_index: 1-based index of the source section (0 = deck metadata)",
+            "- key_points: 2-4 most important facts/claims for this slide",
+            "- notes: brief hint for the slide builder (e.g. 'bar chart by region')",
+            "",
+            "Return JSON inside ```json ... ``` markers.",
+        ])
+
+    def _plan_deck_llm(
+        self,
+        title: str,
+        sections: list[dict[str, Any]],
+        *,
+        goal: str = "",
+        audience: str = "",
+        additional_guidance: str = "",
+    ) -> list[dict[str, Any]]:
+        """Phase 1: Ask LLM to outline the deck structure.
+
+        Small, fast call (~3K sys + ~6K user). Returns list of plan entries.
+        """
+        system_prompt = self._build_plan_system_prompt()
+
+        parts = [f"Create a deck plan for: **{title}**"]
+        if audience:
+            parts.append(f"Audience: {audience}")
+        if goal:
+            parts.append(f"Goal: {goal}")
+        if additional_guidance:
+            parts.append(f"\nAdditional guidance: {additional_guidance.strip()}")
+
+        parts.append("\n## Content Sections\n")
+        for i, sec in enumerate(sections):
+            sec_title = sec.get("title", sec.get("section", sec.get("type", "Untitled")))
+            narrative = sec.get("narrative", "")
+            # 400-char preview — enough for the planner to understand the section
+            preview = narrative[:400] + ("..." if len(narrative) > 400 else "")
+            parts.append(f"**Section {i + 1}: {sec_title}**")
+            if preview:
+                parts.append(preview)
+            parts.append("")
+
+        parts.append("Output the deck plan as a JSON array inside ```json ... ``` markers.")
+        user_prompt = "\n".join(parts)
+
+        log.info("DesignAdvisor Phase 1 call: %d sys / %d user chars",
+                 len(system_prompt), len(user_prompt))
+        content = self._call_llm(system_prompt, user_prompt)
+        return self._parse_plan_response(content)
+
+    def _parse_plan_response(self, content: str) -> list[dict[str, Any]]:
+        """Parse the planning LLM's JSON response into plan entries."""
+        json_str = content.strip()
+        if "```json" in content:
+            try:
+                start = content.index("```json") + 7
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
+        elif "```" in content:
+            try:
+                start = content.index("```") + 3
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
+
+        if json_str and json_str[0] not in ("[", "{"):
+            for bracket in ("[", "{"):
+                idx = json_str.find(bracket)
+                if idx != -1:
+                    json_str = json_str[idx:]
+                    break
+
+        try:
+            plan = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            log.error("Failed to parse plan response: %s\nRaw (first 500): %s", e, content[:500])
+            raise
+
+        if isinstance(plan, dict):
+            plan = [plan]
+        if not isinstance(plan, list):
+            raise ValueError(f"Plan LLM returned unexpected type: {type(plan)}")
+        return plan
+
+    # ------------------------------------------------------------------
+    # Phase 2 helpers — per-slide design
+    # ------------------------------------------------------------------
+
+    def _build_slide_design_prompt(
+        self,
+        plan_entry: dict[str, Any],
+        source_section: str,
+        *,
+        title: str = "",
+        date: str = "",
+        subtitle: str = "",
+        contact: Optional[dict] = None,
+        audience: str = "",
+        goal: str = "",
+    ) -> str:
+        """Build a focused per-slide user prompt from a plan entry."""
+        stype = plan_entry.get("slide_type", "content")
+        slide_title = plan_entry.get("title", "")
+        key_points = plan_entry.get("key_points", [])
+        notes = plan_entry.get("notes", "")
+
+        parts = [
+            f"Design ONE slide for the deck: **{title}**",
+            f"Brand: {self.brand} | Template: {self.template}",
+        ]
+        if audience:
+            parts.append(f"Audience: {audience}")
+        if goal:
+            parts.append(f"Deck goal: {goal}")
+
+        parts += [
+            "",
+            "## Slide assignment",
+            f"Planned type: {stype}",
+            f"Planned title: {slide_title}",
+        ]
+        if key_points:
+            parts.append("Key points to convey:")
+            for kp in key_points:
+                parts.append(f"  - {kp}")
+        if notes:
+            parts.append(f"Design hint: {notes}")
+
+        if source_section:
+            trunc = source_section[:2000]
+            omitted = len(source_section) - len(trunc)
+            parts += [
+                "",
+                "## Source content — extract all data, numbers, names, and claims from this:",
+                trunc,
+            ]
+            if omitted > 0:
+                parts.append(f"[...{omitted} chars omitted]")
+
+        if stype == "title":
+            parts += ["", "## Deck metadata",
+                      f"Title: {title}", f"Subtitle: {subtitle}", f"Date: {date}"]
+        elif stype == "closing" and contact:
+            parts += ["", "## Contact info", json.dumps(contact, indent=2)]
+
+        parts += [
+            "",
+            "## Output format",
+            "Return ONLY a single slide spec as JSON:",
+            '  {"slide_type": "...", "data": {...}}',
+            "",
+            "Rules:",
+            "- Use action titles (state the conclusion, not the topic)",
+            "- Base ALL data strictly on the source content above",
+            "- DO NOT invent statistics, names, or metrics",
+            "- If source is sparse, design a sparse-but-impactful slide",
+            "",
+            "Return JSON inside ```json ... ``` markers.",
+        ]
+        return "\n".join(parts)
+
+    def _design_slide_from_plan(
+        self,
+        plan_entry: dict[str, Any],
+        source_section: str,
+        *,
+        title: str = "",
+        date: str = "",
+        subtitle: str = "",
+        contact: Optional[dict] = None,
+        audience: str = "",
+        goal: str = "",
+        reference_archetypes: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Phase 2: Design a single slide from its plan entry + source content.
+
+        Uses the full _build_system_prompt() which is cached by the bridge
+        across all per-slide calls in the same deck (same content hash).
+        """
+        system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
+        user_prompt = self._build_slide_design_prompt(
+            plan_entry, source_section,
+            title=title, date=date, subtitle=subtitle,
+            contact=contact, audience=audience, goal=goal,
         )
 
         content = self._call_llm(system_prompt, user_prompt)
-        slides = self._parse_llm_response(content, title, date, subtitle, contact)
-        log.info("DesignAdvisor LLM: planned %d slides for '%s'", len(slides), title)
-        return slides
+
+        # Parse single slide (may be object {} or single-element array [{}])
+        json_str = content.strip()
+        if "```json" in content:
+            try:
+                start = content.index("```json") + 7
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
+        elif "```" in content:
+            try:
+                start = content.index("```") + 3
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
+
+        if json_str and json_str[0] not in ("[", "{"):
+            for bracket in ("[", "{"):
+                idx = json_str.find(bracket)
+                if idx != -1:
+                    json_str = json_str[idx:]
+                    break
+
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            log.warning("Slide parse failed for '%s': %s — using content fallback",
+                        plan_entry.get("title", "?"), e)
+            return {"slide_type": "content", "data": {
+                "title": plan_entry.get("title", ""),
+                "items": plan_entry.get("key_points", []),
+            }}
+
+        # Unwrap single-element array
+        if isinstance(parsed, list):
+            parsed = parsed[0] if parsed else {}
+
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        # Validate slide type; fall back to plan's type if LLM went off-piste
+        stype = parsed.get("slide_type", "")
+        if stype not in SLIDE_TYPES:
+            fallback_type = plan_entry.get("slide_type", "content")
+            if fallback_type not in SLIDE_TYPES:
+                fallback_type = "content"
+            log.warning("Slide '%s' returned unknown type '%s', using '%s'",
+                        plan_entry.get("title", "?"), stype, fallback_type)
+            parsed["slide_type"] = fallback_type
+
+        if "data" not in parsed:
+            parsed["data"] = {}
+
+        # Embed source section so the Archon visual auditor can check narrative
+        # fidelity without re-running the full source match (it's already here).
+        _EXEMPT_SOURCE = {"title", "closing", "section_divider"}
+        if source_section and parsed.get("slide_type") not in _EXEMPT_SOURCE:
+            parsed["data"].setdefault("source_section", source_section[:2000])
+
+        return parsed
 
     def _build_system_prompt(
         self,
