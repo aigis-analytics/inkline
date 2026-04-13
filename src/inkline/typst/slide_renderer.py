@@ -1304,7 +1304,7 @@ class TypstSlideRenderer:
   )"""
 
         footnote_block = (
-            f'\n  #v(4pt)\n  #text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{_esc(footnote)}]'
+            f'\n  v(4pt)\n  text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{_esc(footnote)}]'
             if footnote else ""
         )
 
