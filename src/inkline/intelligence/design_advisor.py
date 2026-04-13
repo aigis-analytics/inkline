@@ -318,39 +318,32 @@ class DesignAdvisor:
             )
             return self.llm_caller(system_prompt, user_prompt)
 
-        # Try bridge (short connect timeout so failures are fast).
-        # Skip for very large prompts (>50K user chars) — the bridge's claude -p
-        # subprocess hits a 300s timeout and the API is faster for large contexts.
-        total_chars = len(system_prompt) + len(user_prompt)
-        bridge_viable = total_chars <= 80_000
-        if not bridge_viable:
+        # Try bridge — narrative truncation in _build_user_prompt() keeps prompts
+        # under ~80K total (47K system + 33K user), within bridge processing limits.
+        # Read timeout matches bridge's dynamic timeout (180s + 3s/KB, max 600s).
+        try:
+            import requests as _req
+            total_chars = len(system_prompt) + len(user_prompt)
+            bridge_read_timeout = min(600, max(200, 180 + (total_chars // 1000) * 3)) + 15  # +15s buffer
             log.info(
-                "DesignAdvisor skipping bridge (prompt too large: %d chars) — going direct to API",
-                total_chars,
+                "DesignAdvisor LLM bridge %s (%d sys / %d user chars, timeout=%ds)...",
+                self.bridge_url, len(system_prompt), len(user_prompt), bridge_read_timeout,
             )
-
-        if bridge_viable:
-            try:
-                import requests as _req
+            resp = _req.post(
+                f"{self.bridge_url}/prompt",
+                json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
+                timeout=(5, bridge_read_timeout),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("response"):
                 log.info(
-                    "DesignAdvisor LLM bridge %s (%d sys / %d user chars)...",
-                    self.bridge_url, len(system_prompt), len(user_prompt),
+                    "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
+                    len(data["response"]), data.get("source", "?"),
                 )
-                resp = _req.post(
-                    f"{self.bridge_url}/prompt",
-                    json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
-                    timeout=(5, 240),  # 5s connect, 240s read
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                if data.get("response"):
-                    log.info(
-                        "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
-                        len(data["response"]), data.get("source", "?"),
-                    )
-                    return data["response"]
-            except Exception as e:
-                log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
+                return data["response"]
+        except Exception as e:
+            log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
 
         # Anthropic SDK fallback
         try:
@@ -754,6 +747,11 @@ class DesignAdvisor:
 
         return "\n".join(parts)
 
+    # Maximum chars for a section's narrative field in the user prompt.
+    # Bridge handles ~80K total (47K system + 33K user) within its 300s timeout.
+    # With ~16 sections × 1200 chars avg + 8K overhead ≈ 27K user + 47K sys = 74K.
+    MAX_NARRATIVE_CHARS = 1200
+
     def _build_user_prompt(
         self,
         title: str,
@@ -766,7 +764,11 @@ class DesignAdvisor:
         goal: str = "",
         additional_guidance: str = "",
     ) -> str:
-        """Build the user prompt with content to design."""
+        """Build the user prompt with content to design.
+
+        Narratives are truncated at sentence boundaries to keep the total
+        prompt size within the LLM bridge limit (~80K chars total).
+        """
         parts = [
             f"Design a slide deck for: **{title}**",
         ]
@@ -801,9 +803,27 @@ class DesignAdvisor:
         for i, section in enumerate(sections):
             slide_mode = section.get("slide_mode", "auto")
             mode_tag = f" [MODE: {slide_mode.upper()}]" if slide_mode != "auto" else ""
-            parts.append(f"### Section {i+1}: {section.get('section', section.get('type', 'Untitled'))}{mode_tag}")
+            parts.append(f"### Section {i+1}: {section.get('section', section.get('type', section.get('title', 'Untitled')))}{mode_tag}")
             parts.append(f"Original title: {section.get('title', '')}")
-            parts.append(f"```json\n{json.dumps(section, indent=2, default=str)}\n```\n")
+
+            # Truncate long narratives to keep user prompt within bridge limits.
+            # Guided sections are never truncated — user-specified content must be preserved.
+            sec_for_prompt = dict(section)
+            if slide_mode == "auto":
+                narrative = sec_for_prompt.get("narrative", "")
+                if len(narrative) > self.MAX_NARRATIVE_CHARS:
+                    # Cut at sentence boundary nearest to the limit
+                    trunc = narrative[:self.MAX_NARRATIVE_CHARS]
+                    # Find last sentence-ending character
+                    for end_char in ("\n\n", ".\n", ". ", ".\t"):
+                        idx = trunc.rfind(end_char)
+                        if idx > int(self.MAX_NARRATIVE_CHARS * 0.6):
+                            trunc = trunc[:idx + len(end_char)].rstrip()
+                            break
+                    omitted_pct = int((len(narrative) - len(trunc)) / len(narrative) * 100)
+                    sec_for_prompt["narrative"] = trunc + f"\n[...{omitted_pct}% omitted — key data above is sufficient for slide design]"
+
+            parts.append(f"```json\n{json.dumps(sec_for_prompt, indent=2, default=str)}\n```\n")
 
         if contact:
             parts.append(f"### Closing Contact\n```json\n{json.dumps(contact, indent=2)}\n```\n")
