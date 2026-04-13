@@ -335,11 +335,11 @@ class DesignAdvisor:
 
         # Try bridge — narrative truncation in _build_user_prompt() keeps prompts
         # under ~80K total (47K system + 33K user), within bridge processing limits.
-        # Read timeout matches bridge's dynamic timeout (180s + 3s/KB, max 600s).
+        # Read timeout matches bridge's dynamic timeout (180 + 4s/KB + 60s buffer, max 600s).
         try:
             import requests as _req
             total_chars = len(system_prompt) + len(user_prompt)
-            bridge_read_timeout = min(600, max(200, 180 + (total_chars // 1000) * 3)) + 15  # +15s buffer
+            bridge_read_timeout = min(600, max(200, 180 + (total_chars // 1000) * 4 + 60)) + 15  # +15s safety
             log.info(
                 "DesignAdvisor LLM bridge %s (%d sys / %d user chars, timeout=%ds)...",
                 self.bridge_url, len(system_prompt), len(user_prompt), bridge_read_timeout,

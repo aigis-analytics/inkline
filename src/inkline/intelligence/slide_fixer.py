@@ -387,11 +387,15 @@ def apply_graduated_fixes(
         # overflow due to layout constraints, not item count — splitting them
         # creates two identically-overflowing slides and makes things worse.
         return _fix_slide_splitting(slides, source, overflow_indices)
-    elif attempt >= 5:
-        # Last resort: aggressive content reduction + another downgrade pass
+    elif attempt == 5:
+        # Attempt 5: aggressive combo — content reduction + another downgrade pass
         slides, source, changed = _fix_content_reduction(slides, source, overflow_indices)
         slides2, source2, changed2 = _fix_type_downgrade(slides, source, overflow_indices)
         return slides2, source2, changed or changed2
+    elif attempt >= 6:
+        # Attempt 6+: nuclear — force any remaining overflowing slide to content/split
+        # regardless of type. Guarantees convergence; visual quality is secondary here.
+        return _fix_nuclear_downgrade(slides, source, overflow_indices)
     else:
         return slides, source, False
 
@@ -773,8 +777,78 @@ def _fix_type_downgrade(
 
         slides[idx] = {"slide_type": target, "data": new_data}
         log.info(
-            "Overflow fix attempt 4 (type downgrade): slide %d %s → %s",
+            "Overflow fix attempt (type downgrade): slide %d %s → %s",
             idx, stype, target,
+        )
+        modified = True
+
+    return slides, source, modified
+
+
+def _fix_nuclear_downgrade(
+    slides: list[dict[str, Any]],
+    source: str,
+    indices: list[int],
+) -> tuple[list[dict[str, Any]], str, bool]:
+    """Attempt 6+: nuclear — force any remaining overflowing slide to content.
+
+    All graduated fixes (content reduction, spacing, type downgrade, selective
+    split) have been exhausted.  Any slide still overflowing here is converted
+    directly to a plain ``content`` (bullet) slide regardless of its current
+    type.  Visual quality is secondary — the goal is a rendered PDF with the
+    right page count.
+
+    The CRITICAL_OVERFLOW note in the next LLM visual audit round will prompt
+    the advisor to produce a better redesign of these slides.
+    """
+    _NUCLEAR_SKIP = {"title", "closing", "content"}  # already at floor; skip
+
+    modified = False
+    for idx in indices:
+        if idx >= len(slides):
+            continue
+        slide = slides[idx]
+        stype = slide.get("slide_type", "")
+        if stype in _NUCLEAR_SKIP:
+            continue
+        data = slide.get("data", {})
+
+        # Extract the most important text fields as bullet items
+        new_data: dict[str, Any] = {
+            "title":   data.get("title", ""),
+            "section": data.get("section", ""),
+        }
+        # Collect any list-like fields and flatten to strings
+        items: list[str] = []
+        for field in ("items", "bullets", "rows", "stats", "kpis", "bars",
+                      "cards", "milestones", "steps", "tiers", "features",
+                      "left_items", "right_items"):
+            raw = data.get(field, [])
+            if isinstance(raw, list):
+                for item in raw[:6]:
+                    if isinstance(item, dict):
+                        label = (item.get("label") or item.get("title")
+                                 or item.get("value") or "")
+                        body  = (item.get("body") or item.get("text")
+                                 or item.get("description") or "")
+                        items.append(f"{label}: {body}".strip(": ") if body else label)
+                    elif isinstance(item, (list, tuple)):
+                        items.append(" | ".join(str(c) for c in item if c))
+                    else:
+                        items.append(str(item))
+                break  # first matching field wins
+
+        new_data["items"] = items[:6]
+
+        # Enforce title cap
+        t = new_data.get("title", "")
+        if len(t) > MAX_TITLE_CHARS:
+            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS)
+
+        slides[idx] = {"slide_type": "content", "data": new_data}
+        log.info(
+            "Overflow fix attempt 6 (nuclear): slide %d %s → content (last resort)",
+            idx, stype,
         )
         modified = True
 
