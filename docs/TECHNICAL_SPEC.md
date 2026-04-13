@@ -883,24 +883,30 @@ TABLE_MAX_COLS     = 6
 
 Four laws baked into all Inkline LLM system prompts and routing logic:
 
-**I. Visual hierarchy** — 5-tier decision ladder (must prefer higher tiers):
+**I. Visual hierarchy** — 5-tier decision ladder with explicit priority within Tier 1:
 
-- **Tier 1A** (KPI / native infographic): `kpi_strip`, `icon_stat`, `progress_bars`, `feature_grid`
-- **Tier 1B** (structural infographic — matplotlib rendered): `iceberg`, `waffle`, `pyramid_detailed`,
-  `ladder`, `radial_pinwheel`, `dual_donut`, `petal_teardrop`, `hexagonal_honeycomb`,
-  `semicircle_taxonomy`, `process_curved_arrows`, `funnel_kpi_strip`, `funnel_ribbon`,
-  `persona_dashboard`, `sidebar_profile`, `metaphor_backdrop`
-- **Tier 1C** (multi-exhibit): `multi_chart` (2–4 exhibits, 8 asymmetric layouts),
-  `chart_row` (composite PNG with `width_ratios`)
-- **Tier 2** (institutional exhibit): `marimekko`, `entity_flow`, `divergent_bar`,
-  `horizontal_stacked_bar`, `chart_caption`, `dashboard`
+**Priority within Tier 1: 1C > 1B > 1A.** Always attempt to use a multi-exhibit
+layout first. If a single structural infographic fits, prefer it over a plain KPI
+callout. 1A and 1B types are also valid as individual exhibit slots within a 1C layout.
+
+- **Tier 1C** (multi-exhibit — highest priority): `multi_chart` with 2–4 exhibit slots
+  in 8 asymmetric layouts; `chart_row` composite PNG. For each slot, apply the
+  1B → 1A → Tier 2 sub-selector to pick the best exhibit type.
+- **Tier 1B** (structural infographic — matplotlib rendered): `iceberg`, `waffle`,
+  `pyramid_detailed`, `ladder`, `radial_pinwheel`, `dual_donut`, `petal_teardrop`,
+  `hexagonal_honeycomb`, `semicircle_taxonomy`, `process_curved_arrows`,
+  `funnel_kpi_strip`, `funnel_ribbon`, `persona_dashboard`, `sidebar_profile`,
+  `metaphor_backdrop`
+- **Tier 1A** (KPI callout — use standalone or as supporting slots in 1C):
+  `kpi_strip`, `icon_stat`, `progress_bars`, `feature_grid`
+- **Tier 2** (institutional exhibit — standalone or as 1C slot): `marimekko`,
+  `entity_flow`, `divergent_bar`, `horizontal_stacked_bar`, `chart_caption`, `dashboard`
 - **Tier 3** (structural visual): `three_card`, `four_card`, `comparison`, `split`, `timeline`, `process_flow`
 - **Tier 4** (data table): `table` — ≤ 6×6 only
 - **Tier 5** (text bullets): `content` — at most 1 per deck
 
-Scoring rule: ≥ 40% slides should be Tier 1 (any sub-tier); ≥ 20% should be Tier 2;
-≤ 1 `content` slide per deck. Every deck should contain at least one Tier 1B or 1C
-exhibit and at least one Tier 2 institutional exhibit where data supports it.
+Scoring rule: ≥ 30% slides should be Tier 1C; ≥ 20% Tier 1A/1B; ≥ 20% Tier 2;
+≤ 1 `content` slide per deck. Every deck must contain at least one Tier 1C slide.
 
 **II. Bridge first** — All LLM calls (text + vision) try the local bridge
 before the Anthropic API. Prevents accidental API credit spend.
