@@ -865,20 +865,35 @@ def _render_infographic_iceberg(data, *, colors, accent, bg, text_color, muted, 
         ax.text(0.55, y, f"• {label}", ha="left", va="center",
                 fontsize=9, fontweight="bold", color=text_color, zorder=6)
         if desc:
-            ax.text(0.58, y - 0.07, textwrap.fill(desc, 28), ha="left", va="top",
-                    fontsize=7.5, color=muted, zorder=6)
+            ax.text(0.58, y - 0.06, textwrap.fill(desc, 26), ha="left", va="top",
+                    fontsize=7, color=muted, zorder=6)
 
-    # Right side: below items
+    # Below items — alternate left / right sides to avoid crowding
     n_below = len(below_items)
-    for i, item in enumerate(below_items):
-        y = -0.12 - i * (0.72 / max(n_below, 1))
+    left_items = below_items[1::2]   # odd-indexed → left side
+    right_items = below_items[0::2]  # even-indexed → right side
+
+    n_right = len(right_items)
+    for i, item in enumerate(right_items):
+        y = -0.10 - i * (0.76 / max(n_right, 1))
         label = item.get("label", "")
         desc = item.get("desc", "")
         ax.text(0.75, y, f"• {label}", ha="left", va="center",
-                fontsize=9, fontweight="bold", color=text_color, zorder=6)
+                fontsize=8.5, fontweight="bold", color=text_color, zorder=6)
         if desc:
-            ax.text(0.78, y - 0.07, textwrap.fill(desc, 22), ha="left", va="top",
-                    fontsize=7.5, color=muted, zorder=6)
+            ax.text(0.78, y - 0.06, textwrap.fill(desc, 20), ha="left", va="top",
+                    fontsize=6.5, color=muted, zorder=6)
+
+    n_left = len(left_items)
+    for i, item in enumerate(left_items):
+        y = -0.22 - i * (0.76 / max(n_left, 1))
+        label = item.get("label", "")
+        desc = item.get("desc", "")
+        ax.text(-1.45, y, f"• {label}", ha="left", va="center",
+                fontsize=8.5, fontweight="bold", color=text_color, zorder=6)
+        if desc:
+            ax.text(-1.42, y - 0.06, textwrap.fill(desc, 20), ha="left", va="top",
+                    fontsize=6.5, color=muted, zorder=6)
 
     fig.tight_layout()
     return fig
@@ -987,19 +1002,25 @@ def _render_infographic_waffle(data, *, colors, accent, bg, text_color, muted, w
 
     cat_colors = [colors[i % len(colors)] for i in range(len(categories))]
 
+    title = data.get("title", "")
+    pct_labels = [f"{labels[i]}  {raw_vals[i]}%" for i in range(len(categories))]
+
     if HAVE_PYWAFFLE and categories:
         fig = _plt.figure(
             FigureClass=Waffle,
             rows=rows, columns=cols,
             values=norm_vals,
             colors=cat_colors,
-            labels=labels,
-            legend={"loc": "lower left", "bbox_to_anchor": (0, -0.25),
-                    "ncol": min(len(labels), 4), "frameon": False,
+            labels=pct_labels,
+            legend={"loc": "lower left", "bbox_to_anchor": (0, -0.22),
+                    "ncol": min(len(labels), 3), "frameon": False,
                     "fontsize": 9},
             figsize=(width, height),
         )
         fig.patch.set_facecolor(bg)
+        if title:
+            fig.suptitle(title, fontsize=12, fontweight="bold",
+                         color=text_color, y=1.02)
         fig.tight_layout()
         return fig
 
@@ -1010,6 +1031,10 @@ def _render_infographic_waffle(data, *, colors, accent, bg, text_color, muted, w
     ax.axis("off")
     ax.set_xlim(-0.5, cols - 0.5)
     ax.set_ylim(-1.5, rows - 0.5)
+
+    if title:
+        ax.set_title(title, fontsize=11, fontweight="bold",
+                     color=text_color, pad=8)
 
     # Build cell color grid row by row (bottom-left to top-right)
     cell_colors = []
@@ -1025,12 +1050,12 @@ def _render_infographic_waffle(data, *, colors, accent, bg, text_color, muted, w
                            linewidths=0, zorder=3)
                 cell_idx += 1
 
-    # Legend
+    # Legend with percentages
     from matplotlib.patches import Patch
-    handles = [Patch(facecolor=cat_colors[i], label=f"{labels[i]} ({raw_vals[i]}%)")
+    handles = [Patch(facecolor=cat_colors[i], label=pct_labels[i])
                for i in range(len(categories))]
     ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(0, -0.18),
-              ncol=min(len(labels), 4), frameon=False, fontsize=9,
+              ncol=min(len(labels), 3), frameon=False, fontsize=9,
               labelcolor=text_color)
 
     fig.tight_layout()
@@ -1933,7 +1958,6 @@ def _render_infographic_sidebar_profile(data, *, colors, accent, bg, text_color,
     ax_left.add_patch(circ)
     ax_left.text(0, 0.55, initial.upper(), ha="center", va="center",
                  fontsize=20, fontweight="bold", color=sidebar_color, zorder=4)
-    ax_left.set_aspect("equal")
 
     name = profile.get("name", "")
     role = profile.get("role", "")
@@ -2064,7 +2088,13 @@ def _render_infographic_metaphor_backdrop(data, *, colors, accent, bg, text_colo
     # ---- Content cards overlaid ----
     if n > 0:
         card_positions = []
-        if n <= 3:
+        if backdrop == "mountain" and n <= 3:
+            # Stagger vertically: base=low, mid=centre, summit=high — reinforces ascent
+            mountain_y = [1.1, 2.5, 4.0]
+            mountain_x = [2.0, 5.0, 8.0]
+            for i in range(n):
+                card_positions.append((mountain_x[i], mountain_y[i]))
+        elif n <= 3:
             for i in range(n):
                 card_positions.append((1.0 + i * 3.0, 2.0))
         elif n <= 5:
