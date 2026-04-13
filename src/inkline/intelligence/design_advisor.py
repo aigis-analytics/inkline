@@ -49,7 +49,7 @@ SLIDE_TYPES = [
     "table", "split", "chart", "bar_chart", "kpi_strip",
     "timeline", "process_flow", "icon_stat", "progress_bars",
     "pyramid", "comparison", "feature_grid", "dashboard",
-    "chart_caption", "multi_chart", "closing",
+    "chart_caption", "multi_chart", "closing", "section_divider",
 ]
 
 # Slide type descriptions for the LLM
@@ -675,6 +675,22 @@ class DesignAdvisor:
                      entry.get("slide_type", "?"),
                      str(entry.get("title", ""))[:55])
 
+        # === PHASE 1b: Archon reviews plan before any rendering ===
+        # Text-only review: checks story arc, slide type fitness, exhibit
+        # opportunities, coverage, and commercial viability.
+        # Catches structural problems before spending credits on 20 slide calls.
+        log.info("DesignAdvisor Phase 1b: Archon reviewing plan (text-only)...")
+        plan = self._review_plan_llm(
+            plan, title, sections,
+            goal=goal, audience=audience,
+            reference_archetypes=reference_archetypes,
+        )
+        log.info("DesignAdvisor Phase 1b: plan finalised at %d slides", len(plan))
+        for i, entry in enumerate(plan):
+            log.info("  [%2d] %-22s — %s", i + 1,
+                     entry.get("slide_type", "?"),
+                     str(entry.get("title", ""))[:55])
+
         # === PHASE 2: Design each slide from its plan entry ===
         # Build source section lookup (1-based index, matching plan's source_index)
         section_lookup: dict[int, dict] = {i + 1: s for i, s in enumerate(sections)}
@@ -777,48 +793,81 @@ class DesignAdvisor:
     # ------------------------------------------------------------------
 
     def _build_plan_system_prompt(self) -> str:
-        """Minimal system prompt for the deck planning phase (~3K chars).
+        """System prompt for the deck planning phase (~5K chars).
 
-        The planner only needs to know slide types and structural rules.
-        Design aesthetics are applied in the per-slide phase.
+        Gives the planner a working knowledge of slide types and when to use
+        each — including chart types for visual exhibits. Design aesthetics are
+        applied in Phase 2; the plan is then reviewed by the Archon before any
+        slides are rendered.
         """
         return "\n".join([
             "You are a presentation architect. Given structured content sections,",
             "produce a concise deck plan — an ordered outline of slides.",
             "",
-            "SLIDE TYPES AVAILABLE:",
-            "  title, section_divider, closing",
-            "  content, split, three_card, four_card, stat, kpi_strip",
-            "  table, bar_chart, multi_chart, comparison",
-            "  icon_stat, progress_bars, timeline, process_flow",
-            "  image_full, quote_block",
-            "  infographic_bar_race, infographic_treemap, infographic_waterfall,",
-            "  infographic_scatter, infographic_heat_map, infographic_funnel,",
-            "  infographic_gauge, infographic_donut, infographic_iceberg,",
-            "  infographic_waffle, infographic_pyramid, infographic_marimekko,",
-            "  infographic_sankey, infographic_bubble, infographic_pareto,",
-            "  infographic_sidebar_callout, infographic_metaphor_diagram",
+            "SLIDE TYPES:",
+            "  title              — opening title slide",
+            "  section_divider    — full-bleed accent page between major themes",
+            "  closing            — final contact/CTA slide",
+            "  content            — bullet list (use sparingly, max 6 bullets)",
+            "  split              — two-column (left bullets / right accent bullets)",
+            "  three_card         — 3 equal cards with one highlighted",
+            "  four_card          — 2×2 grid of cards",
+            "  stat               — 2-4 hero numbers (very large)",
+            "  kpi_strip          — 3-5 metrics in a strip",
+            "  icon_stat          — icon + number + label (3-4 stats)",
+            "  feature_grid       — 6 features in a 3×2 grid",
+            "  table              — data grid (MAX 6×6 — hard limit)",
+            "  bar_chart          — horizontal bar chart",
+            "  comparison         — head-to-head metrics table",
+            "  progress_bars      — % bars per item",
+            "  timeline           — horizontal milestones",
+            "  process_flow       — numbered steps with arrows (3-5 steps)",
+            "  pyramid            — 3-5 tier hierarchy",
+            "  dashboard          — chart (left 60%) + 3 stats + 3 bullets (right)",
+            "  chart_caption      — chart (left 65%) + key takeaways panel (right)",
+            "  chart              — full-width chart image (no panel)",
+            "  multi_chart        — 2-4 charts in a grid layout",
+            "",
+            "CHART TYPES (for chart_caption / dashboard / chart slides):",
+            "Use these by specifying chart_type in the notes field:",
+            "  Standard:    line_chart, area_chart, waterfall, donut, pie,",
+            "               stacked_bar, grouped_bar, heatmap, radar, gauge, scatter",
+            "  Structural:  iceberg (visible vs hidden), funnel_ribbon (conversion),",
+            "               waffle (% progress grid), dual_donut (two rings),",
+            "               pyramid_detailed (hierarchy), ladder (step-up),",
+            "               metaphor_backdrop (conceptual), process_curved_arrows,",
+            "               marimekko (market share matrix), entity_flow (org/flow),",
+            "               divergent_bar (left-right comparison), chart_row (3 small charts)",
+            "",
+            "WHEN TO USE CHARTS vs NATIVE SLIDE TYPES:",
+            "  Financial walk / bridge       → chart_caption + waterfall",
+            "  Market share by segment       → chart_caption + donut or pie",
+            "  Revenue/cost breakdown        → chart_caption + stacked_bar or waterfall",
+            "  Risk matrix / 2D intensity    → chart_caption + heatmap",
+            "  Acquisition funnel / pipeline → chart_caption + funnel_ribbon",
+            "  Fund progress vs target       → chart_caption + gauge or waffle",
+            "  Value chain / flow allocation → chart_caption + entity_flow",
+            "  Visible vs hidden issues      → chart_caption + iceberg",
+            "  Growth over time              → chart_caption + line_chart or area_chart",
+            "  Market sizing comparison      → multi_chart with grouped_bar + donut",
+            "  Portfolio overview            → dashboard (chart + 3 stats + bullets)",
             "",
             "PLANNING RULES:",
-            "- Always start with a title slide (source_index=0)",
-            "- Always end with a closing slide (source_index=0)",
-            "- Add section_divider slides to separate major themes",
-            "- Each source section typically becomes 1-2 slides",
-            "- Use action titles: state the conclusion, not just the topic",
-            "- Vary slide types for visual interest",
-            "- Multi-metric data → stat/kpi_strip/bar_chart",
-            "- Tabular data → table",
-            "- Process/steps → process_flow or timeline",
-            "- Comparisons → comparison or split",
-            "- DO NOT invent facts — key_points must come only from source sections",
+            "- Start with title (source_index=0), end with closing (source_index=0)",
+            "- Add section_divider between major themes (2-4 for a long deck)",
+            "- Each source section → 1-2 slides",
+            "- Action titles: state the conclusion, not the topic",
+            "- Vary types — never 3+ consecutive text slides",
+            "- PREFER charts over tables when data has a story shape",
+            "- DO NOT invent facts — key_points must come from the source only",
             "",
-            "OUTPUT FORMAT — return a JSON array, each entry:",
+            "OUTPUT FORMAT — JSON array, each entry:",
             '  {"slide_type": "...", "title": "...", "source_index": N,',
             '   "key_points": ["..."], "notes": "..."}',
             "",
-            "- source_index: 1-based index of the source section (0 = deck metadata)",
-            "- key_points: 2-4 most important facts/claims for this slide",
-            "- notes: brief hint for the slide builder (e.g. 'bar chart by region')",
+            "- source_index: 1-based (0 = deck metadata / title / closing)",
+            "- key_points: 2-4 most important facts/claims from that source section",
+            "- notes: design hint for Phase 2 (e.g. 'chart_caption + waterfall chart')",
             "",
             "Return JSON inside ```json ... ``` markers.",
         ])
@@ -835,6 +884,7 @@ class DesignAdvisor:
         """Phase 1: Ask LLM to outline the deck structure.
 
         Small, fast call (~3K sys + ~6K user). Returns list of plan entries.
+        The plan is then reviewed by _review_plan_llm before per-slide design begins.
         """
         system_prompt = self._build_plan_system_prompt()
 
@@ -864,6 +914,174 @@ class DesignAdvisor:
                  len(system_prompt), len(user_prompt))
         content = self._call_llm(system_prompt, user_prompt)
         return self._parse_plan_response(content)
+
+    def _review_plan_llm(
+        self,
+        plan: list[dict[str, Any]],
+        title: str,
+        sections: list[dict[str, Any]],
+        *,
+        goal: str = "",
+        audience: str = "",
+        reference_archetypes: Optional[list[str]] = None,
+    ) -> list[dict[str, Any]]:
+        """Phase 1b: Archon review of the deck plan before any rendering.
+
+        Uses the full design system prompt (bridge caches it from Phase 2 calls).
+        Checks story arc, slide type choices, exhibit opportunities, and
+        narrative flow. Returns the (potentially revised) plan.
+
+        This is a text-only call — no PDF, no images, no vision. It's cheap and
+        catches structural problems before spending API credits on per-slide design.
+        """
+        system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
+
+        # Format the plan as a readable markdown outline for review
+        plan_lines = [f"## Deck Plan: {title}"]
+        if audience:
+            plan_lines.append(f"**Audience:** {audience}")
+        if goal:
+            plan_lines.append(f"**Goal:** {goal}")
+        plan_lines.append(f"**Slides planned:** {len(plan)}\n")
+
+        for i, entry in enumerate(plan):
+            stype = entry.get("slide_type", "?")
+            slide_title = entry.get("title", "")
+            src_idx = entry.get("source_index", 0)
+            key_points = entry.get("key_points", [])
+            notes = entry.get("notes", "")
+            plan_lines.append(f"**[{i+1}] {stype}** — {slide_title}")
+            if key_points:
+                for kp in key_points:
+                    plan_lines.append(f"  - {kp}")
+            if notes:
+                plan_lines.append(f"  _(hint: {notes})_")
+            if src_idx > 0 and src_idx <= len(sections):
+                sec = sections[src_idx - 1]
+                sec_title = sec.get("title", "")
+                plan_lines.append(f"  _(source: Section {src_idx}: {sec_title})_")
+            plan_lines.append("")
+
+        plan_md = "\n".join(plan_lines)
+
+        # Include source section previews so Archon can judge fit
+        source_lines = ["\n## Source Content Summaries\n"]
+        for i, sec in enumerate(sections):
+            sec_title = sec.get("title", sec.get("section", "Untitled"))
+            narrative = sec.get("narrative", "")
+            preview = narrative[:500] + ("..." if len(narrative) > 500 else "")
+            source_lines.append(f"**Section {i+1}: {sec_title}**")
+            if preview:
+                source_lines.append(preview)
+            source_lines.append("")
+
+        user_prompt = "\n".join([
+            "You are reviewing a deck plan BEFORE any slides are rendered.",
+            "Your job: evaluate the plan's story arc, slide type choices, and exhibit",
+            "opportunities — then either approve it or revise it.",
+            "",
+            plan_md,
+            "\n".join(source_lines),
+            "=" * 60,
+            "REVIEW CRITERIA",
+            "=" * 60,
+            "",
+            "1. STORY ARC — Does the deck flow logically from hook → evidence → ask?",
+            "   Does it answer: 'why this deal / opportunity / decision, why now, why us?'",
+            "",
+            "2. SLIDE TYPE + CHART TYPE FIT — Are the right exhibit types chosen?",
+            "   The slide_type determines the layout; chart_type (in notes) determines the chart.",
+            "   Upgrade opportunities:",
+            "   - Financial walk / bridge data → chart_caption + waterfall (not table)",
+            "   - Market share / portfolio breakdown → chart_caption + donut or stacked_bar",
+            "   - Risk matrix / 2D assessment → chart_caption + heatmap",
+            "   - Funnel / pipeline conversion → chart_caption + funnel_ribbon",
+            "   - Progress vs target → chart_caption + gauge or waffle",
+            "   - Visible vs hidden risks → chart_caption + iceberg",
+            "   - Org / value chain flows → chart_caption + entity_flow",
+            "   - Growth over time → chart_caption + line_chart or area_chart",
+            "   - Multi-metric portfolio → dashboard (chart + 3 stats + bullets)",
+            "   - Side-by-side metrics → comparison (not two content slides)",
+            "   - Milestone history → timeline (not content bullets)",
+            "   - Process / how-it-works → process_flow (not content bullets)",
+            "   If you upgrade to chart_caption/chart/dashboard, update notes to specify",
+            "   the chart_type (e.g. 'chart_caption + waterfall chart').",
+            "",
+            "3. COVERAGE — Are any critical source sections missing or under-served?",
+            "   Does the plan weight emphasis toward the most commercially important points?",
+            "",
+            "4. VISUAL VARIETY — No 3+ consecutive text/content slides. Mix chart and",
+            "   narrative layouts throughout the deck.",
+            "",
+            "5. COMMERCIAL VIABILITY — Would the audience leave knowing exactly what action",
+            "   to take and why? Is the key ask/recommendation prominent?",
+            "",
+            "=" * 60,
+            "OUTPUT FORMAT",
+            "=" * 60,
+            "",
+            "Return a JSON object inside ```json ... ``` markers:",
+            "",
+            '{"verdict": "approved" | "revised",',
+            ' "feedback": ["concise note about each change or observation"],',
+            ' "revised_plan": [...]}',
+            "",
+            "- verdict 'approved': revised_plan is the original plan unchanged.",
+            "- verdict 'revised': revised_plan is the improved plan.",
+            "- feedback: 3-5 concise notes explaining changes or confirming quality.",
+            "- DO NOT invent new facts. key_points must come from the source sections.",
+            "- revised_plan entries follow the same schema: {slide_type, title,",
+            "  source_index, key_points, notes}.",
+        ])
+
+        log.info("DesignAdvisor Phase 1b (plan review): %d sys / %d user chars",
+                 len(system_prompt), len(user_prompt))
+        content = self._call_llm(system_prompt, user_prompt)
+
+        # Parse the review response
+        json_str = content.strip()
+        for fence in ("```json", "```"):
+            if fence in content:
+                try:
+                    start = content.index(fence) + len(fence)
+                    end = content.index("```", start)
+                    json_str = content[start:end].strip()
+                    break
+                except ValueError:
+                    pass
+
+        if json_str and json_str[0] not in ("{", "["):
+            for bracket in ("{", "["):
+                idx = json_str.find(bracket)
+                if idx != -1:
+                    json_str = json_str[idx:]
+                    break
+
+        try:
+            review = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            log.warning("Plan review parse failed (%s) — using original plan", e)
+            return plan
+
+        # Graceful fallback if LLM returned wrong structure (e.g. a slide array)
+        if not isinstance(review, dict):
+            log.warning("Plan review returned unexpected type %s — using original plan",
+                        type(review).__name__)
+            return plan
+
+        verdict = review.get("verdict", "approved")
+        feedback = review.get("feedback", [])
+        revised = review.get("revised_plan", plan)
+
+        for note in feedback:
+            log.info("Plan review feedback: %s", note)
+
+        if verdict == "revised" and isinstance(revised, list) and revised:
+            log.info("Plan review REVISED plan: %d → %d slides", len(plan), len(revised))
+            return revised
+        else:
+            log.info("Plan review APPROVED plan (%d slides)", len(plan))
+            return plan
 
     def _parse_plan_response(self, content: str) -> list[dict[str, Any]]:
         """Parse the planning LLM's JSON response into plan entries."""

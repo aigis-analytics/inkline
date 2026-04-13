@@ -299,6 +299,7 @@ class TypstSlideRenderer:
             "dashboard": self._dashboard_slide,
             "chart_caption": self._chart_caption_slide,
             "multi_chart": self._multi_chart_slide,
+            "section_divider": self._section_divider_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -762,6 +763,33 @@ class TypstSlideRenderer:
   ]
 ]"""
 
+
+    # -- Section divider ---------------------------------------------------
+
+    def _section_divider_slide(self, d: dict) -> str:
+        """Full-bleed accent page used to separate major deck sections.
+
+        data: title (required), subtitle? (optional tagline)
+        """
+        t = self.t
+        title = d.get("title", "")
+        subtitle = d.get("subtitle", "")
+        heading_font = t.get("heading_font", "Inter")
+
+        return f"""#page(
+  fill: {_rgb(t['accent'])},
+  margin: (top: 1.4cm, bottom: 1.2cm, left: 1.6cm, right: 1.6cm),
+  header: none,
+  footer: none,
+)[
+  #set text(fill: white)
+  #v(1fr)
+  #align(horizon)[
+    #text(weight: "bold", size: 40pt, font: "{heading_font}", tracking: -0.5pt)[{_esc(title)}]
+    {f'#v(0.5cm)#text(size: 14pt, fill: white.transparentize(25%))[{_esc(subtitle)}]' if subtitle else ''}
+  ]
+  #v(1fr)
+]"""
 
     # ==================================================================
     # INFOGRAPHIC SLIDE TYPES
