@@ -167,12 +167,13 @@ MyCorpBrand = BaseBrand(
 )
 ```
 
-## Slide types (17)
+## Slide types (20)
 
 **Standard:** `title`, `content`, `three_card`, `four_card`, `stat`, `table`,
 `split`, `bar_chart`, `kpi_strip`, `closing`
 **Infographic:** `timeline`, `process_flow`, `icon_stat`, `progress_bars`,
-`pyramid`, `comparison`
+`pyramid`, `comparison`, `feature_grid`
+**Data exhibit:** `dashboard`, `chart_caption`
 **Embedded:** `chart` (matplotlib PNG/SVG)
 
 ## Chart types (11)
@@ -239,20 +240,46 @@ src/inkline/
 │   ├── theme_registry.py    # template → theme generation
 │   └── themes/              # 90 themes in 13 categories
 └── intelligence/     # Design advisor + overflow audit
-    ├── design_advisor.py
+    ├── design_advisor.py    # DesignAdvisor — LLM design planning + revision
+    ├── slide_fixer.py       # Closed-loop overflow fixer (6 graduated fix levels)
+    ├── overflow_audit.py    # Structural + Claude vision audit (bridge /vision)
+    ├── claude_code.py       # Bridge caller + ensure_bridge_running()
+    ├── archon.py            # Pipeline supervisor: phase tracking + issue log
+    ├── vishwakarma.py       # Design philosophy constants (4 laws)
     ├── content_analyzer.py
     ├── layout_selector.py
     ├── chart_advisor.py
-    ├── overflow_audit.py
-    ├── playbooks/           # design rules, colour theory, typography
+    ├── playbooks/           # 9 design playbooks (colour, typography, layouts, …)
     └── design_md_styles/    # 27 curated design systems (getdesign.md)
 ```
+
+## Vishwakarma design philosophy
+
+All LLM-driven design decisions in Inkline are governed by four laws baked into
+the system prompts and routing logic:
+
+1. **Visual hierarchy** — Infographic-first decision ladder: icon/KPI strips →
+   chart exhibits → structural visuals → data tables → text bullets. Text bullets
+   are a last resort; ≥ 50% of slides should be tier 1 or 2.
+2. **Bridge first** — Every LLM call (text and vision) routes through the local
+   Claude bridge (`localhost:8082`) before touching the Anthropic API. Zero
+   incremental API cost when Claude Max is running.
+3. **Visual audit mandatory** — Every deck gets a two-agent design dialogue:
+   a vision auditor checks each rendered slide PNG, the design advisor revises
+   from the findings. Loop continues until the auditor signs off or max rounds.
+4. **Archon oversight** — A single `Archon` instance supervises each pipeline
+   run, intercepts all `inkline.*` log records, and writes a structured issues
+   report at completion.
+
+See `inkline.intelligence.vishwakarma` for the constants and
+`inkline.intelligence.archon.Archon` for the supervisor class.
 
 ## Documentation
 
 - [Technical specification](docs/TECHNICAL_SPEC.md) — architecture, APIs, data models
 - [Commercial pitch](docs/PITCH.md) — capabilities, competitive comparison
-- [Archon audit workflow](docs/ARCHON_AUDIT.md) — how the overflow process works
+- [Archon audit workflow](docs/ARCHON_AUDIT.md) — Archon supervisor + audit pipeline
+- [Closed-loop audit spec](docs/CLOSED_LOOP_AUDIT_SPEC.md) — two-loop QA architecture
 
 ## Testing
 

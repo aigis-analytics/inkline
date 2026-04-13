@@ -212,6 +212,9 @@ export_typst_slides(
     font_paths: list[str | Path] | None = None,
     image_root: str | Path | None = None,
     audit: bool = True,              # run overflow audit before compile
+    auto_fix: bool = True,           # enable closed-loop fixer
+    max_overflow_attempts: int = 6,  # inner loop max (structural fixes)
+    max_visual_attempts: int = 3,    # outer loop max (LLM vision rounds)
 ) -> Path
 
 export_typst_document(
@@ -265,8 +268,9 @@ class DesignAdvisor:
         template: str = "brand",
         mode: Literal["rules", "advised", "llm"] = "llm",
         api_key: str | None = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
         llm_caller: LLMCaller | None = None,    # plug in any caller
+        bridge_url: str = "http://localhost:8082",
     ) -> None: ...
 
     def design_deck(
@@ -299,29 +303,39 @@ format_report(warnings: list[AuditWarning]) -> str
 emit_audit_report(warnings: list[AuditWarning]) -> None        # logger output
 
 # Claude vision audit — pixel-grounded check on the rendered slide
+# Routes through bridge /vision endpoint first; SDK only if api_key is explicit.
+# NEVER auto-reads ANTHROPIC_API_KEY from env — prevents accidental API spend.
 audit_slide_with_llm(
     image_path,
     *,
     slide_index: int = -1,
     slide_type: str = "",
+    bridge_url: str = "http://localhost:8082",
     api_key: str | None = None,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-sonnet-4-6",
 ) -> list[AuditWarning]
 
-audit_deck_with_llm(pdf_path, expected_slides: int, **kwargs) -> list[AuditWarning]
+audit_deck_with_llm(
+    pdf_path,
+    slides: list[dict],
+    *,
+    bridge_url: str = "http://localhost:8082",
+    api_key: str | None = None,
+) -> list[AuditWarning]
 ```
 
-### 4.6 Claude Code subprocess caller — `inkline.intelligence.claude_code`
+### 4.6 Claude Code bridge caller — `inkline.intelligence.claude_code`
 
-Run the LLM design pipeline against the user's logged-in Claude Pro/Max
-subscription instead of consuming `ANTHROPIC_API_KEY` budget. Adds zero
-new dependencies — only `subprocess` from the stdlib.
+Inkline routes all LLM calls (text and vision) through a local HTTP bridge
+server (`claude_bridge.py`, default `http://localhost:8082`) that wraps the
+`claude` CLI. This uses the user's logged-in Claude Pro/Max subscription with
+**zero API cost**. The bridge is auto-started if not running.
 
 ```python
-from inkline.intelligence import DesignAdvisor
 from inkline.intelligence.claude_code import (
     build_claude_code_caller,
     claude_code_available,
+    ensure_bridge_running,
     ClaudeCodeNotInstalled,
 )
 
@@ -334,17 +348,43 @@ def build_claude_code_caller(
 
 def claude_code_available() -> bool       # is the `claude` CLI on $PATH?
 
-class ClaudeCodeNotInstalled(RuntimeError): ...
+def ensure_bridge_running(
+    bridge_url: str = "http://localhost:8082",
+    startup_wait: float = 4.0,
+) -> bool
+# Checks GET /health. If not healthy, looks for ~/.config/inkline/claude_bridge.py
+# and starts it as a detached subprocess. Polls up to startup_wait seconds.
+# Returns True if bridge is healthy after the check.
+# Called automatically by DesignAdvisor._call_llm() before every bridge request.
 
-# Wire it up:
+class ClaudeCodeNotInstalled(RuntimeError): ...
+```
+
+**Bridge HTTP endpoints** (aiohttp server on port 8082):
+
+| Endpoint | Method | Body | Description |
+|----------|--------|------|-------------|
+| `/health` | GET | — | Returns `{"status":"ok","cli_available":true,"source":"claude_max"}` |
+| `/prompt` | POST | `{system, user, max_tokens}` | Text LLM call (design, revision) |
+| `/vision` | POST | `{system, prompt, image_base64, image_media_type}` | Multimodal visual audit call |
+
+The bridge uses `claude -p --input-format stream-json --output-format stream-json`
+for `/vision` to send multimodal messages. Dynamic timeout formula:
+`min(600, max(180, 180 + (total_chars // 1000) * 4 + 60))` — scales with prompt size.
+
+**Bridge auto-install location:** `~/.config/inkline/claude_bridge.py`
+(also available in `u3126117/inkline-brands-private`).
+
+**Wire up a custom caller** (e.g. for tests):
+```python
 caller = build_claude_code_caller(model="sonnet")
 advisor = DesignAdvisor(brand="aigis", llm_caller=caller, mode="llm")
 ```
 
-Internally invokes `claude --print --bare --model <m> --no-session-persistence
---output-format text --append-system-prompt <playbook>` and pipes the user
-brief on stdin. The `--bare` flag skips hooks, plugins, MCP servers, and
-CLAUDE.md auto-discovery so Inkline supplies the entire prompt.
+**Default routing in DesignAdvisor._call_llm():**
+1. Custom injected `llm_caller` — highest priority
+2. Bridge at `bridge_url` (`INKLINE_BRIDGE_URL` env var overrides) — zero API cost
+3. Anthropic SDK with explicit `api_key` — only if bridge unreachable + key provided
 
 ### 4.7 Template catalog — `inkline.intelligence.template_catalog`
 
@@ -618,15 +658,146 @@ plus matplotlib label clipping. `audit_rendered_pdf()` walks a compiled
 PDF and reports per-page issues.
 
 **Visual pass** — Claude vision audit (`audit_slide_with_llm()`,
-`audit_deck_with_llm()`) — renders the compiled PDF to PNGs and posts
-each page to Claude with a strict JSON-only system prompt. Claude inspects
-for actual visual problems (overflowing text, clipped charts, illegible
-contrast, off-brand colours) and returns `AuditWarning` objects with the
-same shape as the structural pass. Falls back to silent no-op if no API
-key. This is the audit pass that catches what `SLIDE_CAPACITY` cannot.
+`audit_deck_with_llm()`) — renders the compiled PDF to PNGs and posts each
+page to Claude via the bridge `/vision` endpoint (falls back to SDK only if
+an explicit `api_key` is passed — never reads `ANTHROPIC_API_KEY` from env).
+Claude inspects for actual visual problems and returns `AuditWarning` objects.
 
-`export_typst_slides()` calls `audit_deck()` automatically and logs
-warnings. Pass `audit=False` to opt out. The visual pass is opt-in.
+`export_typst_slides()` calls the audit loop automatically. Pass `audit=False`
+to opt out of the closed-loop system entirely.
+
+### 8.5 Closed-loop overflow fixer (`slide_fixer.py`)
+
+`apply_graduated_fixes()` is called inside the inner overflow loop with an
+escalating attempt number:
+
+| Attempt | Fix strategy | Adds slides? |
+|---------|-------------|--------------|
+| 1 | Content reduction — trim bullets, shorten title to 50 chars, drop footnote | No |
+| 2 | Typst source micro-adjustments — reduce spacing/font/padding in `.typ` string | No |
+| 3 | Type downgrade — replace complex type with simpler one (see map below) | No |
+| 4 | Selective split — only `content`/`table` slides with ≥ 4 items | Yes |
+| 5+ | Aggressive combo — content reduction + type downgrade together | No |
+
+**Type downgrade map (`_DOWNGRADE_MAP`):**
+
+```python
+{
+    "chart_caption": "split",      # drop chart; keep title+bullets as 2-col
+    "dashboard":     "chart_caption",
+    "feature_grid":  "content",
+    "comparison":    "split",
+    "split":         "content",
+    "four_card":     "three_card",
+    "three_card":    "content",
+    "table":         "content",
+    "timeline":      "content",
+    "icon_stat":     "kpi_strip",  # compact strip; no desc text
+    "kpi_strip":     "content",
+    "progress_bars": "content",
+}
+```
+
+**Key design decisions:**
+- Type downgrade (attempt 3) always runs before split (attempt 4). Splitting
+  adds slides and grows the page count; downgrade converts in-place.
+- Only `content` and `table` types are splittable (`_SPLITTABLE_TYPES`). Chart
+  and card types overflow due to layout constraints, not item count — splitting
+  them produces two identically-overflowing slides.
+- Minimum 4 items required before splitting (splitting 3-item slides into
+  1+2 produces degenerate near-empty slides).
+
+**Hard caps enforced in `validate_and_fix_slides()`:**
+
+```python
+MAX_TITLE_CHARS    = 50
+MAX_BULLET_CHARS   = 200
+MAX_CARD_BODY_CHARS = 80
+TABLE_MAX_ROWS     = 6
+TABLE_MAX_COLS     = 6
+```
+
+### 8.6 Vishwakarma design philosophy (`vishwakarma.py`)
+
+Four laws baked into all Inkline LLM system prompts and routing logic:
+
+**I. Visual hierarchy** — 5-tier decision ladder (must prefer higher tiers):
+- Tier 1 (infographic): `icon_stat`, `kpi_strip`, `feature_grid`, `pyramid`, `progress_bars`
+- Tier 2 (chart exhibit): `chart_caption`, `dashboard`, `bar_chart`
+- Tier 3 (structural visual): `three_card`, `four_card`, `comparison`, `split`, `timeline`, `process_flow`
+- Tier 4 (data table): `table` — ≤ 6×6 only
+- Tier 5 (text bullets): `content` — at most 1 per deck
+
+Scoring rule: ≥ 50% slides should be Tier 1 or 2; ≤ 1 `content` slide per deck.
+
+**II. Bridge first** — All LLM calls (text + vision) try the local bridge
+before the Anthropic API. Prevents accidental API credit spend.
+
+**III. Visual audit mandatory** — Two-agent design dialogue on every deck.
+Auditor (vision) checks rendered PNGs; advisor revises from findings.
+
+**IV. Archon oversight** — A single `Archon` supervisor instance per pipeline
+run is the one point of contact. It owns phase tracking, issue logging, and
+the final structured report the user sees.
+
+**Exported constants:**
+```python
+VISHWAKARMA_SYSTEM_PREAMBLE   # injected into DesignAdvisor system prompt
+VISHWAKARMA_AUDIT_CRITERIA    # injected into visual auditor system prompt
+VISUAL_HIERARCHY              # full text of Law I
+BRIDGE_FIRST                  # full text of Law II
+AUDIT_MANDATORY               # full text of Law III
+ARCHON_OVERSIGHT              # full text of Law IV
+```
+
+### 8.7 Archon pipeline supervisor (`archon.py`)
+
+`Archon` is a per-run pipeline supervisor. It attaches a logging handler to
+the root `inkline` logger and captures every WARNING/ERROR/INFO emitted during
+the run, keyed by phase.
+
+```python
+from inkline.intelligence.archon import Archon, Issue, PhaseResult
+
+@dataclass
+class Issue:
+    phase: str
+    severity: str   # "INFO" | "WARNING" | "ERROR"
+    message: str
+    detail: str = ""   # traceback or extended context
+
+@dataclass
+class PhaseResult:
+    name: str
+    started: datetime
+    ended: datetime | None
+    ok: bool
+    issues: list[Issue]
+
+class Archon:
+    def __init__(self, report_path: Path, title: str = "", verbose: bool = True)
+    def start_phase(self, name: str) -> PhaseResult
+    def end_phase(self, phase: PhaseResult, ok: bool) -> None
+    def record(self, issue: Issue) -> None
+    def write_report(self) -> None    # Markdown to report_path
+    def detach(self) -> None          # remove logging handler
+```
+
+Usage pattern (from `gen_corsair_deck.py`):
+```python
+archon = Archon(WORK_DIR / "archon_issues.md", title="Project Corsair Board DD Deck")
+phase = archon.start_phase("design_advisor_llm")
+try:
+    slides = advisor.design_deck(...)
+    archon.end_phase(phase, ok=True)
+except Exception as e:
+    archon.record(Issue(phase="design_advisor_llm", severity="ERROR",
+                         message=str(e), detail=traceback.format_exc()))
+    archon.end_phase(phase, ok=False)
+    archon.write_report()
+    archon.detach()
+    sys.exit(1)
+```
 
 ---
 
@@ -636,17 +807,40 @@ warnings. Pass `audit=False` to opt out. The visual pass is opt-in.
 slides (list[dict])
   │
   ▼
-overflow_audit.audit_deck() ──▶ log warnings
+PHASE 0: brand + template ──▶ theme (dict)
   │
   ▼
-brand + template ──▶ theme (dict)
+PHASE 1: chart auto-rendering (one-time; skipped if image_path exists)
   │
   ▼
-TypstSlideRenderer(theme).render_deck(DeckSpec)
-  │  (emits .typ source string)
+PHASE 2: validate_and_fix_slides() — enforce hard caps (title 50, card 80, table 6×6)
+         equalise_card_heights()   — pad shorter cards to match tallest
+  │
   ▼
-compile_typst(source, output_path, root, font_paths)
-  │  (invokes typst-py with bundled fonts + user font_paths)
+PHASE 3: OUTER LOOP (visual quality, max max_visual_attempts rounds)
+  │
+  ├── INNER LOOP (structural overflow, max max_overflow_attempts attempts)
+  │     │
+  │     ├── TypstSlideRenderer(theme).render_deck(DeckSpec)  → .typ source
+  │     ├── compile_typst(source, output_path, root, font_paths)
+  │     ├── count pages in compiled PDF
+  │     │
+  │     ├── [pages == slides] ──▶ break inner loop ✓
+  │     └── [pages > slides]  ──▶ identify_overflow_slides()
+  │                                  ▶ apply_graduated_fixes(attempt++)
+  │                                  ▶ loop
+  │
+  ├── POST-OVERFLOW: audit_rendered_pdf(), audit_chart_images()
+  │
+  ├── LLM VISUAL AUDIT: audit_deck_with_llm()
+  │     │  (sends each slide PNG to Claude via bridge /vision)
+  │     │
+  │     ├── [no errors]    ──▶ break outer loop ✓ ship PDF
+  │     └── [errors found] ──▶ revise_slides_from_review()
+  │                              ▶ re-enter inner loop
+  │
+  └── PHASE 4: emit_audit_report() ── final AuditWarning list to logs
+  │
   ▼
 PDF on disk
 ```
@@ -755,17 +949,47 @@ layer, template catalog, and LLM injection.
 
 ## 14. Versioning & changelog
 
-- **0.3.0** *(current)* —
+- **0.3.x** *(current, 2026-04-13)* —
+  - **Vishwakarma design philosophy** — four laws (`VISUAL_HIERARCHY`,
+    `BRIDGE_FIRST`, `AUDIT_MANDATORY`, `ARCHON_OVERSIGHT`) baked into all
+    LLM system prompts via `inkline.intelligence.vishwakarma`.
+    Tier-1/2 visual slides mandated; ≤ 1 `content` bullet slide per deck.
+  - **Bridge-first routing** — all LLM calls (text + vision) routed through
+    local Claude bridge (`localhost:8082`) before Anthropic API. Visual
+    audit uses new `/vision` endpoint (stream-json multimodal input).
+    `audit_deck_with_llm` never auto-reads `ANTHROPIC_API_KEY` from env.
+  - **Bridge auto-start** — `ensure_bridge_running()` in `claude_code.py`
+    checks health and starts `~/.config/inkline/claude_bridge.py` if not
+    running. Called automatically before every bridge LLM request.
+  - **Dynamic bridge timeout** — `min(600, max(180, 180 + (KB)*4 + 60))`
+    scales with prompt size; prevents timeouts on large design prompts.
+  - **Narrative truncation** — `MAX_NARRATIVE_CHARS = 1200` per section in
+    `DesignAdvisor._build_user_prompt()` keeps total prompt under 80 K chars.
+  - **Archon pipeline supervisor** — `inkline.intelligence.archon.Archon`:
+    phase tracking, log interception (root `inkline` logger only), structured
+    Markdown issues report. `Issue` + `PhaseResult` dataclasses.
+  - **Overflow fixer convergence fixes** — attempt order: type_downgrade
+    (attempt 3) before slide_split (attempt 4). `_SPLITTABLE_TYPES` restricts
+    splitting to `content`/`table` only. `chart_caption` added to
+    `_DOWNGRADE_MAP`. New conversion handlers for `chart_caption→split`,
+    `icon_stat→kpi_strip`, `kpi_strip/progress_bars→content`. Minimum 4
+    items before splitting. `max_overflow_attempts` default 3→6.
+  - **Hard caps tightened** — `MAX_TITLE_CHARS` 75→50; `MAX_CARD_BODY_CHARS`
+    = 80; `TABLE_MAX_ROWS` = `TABLE_MAX_COLS` = 6.
+  - **Model IDs updated** — `claude-sonnet-4-20250514` → `claude-sonnet-4-6`
+    throughout `design_advisor.py`, `overflow_audit.py`.
+  - **AuditWarning fix** — constructor kwargs corrected in `typst/__init__.py`
+    overflow-finding conversion.
+  - **Off-by-one fix** — overflow slide index now 1-based for
+    `revise_slides_from_review`.
+
+- **0.3.0** *(2026-04-09)* —
   - **Pluggable LLM caller** — `DesignAdvisor(llm_caller=...)` accepts any
-    `Callable[[system, user], str]`. Default path is the Anthropic SDK; the
-    bundled `inkline.intelligence.claude_code` provides a Claude Code
-    subprocess bridge that uses the user's logged-in Pro/Max subscription
-    with no API key spend.
-  - **Template catalog** — 771 real-world slide templates indexed across
-    SlideModel + Genspark Professional + Genspark Creative manifests, plus
-    16 structured archetype recipes (`iceberg`, `funnel_ribbon`, `waffle`,
-    `dual_donut`, etc.) wired into the design advisor via
-    `reference_archetypes=`.
+    `Callable[[system, user], str]`. Default path is Anthropic SDK; bundled
+    `claude_code` module provides Claude Code subprocess bridge with no
+    API key spend.
+  - **Template catalog** — 771 real-world slide templates + 16 archetype
+    recipes wired into the design advisor via `reference_archetypes=`.
   - **Visual audit (Claude vision)** — `audit_slide_with_llm()` and
     `audit_deck_with_llm()` post compiled slide PNGs to Claude for
     pixel-grounded layout/contrast/overflow checks.
@@ -773,13 +997,8 @@ layer, template catalog, and LLM injection.
     numbers; illustrative content auto-tagged in the renderer.
   - **3 new slide types** — `feature_grid`, `dashboard`, `chart_caption`
     (total: 20).
-  - **Tighter capacities** — most layouts dropped 2 items based on
-    visual-audit feedback; tables and bullets auto-shrink as a final
-    safety net.
-  - **Chart fixes** — matplotlib label clipping, `progress_bars` rainbow
-    palette, `audit_chart_image` for chart-level inspection.
-  - **Brand colour discipline** — accent / muted distinction enforced in
-    the slide renderer chrome.
+  - **Closed-loop fixer** — `slide_fixer.py` with `apply_graduated_fixes()`
+    nested inside `export_typst_slides()` two-loop QA pipeline.
   - **9 design playbooks** (was 3) — added `infographic_styles`,
     `slide_layouts`, `chart_selection`, `document_design`,
     `visual_libraries`, `template_catalog`.

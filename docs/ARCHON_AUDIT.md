@@ -1,244 +1,223 @@
-# Archon Audit Workflow for Inkline Output
+# Inkline Archon Audit Pipeline
 
-**Purpose:** Ensure every deck and exhibit Inkline produces fits cleanly on the
-slide frame, uses brand-consistent chart sizing, and doesn't silently truncate
-content.
+**Purpose:** Every Inkline pipeline run is supervised by an `Archon` instance
+that intercepts all log records, tracks named phases, and writes a structured
+Markdown issues report at completion. This gives every pipeline run a single
+point of contact and a machine-readable audit trail.
 
-**Applies to:** Any caller that invokes `inkline.typst.export_typst_slides()`,
-`inkline.typst.export_typst_document()`, or `inkline.typst.chart_renderer.render_chart_for_brand()`.
-
----
-
-## 1. Why this exists
-
-Early test decks had two recurring issues:
-
-1. **Exhibit PNGs were oversized.** Matplotlib defaulted to 10″×5.5″ which,
-   when scaled to 90% of the slide width (20.7 cm), pushed the image beyond the
-   usable body area (8.5 cm) and either overflowed the next slide or got
-   clipped by Typst's page fill.
-
-2. **Slide content overflowed silently.** The design advisor would happily
-   return a `content` slide with 15 bullets; the renderer had no hard cap and
-   everything after bullet 10 or so ran off the bottom.
-
-Both failures were invisible in logs — they only showed up when a human opened
-the PDF. The Archon audit workflow catches both classes of problem *before*
-the PDF is compiled and flags them for correction.
+**Module:** `inkline.intelligence.archon`
 
 ---
 
-## 2. The built-in audit
+## 1. Why Archon exists
 
-`inkline.intelligence.overflow_audit` ships with three audit primitives:
+Production Inkline pipelines have 4–6 phases (parse → design → render → audit →
+copy output). Failures happen in any phase. Without a supervisor:
+- Errors from the Typst compiler, LLM bridge, chart renderer, and overflow fixer
+  all go to different log streams with different formats.
+- There is no single file to read when something goes wrong.
+- Phase timing is invisible.
+
+Archon solves all three: it attaches once to the root `inkline` logger and
+captures everything, tagged by phase, written to a predictable Markdown file.
+
+---
+
+## 2. Core API
+
+```python
+from inkline.intelligence.archon import Archon, Issue, PhaseResult
+
+@dataclass
+class Issue:
+    phase: str
+    severity: str   # "INFO" | "WARNING" | "ERROR"
+    message: str
+    detail: str = ""   # optional traceback or extended context
+
+@dataclass
+class PhaseResult:
+    name: str
+    started: datetime
+    ended: datetime | None
+    ok: bool
+    issues: list[Issue]
+
+class Archon:
+    def __init__(
+        self,
+        report_path: Path | str,
+        title: str = "",
+        verbose: bool = True,
+    ) -> None: ...
+
+    def start_phase(self, name: str) -> PhaseResult: ...
+    def end_phase(self, phase: PhaseResult, ok: bool) -> None: ...
+    def record(self, issue: Issue) -> None: ...
+    def write_report(self) -> None: ...
+    def detach(self) -> None: ...
+```
+
+**Logging integration:** Archon attaches `_ArchonHandler` to the **root `inkline`
+logger only** (all child loggers — `inkline.typst`, `inkline.intelligence`, etc. —
+propagate up). DEBUG records are skipped (too noisy). This means you never need
+to wire up multiple loggers; Archon sees everything automatically.
+
+---
+
+## 3. Usage pattern
+
+```python
+from pathlib import Path
+import traceback, sys
+from inkline.intelligence.archon import Archon, Issue
+
+archon = Archon(Path("work_dir/run_issues.md"), title="My Pipeline Run")
+
+# Phase 1
+phase = archon.start_phase("design_advisor_llm")
+try:
+    slides = advisor.design_deck(...)
+    archon.record(Issue(
+        phase="design_advisor_llm", severity="INFO",
+        message=f"DesignAdvisor produced {len(slides)} slides",
+    ))
+    archon.end_phase(phase, ok=True)
+except Exception as e:
+    archon.record(Issue(
+        phase="design_advisor_llm", severity="ERROR",
+        message=str(e), detail=traceback.format_exc(),
+    ))
+    archon.end_phase(phase, ok=False)
+    archon.write_report()
+    archon.detach()
+    sys.exit(1)
+
+# Phase 2 ...
+
+# Done
+archon.write_report()
+archon.detach()
+```
+
+---
+
+## 4. The overflow audit — what Archon captures
+
+The closed-loop QA pipeline in `export_typst_slides()` emits detailed logs for
+every fix attempt. Archon captures all of them:
+
+```
+Phase: export_pdf_with_audit
+  INFO  Pre-render fixer applied 4 fixes to 18 slides
+  INFO  Overflow inner loop: attempt 1 on slides [3, 7, 12]
+  INFO  Overflow fix attempt 1: content_reduction on slide 3
+  INFO  Overflow inner loop: attempt 2 on slides [7, 12]
+  INFO  Overflow fix attempt 3: type_downgrade on slide 7 (chart_caption → split)
+  INFO  Overflow fix attempt 3: type_downgrade on slide 12 (icon_stat → kpi_strip)
+  INFO  Inner loop converged: 18 slides → 18 pages
+  INFO  Visual audit: 2 errors, 1 warning — re-rendering (attempt 1/3)
+  INFO  Visual audit attempt 1: fixed 2 issues, re-rendering
+  INFO  Visual audit: 0 errors → clean pass
+  INFO  PDF rendered: output.pdf (2,847,301 bytes)
+```
+
+---
+
+## 5. Report format
+
+`write_report()` produces a Markdown file:
+
+```markdown
+# Archon Issues Report — My Pipeline Run
+Generated: 2026-04-13 14:32:17
+
+## Summary
+| Phase | Status | Errors | Warnings | Info |
+|-------|--------|--------|----------|------|
+| parse_markdown | ✅ OK | 0 | 0 | 1 |
+| design_advisor_llm | ✅ OK | 0 | 1 | 2 |
+| export_pdf_with_audit | ✅ OK | 0 | 0 | 8 |
+| copy_final_pdf | ✅ OK | 0 | 0 | 1 |
+
+## Phase: design_advisor_llm (12.4s)
+...
+```
+
+---
+
+## 6. Integration with gen scripts
+
+Archon is importable directly from `inkline.intelligence`:
+
+```python
+from inkline.intelligence import Archon, Issue
+# or
+from inkline.intelligence.archon import Archon, Issue, PhaseResult
+```
+
+The Corsair gen script (`gen_corsair_deck.py`) is the reference implementation:
+five phases, all wrapped with `start_phase`/`end_phase`, fatal phases call
+`write_report()` + `detach()` + `sys.exit(1)`.
+
+---
+
+## 7. Structural overflow audit functions
+
+The following remain available as standalone functions in
+`inkline.intelligence.overflow_audit`:
 
 ```python
 from inkline.intelligence import audit_deck, audit_slide, audit_image, format_report
-```
 
-### `audit_deck(slides: list[dict]) -> list[AuditWarning]`
-Walks every slide, looks up its layout in `SLIDE_CAPACITY`, and compares actual
-content length to the capacity. Also checks bullet/label text length for
-wrap-risk (>220 chars), and calls `audit_image()` on any referenced chart PNG.
-
-### `audit_image(path, *, max_width_cm=20.7, max_height_cm=8.5, dpi=200)`
-Opens the PNG with Pillow, converts pixels to cm at the target DPI, and
-computes what its height would be when scaled to slide width. Flags:
-- Images that would exceed `max_height_cm` when fit to width.
-- Aspect ratios under 1.2 (nearly square / tall → poor for 16:9 slides).
-- Missing files.
-
-### `format_report(warnings)`
-Renders the list of `AuditWarning` objects as a human-readable block, grouped
-by severity (error / warn / info).
-
----
-
-## 3. When it runs automatically
-
-`export_typst_slides(..., audit=True)` (default) runs `audit_deck()` *before*
-invoking the Typst compiler. Warnings are logged at `WARNING` level via the
-`inkline.typst` logger. Example:
-
-```
-WARNING inkline.typst: Inkline overflow audit:
-OVERFLOW AUDIT: 0 errors, 2 warnings, 0 info
------------------------------------------
-[WARN] slide 3 (content): field 'items' has 14 items but slide capacity is 8.
-       Excess items will be truncated by the renderer. Consider splitting into
-       multiple slides.
-[WARN] slide 5 (chart): image exhibit_1.png is 2000x1100px (25.4x14.0cm @ 200dpi);
-       when fit to slide width it would be 11.3cm tall (max 8.5cm). Re-render
-       with smaller matplotlib figsize (e.g. 8x4 inches) or use height constraint.
-```
-
-The renderer *also* applies hard caps at render time as a safety net
-(`TypstSlideRenderer.MAX_BULLETS=8`, `MAX_TABLE_ROWS=12`, etc.), so nothing
-actually overflows even if the audit is ignored — but the warnings tell the
-caller to reshape the input next time.
-
----
-
-## 4. How Archon integrates
-
-The Archon review loop (in Aria's codebase, but the pattern applies to any
-orchestrator) should add Inkline audit results to its evidence trail:
-
-### 4.1 Before generation
-```python
-from inkline.intelligence import audit_deck, format_report
-
-warnings = audit_deck(proposed_slides)
-if any(w.severity == "error" for w in warnings):
-    # Block generation — send back to the advisor to replan
-    return replan_deck(proposed_slides, warnings)
-```
-
-### 4.2 During generation
-Capture the audit log from `export_typst_slides()`:
-
-```python
-import logging
-log_capture = logging.handlers.MemoryHandler(capacity=1024)
-logging.getLogger("inkline.typst").addHandler(log_capture)
-
-export_typst_slides(slides, output_path, brand=brand)
-
-audit_records = [r.getMessage() for r in log_capture.buffer
-                 if "overflow audit" in r.getMessage()]
-```
-
-### 4.3 After generation
-Open the produced PDF (via `pdfinfo` or `pdf2image`) and confirm:
-- Page count matches `len(slides)` — no unexpected extra pages (classic overflow symptom).
-- No blank final page (happens when content bleeds past the body).
-- Any embedded images stay within the safe area.
-
-### 4.4 Audit trail
-Record every audit pass in the Archon evidence database:
-
-```python
-archon.record_evidence(
-    source="inkline_overflow_audit",
-    outcome="OK" if not warnings else "WARN",
-    details={
-        "deck": output_path,
-        "slide_count": len(slides),
-        "warnings": [str(w) for w in warnings],
-        "auto_truncated": any(w.severity == "warn" for w in warnings),
-    },
-)
-```
-
----
-
-## 5. Agent workflow
-
-When a Claude/Aria agent is asked to "make a pitch deck":
-
-```
-1. Plan structure ──▶ DesignAdvisor.design_deck()
-                     │
-                     ▼
-2. Pre-audit    ──▶ audit_deck(slides)
-                     │ (errors → back to step 1)
-                     │ (warnings → acceptable, continue)
-                     ▼
-3. Render       ──▶ export_typst_slides(audit=True)
-                     │ (auto-runs audit_deck() again and logs)
-                     ▼
-4. Post-check   ──▶ verify PDF page count, open page 1 as image
-                     │
-                     ▼
-5. Deliver      ──▶ attach PDF + audit summary to Archon evidence
-```
-
----
-
-## 6. Chart sizing rules for agents
-
-When writing code that produces PNG exhibits for slide embedding:
-
-1. **Default figsize is safe.** `render_chart()` now defaults to `width=8.0,
-   height=4.0` inches, which at 200 dpi is 1600×800 px → 20.3×10.2 cm → fits
-   comfortably within the 20.7×8.5 cm image budget.
-
-2. **Don't override figsize upward.** If an agent wants a bigger chart, it
-   should instead use a dedicated `chart` slide and keep figsize ≤ 8×4.
-
-3. **Let Typst do the scaling.** The `chart` slide embed is now
-   `image("...", width: 90%, height: 8.5cm)` — Typst will letterbox the image
-   into that box, preserving aspect ratio.
-
-4. **For tables of numbers, use `table` slide — not a chart PNG.**
-   Tables render as native Typst, reflow correctly, and the audit knows their
-   capacity.
-
----
-
-## 7. Failure modes the audit catches
-
-| Symptom in PDF                                 | Audit warning                                       |
-|------------------------------------------------|-----------------------------------------------------|
-| Bullets cut off at bottom of slide             | `field 'items' has N items but slide capacity is 8` |
-| Table runs onto a second (blank) page          | `field 'rows' has N items but slide capacity is 12` |
-| Chart PNG clipped at the bottom                | `image ... would be N cm tall (max 8.5 cm)`         |
-| Chart looks tiny and square                    | `aspect ratio X is nearly square/tall`              |
-| `image not found` Typst compile error          | `image_path '...' does not exist`                   |
-| Process flow with 8+ steps runs off the side   | `field 'steps' has N items but slide capacity is 5` |
-
----
-
-## 8. Extending the audit
-
-To add a new slide type to the audit:
-
-1. Add it to `SLIDE_CAPACITY` in `intelligence/layout_selector.py`.
-2. Add the content field(s) to `_CONTENT_FIELDS` in
-   `intelligence/overflow_audit.py` (supports dotted paths like
-   `"left.items"`).
-3. Add a `MAX_*` constant on `TypstSlideRenderer` and truncate the input in
-   the corresponding `_*_slide()` method.
-
-The audit will pick up the new type automatically.
-
----
-
-## 9. Running the audit standalone
-
-```bash
-python -c "
-from inkline.intelligence import audit_deck, format_report
-import json
-slides = json.load(open('my_deck.json'))
-print(format_report(audit_deck(slides)))
-"
-```
-
-Or from code:
-
-```python
-from inkline.intelligence import audit_deck, format_report
-
-warnings = audit_deck(my_slides)
+# Structural (no API)
+warnings = audit_deck(slides)
+warnings = audit_slide(slide_index, slide_type, data)
+warnings = audit_image(path, max_width_cm=20.7, max_height_cm=8.5)
+warnings = audit_rendered_pdf(pdf_path, expected_slides)
 print(format_report(warnings))
+
+# Visual (bridge /vision or explicit api_key)
+warnings = audit_deck_with_llm(pdf_path, slides, bridge_url="http://localhost:8082")
+```
+
+**`AuditWarning` dataclass:**
+```python
+@dataclass
+class AuditWarning:
+    slide_index: int
+    slide_type: str
+    severity: str   # "info" | "warn" | "error"
+    message: str
 ```
 
 ---
 
-## 10. Guarantees
+## 8. Failure modes the audit catches
 
-With `audit=True` (default):
+| Symptom in PDF | Audit source | Warning |
+|----------------|-------------|---------|
+| Bullets cut off at bottom | Structural | `field 'items' has N > capacity` |
+| Table runs onto second page | Structural | `field 'rows' has N > 6` |
+| Chart PNG clipped | `audit_image` | `image would be N cm tall (max 8.5 cm)` |
+| Page count > slide count | `audit_rendered_pdf` | `actual=N pages > expected=M slides` |
+| Text visually overflowing | LLM vision | ERROR finding → triggers revision |
+| Off-brand colour | LLM vision | WARN finding → logged, not auto-fixed |
 
-- **No silent overflow.** Any content that exceeds a layout's capacity will
-  generate a `WARN`-level log line.
+---
+
+## 9. Guarantees
+
+With `audit=True` (default in `export_typst_slides`):
+
+- **No silent overflow.** Any content exceeding layout capacity generates a
+  `WARN`-level log line (captured by Archon).
 - **No missing images.** Referenced `image_path` values that don't exist
-  generate `ERROR`-level warnings.
-- **No oversized charts.** PNGs that would exceed 8.5 cm tall when fit to
-  slide width generate a `WARN`-level recommendation.
-- **No long-wrap bullets.** Individual bullets >220 characters are flagged.
-- **Truncation is deterministic.** Even with the audit disabled, the renderer
-  truncates to hard limits so nothing renders off-page.
-
-The audit is cheap (microseconds), safe (never throws), and idempotent. It
-should be on by default in every production Inkline pipeline.
+  generate `ERROR`-level warnings before compile.
+- **Auto-fix convergence.** The inner loop runs up to `max_overflow_attempts`
+  (default 6) fix attempts; the outer loop runs up to `max_visual_attempts`
+  (default 3) vision-dialogue rounds. Exit on: clean pass, no actionable
+  fixes, or max rounds reached — never infinite loop.
+- **Zero API spend by default.** Visual audit routes through the bridge
+  (`/vision` endpoint). `ANTHROPIC_API_KEY` is never read from the environment
+  automatically; pass `api_key=` explicitly to opt in to SDK fallback.
