@@ -655,9 +655,14 @@ class DesignAdvisor:
         """
         from inkline.intelligence.playbooks import load_playbook, load_playbook_summary
 
-        # Tiered playbook loading — full for core, summary for bulk reference
-        CORE_PLAYBOOKS = ["slide_layouts", "professional_exhibit_design"]
-        SUMMARY_PLAYBOOKS = ["template_catalog", "typography", "color_theory"]
+        # Tiered playbook loading — all as summaries to keep total system prompt
+        # under ~40K chars. SLIDE_TYPE_GUIDE + VISHWAKARMA already cover the
+        # essential layout rules; playbooks add depth, not the primary source.
+        CORE_PLAYBOOKS: list[str] = []
+        SUMMARY_PLAYBOOKS = [
+            "slide_layouts", "professional_exhibit_design",
+            "template_catalog", "typography", "color_theory",
+        ]
 
         from inkline.intelligence.vishwakarma import VISHWAKARMA_SYSTEM_PREAMBLE
 
@@ -718,9 +723,12 @@ class DesignAdvisor:
                 log.warning("Failed to load core playbook '%s': %s", name, e)
 
         # Summary playbooks: condensed to reduce token count
+        # professional_exhibit_design gets 6K to capture exhibit-type rules;
+        # others stay at 4K.
+        SUMMARY_MAX = {"professional_exhibit_design": 6000}
         for name in SUMMARY_PLAYBOOKS:
             try:
-                content = load_playbook_summary(name, max_chars=4000)
+                content = load_playbook_summary(name, max_chars=SUMMARY_MAX.get(name, 4000))
                 parts.append(f"## {name.replace('_', ' ').title()} (summary)")
                 parts.append(content)
                 parts.append("")
@@ -878,21 +886,36 @@ class DesignAdvisor:
         contact: Optional[dict],
     ) -> list[dict[str, Any]]:
         """Parse the LLM's JSON response into slide specs."""
-        # Extract JSON from markdown code block
-        json_str = content
+        # Extract JSON — handle fenced code blocks OR bare JSON array/object
+        json_str = content.strip()
         if "```json" in content:
-            start = content.index("```json") + 7
-            end = content.index("```", start)
-            json_str = content[start:end].strip()
+            try:
+                start = content.index("```json") + 7
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
         elif "```" in content:
-            start = content.index("```") + 3
-            end = content.index("```", start)
-            json_str = content[start:end].strip()
+            try:
+                start = content.index("```") + 3
+                end = content.index("```", start)
+                json_str = content[start:end].strip()
+            except ValueError:
+                pass
+
+        # If still not starting with [ or {, try to find the first array/object
+        if json_str and json_str[0] not in ("[", "{"):
+            for bracket in ("[", "{"):
+                idx = json_str.find(bracket)
+                if idx != -1:
+                    json_str = json_str[idx:]
+                    break
 
         try:
             slides = json.loads(json_str)
         except json.JSONDecodeError as e:
-            log.error("Failed to parse LLM response as JSON: %s", e)
+            log.error("Failed to parse LLM response as JSON: %s\nRaw response (first 500): %s",
+                      e, content[:500])
             raise
 
         # Validate slide types
