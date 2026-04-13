@@ -286,7 +286,7 @@ class DesignAdvisor:
         template: str = "brand",
         mode: str = "llm",
         api_key: str | None = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
         llm_caller: Optional["LLMCaller"] = None,
         bridge_url: str | None = None,
     ):
@@ -1074,11 +1074,26 @@ class DesignAdvisor:
 
         system_prompt = self._build_system_prompt()
 
+        # Check if any findings are overflow-related — require stricter constraints
+        has_overflow = any("overflow" in f.get("message", "").lower() for f in findings)
+
         parts = [
             "Fix ONLY the specific issues listed below. Return the revised slides as JSON.",
             "DO NOT change company names, numbers, or factual data.",
             "DO NOT add new image_path references.",
             "Only adjust layout, text formatting, or slide_type if needed.",
+        ]
+        if has_overflow:
+            parts += [
+                "",
+                "CRITICAL OVERFLOW CONSTRAINT:",
+                "- Each slide MUST fit on exactly ONE page. Overflow onto a second page is a hard failure.",
+                "- To fix overflow: reduce items, shorten text, or switch to a SIMPLER slide type.",
+                "- SAFE types that reliably fit: content, split, three_card, stat, icon_stat.",
+                "- AVOID or DOWNGRADE: feature_grid, dashboard, comparison, four_card, table with many rows.",
+                "- Do NOT switch to a denser slide type. If unsure, use 'content' with bullet points.",
+            ]
+        parts += [
             "",
             "Issues to fix:\n",
         ]

@@ -316,6 +316,14 @@ def apply_graduated_fixes(
         return _fix_source_spacing(slides, source, overflow_indices)
     elif attempt == 3:
         return _fix_slide_splitting(slides, source, overflow_indices)
+    elif attempt == 4:
+        # Nuclear option: downgrade complex types to content/split
+        return _fix_type_downgrade(slides, source, overflow_indices)
+    elif attempt >= 5:
+        # Last resort: aggressive truncation + type downgrade again
+        slides, source, changed = _fix_content_reduction(slides, source, overflow_indices)
+        slides2, source2, changed2 = _fix_type_downgrade(slides, source, overflow_indices)
+        return slides2, source2, changed or changed2
     else:
         return slides, source, False
 
@@ -457,6 +465,175 @@ def _split_one_slide(
             b["title"] = data.get("title", "") + " (cont.)"
             return a, b
     return None
+
+
+def _fix_type_downgrade(
+    slides: list[dict[str, Any]],
+    source: str,
+    indices: list[int],
+) -> tuple[list[dict[str, Any]], str, bool]:
+    """Attempt 4: downgrade complex overflow-prone slide types to simpler ones.
+
+    Complex types that frequently overflow are replaced by simpler equivalents
+    that reliably fit on one page regardless of content volume.
+
+    Downgrade map:
+      feature_grid  → content (flat bullet list)
+      comparison    → split   (two-column with bullets, not header+cards)
+      dashboard     → chart_caption (drop stat boxes)
+      four_card     → three_card   (remove last card)
+      table         → content (if many rows, convert to bullet list)
+    """
+    # Types ordered by overflow risk (most → least)
+    # Each type is downgraded to a simpler equivalent that fits on one page.
+    _DOWNGRADE_MAP = {
+        "feature_grid": "content",
+        "comparison":   "split",
+        "split":        "content",   # split with heavy content → flat list
+        "dashboard":    "chart_caption",
+        "four_card":    "three_card",
+        "three_card":   "content",   # if three_card still overflows → list
+        "table":        "content",
+        "timeline":     "content",   # timeline with many items → list
+        "icon_stat":    "content",
+    }
+    modified = False
+    for idx in indices:
+        if idx >= len(slides):
+            continue
+        slide = slides[idx]
+        stype = slide.get("slide_type", "")
+        target = _DOWNGRADE_MAP.get(stype)
+        if not target:
+            continue
+
+        data = dict(slide.get("data", {}))
+        new_data: dict[str, Any] = {}
+
+        if stype == "feature_grid" and target == "content":
+            # Convert feature cards to bullet strings
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            features = data.get("features", [])
+            items = []
+            for feat in features:
+                if isinstance(feat, dict):
+                    label = feat.get("title") or feat.get("label") or ""
+                    body = feat.get("body") or feat.get("desc") or ""
+                    items.append(f"{label}: {body}".strip(": ") if body else label)
+                else:
+                    items.append(str(feat))
+            new_data["items"] = items[:6]
+
+        elif stype == "comparison" and target == "split":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            left = data.get("left", {})
+            right = data.get("right", {})
+            left_items = left.get("items", []) if isinstance(left, dict) else []
+            right_items = right.get("items", []) if isinstance(right, dict) else []
+            new_data["left_title"] = (left.get("title", "Option A") if isinstance(left, dict) else "Option A")
+            new_data["right_title"] = (right.get("title", "Option B") if isinstance(right, dict) else "Option B")
+            new_data["left_items"] = [
+                (i if isinstance(i, str) else i.get("body", str(i))) for i in left_items[:4]
+            ]
+            new_data["right_items"] = [
+                (i if isinstance(i, str) else i.get("body", str(i))) for i in right_items[:4]
+            ]
+
+        elif stype == "dashboard" and target == "chart_caption":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            new_data["image_path"] = data.get("image_path", "")
+            new_data["chart_request"] = data.get("chart_request")
+            new_data["caption"] = data.get("insight", data.get("caption", ""))
+            bullets = data.get("bullets", [])
+            new_data["bullets"] = bullets[:3]
+
+        elif stype == "four_card" and target == "three_card":
+            new_data = dict(data)
+            cards = new_data.get("cards", [])
+            new_data["cards"] = cards[:3]
+
+        elif stype == "split" and target == "content":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            left_title = data.get("left_title", "")
+            right_title = data.get("right_title", "")
+            left_items = data.get("left_items", [])
+            right_items = data.get("right_items", [])
+            items = []
+            if left_title:
+                items.append(f"{left_title}:")
+            items.extend(
+                (i if isinstance(i, str) else i.get("body", str(i))) for i in left_items[:3]
+            )
+            if right_title:
+                items.append(f"{right_title}:")
+            items.extend(
+                (i if isinstance(i, str) else i.get("body", str(i))) for i in right_items[:3]
+            )
+            new_data["items"] = items[:6]
+
+        elif stype == "three_card" and target == "content":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            cards = data.get("cards", [])
+            items = []
+            for card in cards:
+                if isinstance(card, dict):
+                    title = card.get("title") or card.get("label") or ""
+                    body = card.get("body") or card.get("desc") or ""
+                    items.append(f"{title}: {body}".strip(": ") if body else title)
+                else:
+                    items.append(str(card))
+            new_data["items"] = items[:6]
+
+        elif stype in ("timeline", "icon_stat") and target == "content":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            field = "milestones" if stype == "timeline" else "stats"
+            items_raw = data.get(field, [])
+            items = []
+            for item in items_raw[:6]:
+                if isinstance(item, dict):
+                    label = item.get("label") or item.get("title") or item.get("date") or ""
+                    body = item.get("body") or item.get("desc") or item.get("event") or ""
+                    items.append(f"{label}: {body}".strip(": ") if body else label)
+                else:
+                    items.append(str(item))
+            new_data["items"] = items
+
+        elif stype == "table" and target == "content":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            headers = data.get("headers", [])
+            rows = data.get("rows", [])
+            items = []
+            for row in rows[:6]:
+                if isinstance(row, (list, tuple)) and len(row) > 0:
+                    label = str(row[0])
+                    rest = " | ".join(str(c) for c in row[1:] if c)
+                    items.append(f"{label}: {rest}" if rest else label)
+                elif isinstance(row, str):
+                    items.append(row)
+            new_data["items"] = items
+
+        else:
+            # Unhandled downgrade — keep original
+            continue
+
+        # Clean up None values
+        new_data = {k: v for k, v in new_data.items() if v is not None}
+
+        slides[idx] = {"slide_type": target, "data": new_data}
+        log.info(
+            "Overflow fix attempt 4 (type downgrade): slide %d %s → %s",
+            idx, stype, target,
+        )
+        modified = True
+
+    return slides, source, modified
 
 
 # =========================================================================

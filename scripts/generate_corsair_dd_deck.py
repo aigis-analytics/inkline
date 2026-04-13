@@ -130,7 +130,6 @@ try:
         date="28 February 2026",
         subtitle="Proposed Acquisition of Byron Energy LLC",
         audit=True,
-        audit_visual=False,   # skip LLM visual audit for this test run
         auto_fix=True,
     )
     print(f"\n{'='*60}")

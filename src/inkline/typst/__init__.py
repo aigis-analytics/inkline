@@ -173,9 +173,8 @@ def export_typst_slides(
     font_paths: Optional[list[str | Path]] = None,
     image_root: Optional[str | Path] = None,
     audit: bool = True,
-    audit_visual: bool = True,
     auto_fix: bool = True,
-    max_overflow_attempts: int = 3,
+    max_overflow_attempts: int = 6,
     max_visual_attempts: int = 5,
 ) -> Path:
     """Generate a slide deck PDF with closed-loop quality assurance.
@@ -186,6 +185,10 @@ def export_typst_slides(
     - **Outer loop** (LLM-driven): runs Claude vision audit on every slide,
       applies targeted fixes for ERROR findings, and re-renders until the
       visual auditor gives a clean pass.
+
+    The visual audit is an integral part of the quality loop and always runs
+    when ``audit=True``. There is no mechanism to disable it independently —
+    if you don't want quality checking at all, pass ``audit=False``.
 
     Parameters
     ----------
@@ -204,9 +207,8 @@ def export_typst_slides(
     image_root : Path, optional
         Root directory for image resolution.
     audit : bool
-        Enable audit checks (default True).
-    audit_visual : bool
-        Enable LLM visual audit in the outer loop (default True).
+        Enable quality assurance loop (overflow detection + visual audit).
+        Pass ``False`` only in tests or draft previews. Default: True.
     auto_fix : bool
         Enable closed-loop auto-fixing (default True).
     max_overflow_attempts : int
@@ -315,6 +317,9 @@ def export_typst_slides(
 
             if actual == expected:
                 break  # No overflow
+            if actual == 0:
+                log.debug("Page count unavailable (no PDF reader installed) — skipping overflow detection")
+                break  # Can't detect overflow without a PDF reader
 
             if overflow_attempt >= max_overflow_attempts or not auto_fix:
                 _verify_page_count(output_path, expected)
@@ -335,6 +340,19 @@ def export_typst_slides(
                 log.warning("Overflow fix failed: %s", e)
                 break
 
+        # Re-identify any slides that still overflow after inner loop maxed out.
+        # (Indices must be fresh — earlier passes may have split/added slides.)
+        persistent_overflow_indices: list[int] = []
+        if audit and auto_fix:
+            final_actual = _count_pages(output_path)
+            if 0 < final_actual != len(slides):
+                try:
+                    from inkline.intelligence.slide_fixer import identify_overflow_slides
+                    persistent_overflow_indices = identify_overflow_slides(output_path, slides, source or "")
+                    log.info("Persistent overflow after inner loop: slides %s", persistent_overflow_indices)
+                except Exception:
+                    pass
+
         # --- Post-overflow audits ---
         if not audit:
             break
@@ -349,6 +367,28 @@ def export_typst_slides(
 
         post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
 
+        # If the inner loop maxed out with specific overflow slides, inject
+        # per-slide ERROR warnings so the visual dialogue knows which slides to fix.
+        if persistent_overflow_indices:
+            try:
+                from inkline.intelligence.overflow_audit import AuditWarning
+                for idx in persistent_overflow_indices:
+                    if idx < len(slides):
+                        stype = slides[idx].get("slide_type", "unknown")
+                        stitle = slides[idx].get("data", {}).get("title", "")[:50]
+                        post_warnings.append(AuditWarning(
+                            slide_index=idx + 1,  # 1-based to match audit_deck_with_llm convention
+                            slide_type=stype,
+                            severity="error",
+                            message=(
+                                f"Slide {idx + 1} ({stype}: '{stitle}') overflows onto an extra page. "
+                                f"Replace with a simpler slide type (content/split/three_card) "
+                                f"or reduce the number of items."
+                            ),
+                        ))
+            except Exception:
+                pass
+
         # Chart image clipping audit
         seen_images: set = set()
         for s in slides:
@@ -360,20 +400,24 @@ def export_typst_slides(
                     post_warnings.extend(audit_chart_image(img_path))
 
         # --- TWO-AGENT DESIGN DIALOGUE ---
-        if audit_visual:
+        if audit:
             log.info("Design dialogue round %d: auditing %d slides...",
                      visual_attempt + 1, len(slides))
             llm_warnings = audit_deck_with_llm(output_path, slides, brand=brand)
             post_warnings.extend(llm_warnings)
 
-            errors = [w for w in llm_warnings if w.severity == "error"]
+            llm_errors = [w for w in llm_warnings if w.severity == "error"]
+            # Structural errors (e.g. overflow page count) also trigger revision
+            structural_errors = [w for w in post_warnings if getattr(w, "severity", "") == "error"
+                                  and w not in llm_warnings]
+            errors = llm_errors + structural_errors
             # Send errors to dialogue; warnings logged but don't trigger revision
             # (30+ warnings per deck would overwhelm the revision LLM)
             actionable = errors
 
             if not actionable or not auto_fix:
                 all_warnings.extend(post_warnings)
-                if not errors:
+                if not actionable:
                     log.info("Design dialogue PASSED — no errors on round %d",
                              visual_attempt + 1)
                 break

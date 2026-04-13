@@ -503,7 +503,7 @@ def audit_slide_with_llm(
     slide_data: dict | None = None,
     brand: str = "",
     api_key: str | None = None,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-sonnet-4-6",
 ) -> list[AuditWarning]:
     """Send a rendered slide PNG to Claude and ask for a visual audit.
 
@@ -622,7 +622,7 @@ def audit_deck_with_llm(
     *,
     brand: str = "",
     api_key: str | None = None,
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-sonnet-4-6",
     page_dir: str | Path | None = None,
 ) -> list[AuditWarning]:
     """Render each PDF page to PNG and run LLM visual audit on each.
