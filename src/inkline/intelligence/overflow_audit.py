@@ -18,12 +18,15 @@ Usage
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from inkline.intelligence.layout_selector import SLIDE_CAPACITY
+
+log = logging.getLogger(__name__)
 
 # Slide geometry (must stay in sync with TypstSlideRenderer constants)
 SLIDE_CONTENT_WIDTH_CM = 23.0
