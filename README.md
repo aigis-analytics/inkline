@@ -4,12 +4,14 @@
 
 Inkline turns structured data or Markdown into publication-quality, brand-consistent
 output. It ships with 90 built-in themes, 37 slide templates (10 curated + 27
-additional design system styles), 20 slide layouts, 11 chart types, a 1-brand
-public registry (extensible via plugins), an LLM-driven design advisor with a
-pluggable caller (Anthropic SDK or Claude Code subprocess — no API key required),
-9 design playbooks (chart selection, typography, color theory, etc.), a 771-template
-archetype catalog, and a two-layer audit (structural + Claude vision) that keeps
-content inside the slide frame and on-brand.
+additional design system styles), 21 slide layouts, 20+ chart/exhibit types
+(standard charts + 16 infographic archetypes + institutional exhibit types),
+a 1-brand public registry (extensible via plugins), an LLM-driven design advisor
+with a pluggable caller (Anthropic SDK or Claude Code subprocess — no API key
+required), 10 design playbooks (chart selection, typography, color theory,
+professional exhibit design, etc.), a 771-template archetype catalog, and a
+two-layer audit (structural + Claude vision) that keeps content inside the slide
+frame and on-brand.
 
 ```bash
 pip install inkline                # core: Markdown → HTML
@@ -174,18 +176,69 @@ MyCorpBrand = BaseBrand(
 )
 ```
 
-## Slide types (20)
+## Slide types (21)
 
 **Standard:** `title`, `content`, `three_card`, `four_card`, `stat`, `table`,
 `split`, `bar_chart`, `kpi_strip`, `closing`
 **Infographic:** `timeline`, `process_flow`, `icon_stat`, `progress_bars`,
 `pyramid`, `comparison`, `feature_grid`
-**Data exhibit:** `dashboard`, `chart_caption`
+**Data exhibit:** `dashboard`, `chart_caption`, `multi_chart`
 **Embedded:** `chart` (matplotlib PNG/SVG)
 
-## Chart types (11)
+### `multi_chart` — multi-exhibit grid layout
+
+Arrange 2–4 pre-rendered chart images in configurable asymmetric grids,
+modelled on institutional bank presentation patterns:
+
+```python
+{
+    "slide_type": "multi_chart",
+    "data": {
+        "section": "Market Overview",
+        "title": "Four-panel market dashboard",
+        "layout": "hero_left_3",   # 50/25/25 — hero chart + two supporting
+        "charts": [
+            {"image_path": "revenue_trend.png", "title": "Revenue trend"},
+            {"image_path": "asset_mix.png",     "title": "Asset mix"},
+            {"image_path": "ebitda.png",         "title": "EBITDA margin"},
+        ],
+        "footnote": "Source: management accounts",
+    }
+}
+```
+
+Supported layouts:
+
+| Layout | Columns | Use case |
+|--------|---------|----------|
+| `equal_2` | 50 / 50 | Side-by-side comparison |
+| `equal_3` | 33 / 33 / 33 | Three-metric overview |
+| `equal_4` | 25 / 25 / 25 / 25 | Four-panel dashboard |
+| `hero_left` | 65 / 35 | Main chart + supporting callout |
+| `hero_left_3` | 50 / 25 / 25 | Hero + two supporting panels |
+| `hero_right_3` | 25 / 25 / 50 | Two context panels + hero |
+| `quad` | 2×2 grid | Full four-panel data page |
+| `top_bottom` | Wide top + row below | Summary chart + detail exhibits |
+
+## Chart types (20+)
+
+### Standard charts (11)
 `line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
 `stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`
+
+### Institutional exhibit types (4)
+| Type | Description |
+|------|-------------|
+| `marimekko` | Proportional mosaic — column width and cell height both encode data; no axes |
+| `entity_flow` | Legal/org structure diagram with tiered grey palette (dark=focal, mid=intermediary, light=peripheral) |
+| `divergent_bar` | Vertical bars above/below zero baseline; floating value labels; no y-axis |
+| `horizontal_stacked_bar` | 100% stacked horizontal bars showing composition shift over time |
+
+### Infographic archetypes (16, rendered via `chart_row`)
+`iceberg`, `sidebar_profile`, `funnel_kpi_strip`, `persona_dashboard`,
+`radial_pinwheel`, `hexagonal_honeycomb`, `semicircle_taxonomy`,
+`process_curved_arrows`, `pyramid_detailed`, `ladder`, `petal_teardrop`,
+`funnel_ribbon`, `dual_donut`, `waffle`, `metaphor_backdrop`, `chart_row`
 
 ## Slide templates (37+)
 
@@ -248,21 +301,22 @@ src/inkline/
 ├── pptx/             # python-pptx backend
 ├── slides/           # Google Slides API
 ├── typst/            # Typst backend (default)
-│   ├── slide_renderer.py    # 20 slide layouts
-│   ├── chart_renderer.py    # 11 matplotlib charts
+│   ├── slide_renderer.py    # 21 slide layouts (incl. multi_chart)
+│   ├── chart_renderer.py    # 20+ chart/exhibit renderers
 │   ├── theme_registry.py    # template → theme generation
 │   └── themes/              # 90 themes in 13 categories
 └── intelligence/     # Design advisor + overflow audit
     ├── design_advisor.py    # DesignAdvisor — LLM design planning + revision
     ├── slide_fixer.py       # Closed-loop overflow fixer (6 graduated fix levels)
-    ├── overflow_audit.py    # Structural + Claude vision audit (bridge /vision)
+    ├── overflow_audit.py    # Structural + Claude vision audit (15 checks)
     ├── claude_code.py       # Bridge caller + ensure_bridge_running()
     ├── archon.py            # Pipeline supervisor: phase tracking + issue log
     ├── vishwakarma.py       # Design philosophy constants (4 laws)
     ├── content_analyzer.py
     ├── layout_selector.py
     ├── chart_advisor.py
-    ├── playbooks/           # 9 design playbooks (colour, typography, layouts, …)
+    ├── playbooks/           # 10 design playbooks (colour, typography, layouts,
+    │                        #   professional exhibit design, …)
     └── design_md_styles/    # 27 additional design system styles
 ```
 

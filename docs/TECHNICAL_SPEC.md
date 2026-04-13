@@ -1,6 +1,6 @@
 # Inkline — Technical Specification
 
-**Version:** 0.3.0
+**Version:** 0.3.5
 **Language:** Python 3.11+
 **License:** MIT
 **Status:** Production
@@ -47,7 +47,7 @@ embedded fonts and crisp vector graphics.
 │  ContentAnalyzer → LayoutSelector → ChartAdvisor            │
 │  DesignAdvisor  (rules | advised | llm modes)               │
 │  TemplateCatalog (771 archetypes + 16 structured recipes)   │
-│  OverflowAudit  (capacity + image sizing + Claude vision)   │
+│  OverflowAudit  (15 structural/exhibit checks + vision)     │
 │  ClaudeCodeCaller (subprocess bridge, no API key)           │
 └──────────────┬──────────────────────────────────────────────┘
                │
@@ -85,9 +85,9 @@ src/inkline/
 ├── typst/
 │   ├── __init__.py          # export_typst_slides(), export_typst_document()
 │   ├── compiler.py          # Typst subprocess wrapper
-│   ├── slide_renderer.py    # TypstSlideRenderer — 20 layouts
+│   ├── slide_renderer.py    # TypstSlideRenderer — 21 layouts (incl. multi_chart)
 │   ├── document_renderer.py # Markdown → Typst document
-│   ├── chart_renderer.py    # matplotlib chart generator (11 types)
+│   ├── chart_renderer.py    # matplotlib chart generator (20+ types)
 │   ├── components.py        # Shared Typst primitives (card, badge, footer…)
 │   ├── theme_registry.py    # brand_to_typst_theme(), SLIDE_TEMPLATES
 │   └── themes/
@@ -100,10 +100,12 @@ src/inkline/
 │   ├── layout_selector.py   # select_layout(), SLIDE_CAPACITY
 │   ├── chart_advisor.py     # suggest_chart_type()
 │   ├── overflow_audit.py    # audit_deck(), audit_image(), audit_*_with_llm()
-│   ├── playbooks/           # 9 playbooks: colour theory, typography, design
+│   │                        #   15 structural checks incl. axis/legend/insight-title
+│   ├── playbooks/           # 10 playbooks: colour theory, typography, design
 │   │                        #   rules, infographic styles, slide layouts,
 │   │                        #   chart selection, document design, visual
-│   │                        #   libraries, template catalog
+│   │                        #   libraries, template catalog,
+│   │                        #   professional exhibit design
 │   └── template_catalog/    # 771-template manifest + 16 archetype recipes
 │       ├── __init__.py      # find_templates(), get_archetype_recipe()
 │       ├── slidemodel_manifest.json          (328 infographic templates)
@@ -161,7 +163,7 @@ class BaseBrand:
 ```python
 @dataclass
 class SlideSpec:
-    slide_type: str                        # one of 17 types
+    slide_type: str                        # one of 21 types
     data: dict[str, Any] = {}              # shape depends on slide_type
 
 @dataclass
@@ -413,17 +415,42 @@ The catalog ships as ~1 MB of static JSON manifests (771 templates total):
 **16 archetypes** wired to renderer recipes: `iceberg`, `sidebar_profile`,
 `funnel_kpi_strip`, `persona_dashboard`, `radial_pinwheel`,
 `hexagonal_honeycomb`, `semicircle_taxonomy`, `process_curved_arrows`,
-`pyramid`, `ladder`, `petal_teardrop`, `funnel_ribbon`, `dual_donut`,
+`pyramid_detailed`, `ladder`, `petal_teardrop`, `funnel_ribbon`, `dual_donut`,
 `waffle`, `metaphor_backdrop`, `chart_row`.
 
 Pass them via `DesignAdvisor.design_deck(reference_archetypes=["iceberg",
 "funnel_ribbon"])` to bias the LLM toward those patterns.
 
-### 4.8 Chart renderer — `inkline.typst.chart_renderer`
+### 4.8a Design playbooks — `inkline.intelligence.playbooks`
+
+Ten Markdown playbooks loaded by the DesignAdvisor. CORE playbooks are loaded
+in full; SUMMARY playbooks are truncated to ~4 K chars.
+
+| Playbook | Load mode | Content |
+|----------|-----------|---------|
+| `chart_selection` | CORE | Rules for choosing chart type based on data shape and goal |
+| `infographic_styles` | CORE | Visual formats beyond charts: timelines, comparisons, icon grids, flowcharts |
+| `professional_exhibit_design` | CORE | Axis elimination, 3-colour discipline, insight-as-headline, Marimekko/entity-flow/divergent-bar patterns, 6 density techniques |
+| `slide_layouts` | SUMMARY | Consulting-grade slide structures, Pyramid Principle, layout patterns |
+| `template_catalog` | SUMMARY | 16 archetype recipes + decision matrix (section 6 bulk manifest omitted) |
+| `color_theory` | CORE | Palette selection, WCAG accessibility, 60-30-10 rule |
+| `typography` | CORE | Font selection, pairing rules, type scales |
+| `document_design` | SUMMARY | Report formatting, financial tables, RAG displays, callouts |
+| `visual_libraries` | SUMMARY | Reference catalogue of open-source chart libraries |
+| `design_md_styles` | DYNAMIC | 27 brand design systems (colour palettes, typography, style tags) — generated at runtime |
+
+Load a specific subset via `load_playbooks_for_task(task_type)`:
+- `"chart"` → `chart_selection`, `color_theory`, `professional_exhibit_design`
+- `"slide"` → `slide_layouts`, `template_catalog`, `typography`, `color_theory`, `professional_exhibit_design`
+- `"infographic"` → `infographic_styles`, `template_catalog`, `color_theory`, `typography`, `professional_exhibit_design`
+- `"document"` → `document_design`, `typography`, `color_theory`
+- `"full"` → all 10
+
+### 4.9 Chart renderer — `inkline.typst.chart_renderer`
 
 ```python
 render_chart(
-    chart_type: str,                   # one of 11 types
+    chart_type: str,                   # 11 standard + 4 institutional + 16 infographic
     data: dict,
     output_path: str | Path,
     *,
@@ -435,6 +462,7 @@ render_chart(
     width: float = 8.0,                # inches (slide-safe default)
     height: float = 4.0,
     dpi: int = 200,
+    color_mode: str = "palette",       # "palette" | "mono"
 ) -> Path
 
 render_chart_for_brand(chart_type, data, output_path, brand_name="minimal", **kwargs) -> Path
@@ -466,13 +494,27 @@ in `intelligence.layout_selector.SLIDE_CAPACITY`.
 | `feature_grid`   | 6 features    | Icon + title + body grid (new in 0.3)        |
 | `dashboard`      | 3 panels      | Multi-panel KPI/chart dashboard (new in 0.3) |
 | `chart_caption`  | 5 caption pts | Chart with structured caption sidebar (new in 0.3) |
+| `multi_chart`    | 2–4 images    | Multi-exhibit grid: 8 asymmetric layouts (new in 0.3.5) |
 | `title`, `closing`| n/a          | Cover and contact slides                     |
 | `chart`          | 1 image       | Embedded PNG, max 20.7×8.5 cm                |
 
-**20 slide types total.** Capacities are tighter than 0.2.0 because the
+**21 slide types total.** Capacities are tighter than 0.2.0 because the
 Claude-vision audit pass exposed many cases where the previous limits still
 overflowed visually; renderers now also auto-shrink table fonts and bullet
 sizes as a final safety net.
+
+#### `multi_chart` layouts
+
+| Layout | Column spec | Charts | Typical use |
+|--------|------------|--------|-------------|
+| `equal_2` | 1fr / 1fr | 2 | Side-by-side comparison |
+| `equal_3` | 1fr / 1fr / 1fr | 3 | Three-metric overview |
+| `equal_4` | 1fr × 4 | 4 | Four-panel equal dashboard |
+| `hero_left` | 2fr / 1fr | 2 | Main chart + supporting callout (65/35) |
+| `hero_left_3` | 2fr / 1fr / 1fr | 3 | Hero + two supporting panels (50/25/25) |
+| `hero_right_3` | 1fr / 1fr / 2fr | 3 | Two context panels + hero (25/25/50) |
+| `quad` | (1fr, 1fr) × 2 rows | 4 | Full 2×2 data page |
+| `top_bottom` | stack: 1 wide + 1–3 below | 2–4 | Summary chart + detail exhibits |
 
 ### Geometry (constants in `TypstSlideRenderer`)
 
@@ -614,22 +656,92 @@ my_boardroom = {
 
 ## 7. Chart types
 
-All 11 charts use matplotlib Agg backend and render to PNG. Default size 8″×4″
+All charts use matplotlib Agg backend and render to PNG. Default size 8″×4″
 is slide-safe. Brand colours are applied in order from `brand.chart_colors`.
+
+### 7.1 Standard charts (11)
 
 | Chart type     | Input shape                                    |
 |----------------|-----------------------------------------------|
-| `line_chart`   | `{x: [...], series: [{name, y: [...]}...]}`   |
-| `area_chart`   | same as line_chart                             |
-| `scatter`      | `{points: [[x,y], ...], labels?: [...]}`       |
-| `waterfall`    | `{labels: [...], values: [...]}`               |
-| `donut`        | `{labels: [...], values: [...]}` (≤6 segments) |
-| `pie`          | same as donut                                  |
+| `line_chart`   | `{x: [...], series: [{label, values: [...]}...]}`|
+| `area_chart`   | same as `line_chart`                            |
+| `scatter`      | `{points: [[x,y], ...], labels?: [...]}`        |
+| `waterfall`    | `{labels: [...], values: [...]}`                |
+| `donut`        | `{segments: [{label, value}]}` (≤6 segments)   |
+| `pie`          | same as `donut`                                 |
 | `stacked_bar`  | `{categories: [...], series: [{name, values}]}`|
-| `grouped_bar`  | same as stacked_bar                            |
+| `grouped_bar`  | same as `stacked_bar`                          |
 | `heatmap`      | `{x_labels, y_labels, matrix: [[...]]}`        |
 | `radar`        | `{axes: [...], series: [{name, values}]}`      |
 | `gauge`        | `{value: 0-100, label: str}`                   |
+
+### 7.2 Institutional exhibit types (4)
+
+Designed to meet the same visual discipline standards as institutional
+bank and strategy consulting decks: axis elimination, floating labels,
+3-colour discipline, insight-as-headline.
+
+| Chart type | Input shape | Design intent |
+|------------|-------------|---------------|
+| `marimekko` | `{columns: [{label, total, segments: [{label, value}]}]}` | Proportional mosaic — column width and cell height both encode data; no axes or gridlines |
+| `entity_flow` | `{nodes: [{id, label, tier}], edges: [{from, to, label}]}` | Legal/org structure diagram with tiered grey palette (dark=focal, mid=intermediary, light=peripheral) |
+| `divergent_bar` | `{items: [{label, value}], positive_label?, negative_label?, y_label?}` | Vertical bars above/below zero baseline; floating value labels; no y-axis; shows net flows |
+| `horizontal_stacked_bar` | `{periods: [{label, segments: [{label, value}]}], title?, x_label?}` | 100% stacked horizontal bars; composition shift over time; bar height scales with period count |
+
+### 7.3 Infographic archetypes (16)
+
+Rendered via `render_chart()` — use these `chart_type` strings directly:
+
+| Archetype | Description |
+|-----------|-------------|
+| `iceberg` | Above/below waterline split with staggered left/right labels |
+| `waffle` | Square grid with percentage fills and legend |
+| `sidebar_profile` | Initial-badge sidebar with bullet stats |
+| `metaphor_backdrop` | Mountain/horizon metaphor with staggered info cards |
+| `funnel_kpi_strip` | Funnel stages with KPI strip below |
+| `funnel_ribbon` | Ribbon-style funnel with percentage labels |
+| `dual_donut` | Concentric inner/outer donut rings |
+| `hexagonal_honeycomb` | Hexagon tile grid for category comparisons |
+| `radial_pinwheel` | Radial segments around a central hub |
+| `semicircle_taxonomy` | Semicircular taxonomy/classification chart |
+| `process_curved_arrows` | Left-to-right curved-arrow process flow |
+| `pyramid_detailed` | Multi-tier hierarchy pyramid with labels |
+| `ladder` | Ascending step diagram for maturity/progression |
+| `petal_teardrop` | Petal/teardrop segments radiating from centre |
+| `persona_dashboard` | Mini persona card with stats and avatar |
+| `chart_row` | Composite of 2–4 sub-charts in one figure (see §7.4) |
+
+### 7.4 Composite chart row (`chart_row`)
+
+Composes multiple charts into a single PNG using matplotlib `GridSpec`.
+Supports asymmetric column widths and two-row layouts:
+
+```python
+{
+    "charts": [                              # 2–4 chart specs
+        {
+            "chart_type": "line_chart",
+            "title": "Revenue trend",
+            "data": {...},
+            "_ctx": {                        # optional styling context
+                "accent": "#1B2A4A",
+                "bg": "#FFFFFF",
+                "text_color": "#111827",
+                "muted": "#6B7280",
+            },
+        },
+        ...
+    ],
+    "width_ratios": [2, 1, 1],             # optional — 50/25/25 columns
+    "rows": 1,                              # 1 (default) or 2 for 2×N grid
+    "row_height_ratios": [1, 1],           # optional — relative row heights
+    "top_span": False,                      # optional — first chart spans full top row
+}
+```
+
+Key schemas for sub-chart `data` fields:
+- `grouped_bar` / `stacked_bar`: uses `categories` (not `x`) + `series: [{name, values}]`
+- `donut`: uses `segments: [{label, value}]` (not `slices`)
 
 ---
 
@@ -668,12 +780,18 @@ to respect.
 - `llm` — **default** — LLM drives the full plan, rules supply capacity
   constraints as context
 
-The LLM advisor consumes nine playbooks under the hood: design rules
+The LLM advisor consumes ten playbooks under the hood: design rules
 (grid, hierarchy), colour theory, typography, slide layouts, infographic
-styles, chart selection, document design, visual libraries, and the
-template catalog (16 archetype recipes). Reference archetypes and free-form
+styles, chart selection, document design, visual libraries, template catalog
+(16 archetype recipes), and professional exhibit design (axis elimination,
+3-colour discipline, insight-as-headline, Marimekko/entity-flow/divergent-bar
+patterns, information density techniques). Reference archetypes and free-form
 guidance can be passed at call time via `reference_archetypes=` and
 `additional_guidance=`.
+
+The advisor also knows the full `multi_chart` slide type with all 8 layout
+options. When designing multi-exhibit slides the LLM selects the layout and
+each chart sub-type; callers receive a ready-to-render `multi_chart` spec.
 
 The LLM caller is fully pluggable via `llm_caller=`. Three call paths:
 1. **Anthropic SDK** — set `api_key=` or `ANTHROPIC_API_KEY`. Default.
@@ -689,6 +807,16 @@ The LLM caller is fully pluggable via `llm_caller=`. Three call paths:
 `audit_chart_image()` open PNGs (requires Pillow) and check aspect ratio
 plus matplotlib label clipping. `audit_rendered_pdf()` walks a compiled
 PDF and reports per-page issues.
+
+The structural pass runs **15 checks** in total:
+
+| # | Check | What it flags |
+|---|-------|---------------|
+| 1–11 | Capacity, image sizing, aspect ratio, label clipping, bullet length, title length, table density, font size, card body length, color count, whitespace | Standard structural limits |
+| 12 | AXIS ELIMINATION | Flags charts with both x- and y-axes where at least one could be dropped in favour of floating labels — flags as WARN |
+| 13 | LEGEND NECESSITY | Flags chart slides with a legend but only one data series (legend is redundant noise) |
+| 14 | INSIGHT TITLE | Flags slides whose title is a neutral label (e.g. "Revenue") rather than an insight statement (e.g. "Revenue up 34% YoY") |
+| 15 | POSITIVE (pass) | Confirms exhibit-quality slides (Marimekko, entity_flow, chart_row) are present — logged as positive signal |
 
 **Visual pass** — Claude vision audit (`audit_slide_with_llm()`,
 `audit_deck_with_llm()`) — renders the compiled PDF to PNGs and posts each
@@ -718,6 +846,7 @@ escalating attempt number:
 {
     "chart_caption": "split",      # drop chart; keep title+bullets as 2-col
     "dashboard":     "chart_caption",
+    "multi_chart":   "chart_caption",  # multi-exhibit → single chart + caption
     "feature_grid":  "content",
     "comparison":    "split",
     "split":         "content",
@@ -912,6 +1041,13 @@ Add a dict to `SLIDE_TEMPLATES` in `src/inkline/typst/theme_registry.py` with
 Add a renderer function to `chart_renderer.py` and register it in the dispatch
 in `render_chart()`.
 
+### Add an exhibit type to the advisor
+1. Add a row to the `renderers` dict in `render_chart()`
+2. Document the data schema in `SLIDE_TYPE_GUIDE` in `design_advisor.py`
+3. Add the chart type to relevant `load_playbooks_for_task()` sets if it
+   requires specific playbook context
+4. Add a visual audit test run (via bridge `/vision`) before shipping
+
 ---
 
 ## 11. Dependencies
@@ -982,7 +1118,56 @@ layer, template catalog, and LLM injection.
 
 ## 14. Versioning & changelog
 
-- **0.3.x** *(current, 2026-04-13)* —
+- **0.3.5** *(current, 2026-04-13)* —
+  - **Institutional exhibit types (4 new chart renderers)**
+    - `marimekko` — proportional mosaic with column-width and cell-height
+      encoding, no axes, column totals and row labels embedded.
+    - `entity_flow` — tiered legal/org structure diagram; three-shade
+      grey palette (dark=focal, mid=intermediary, light=peripheral);
+      wrap-text connector labels, clamp-safe coordinates.
+    - `divergent_bar` — vertical bars above/below zero baseline; floating
+      `+/-` value labels; no y-axis; legend embedded inside chart.
+    - `horizontal_stacked_bar` — 100% stacked horizontal bars for
+      composition shift over time; bar height scales proportionally to
+      the number of periods (`min(0.82, 4.0 / n_periods)`).
+  - **`multi_chart` slide type** — 8 asymmetric grid layouts (`equal_2`,
+    `equal_3`, `equal_4`, `hero_left`, `hero_left_3`, `hero_right_3`,
+    `quad`, `top_bottom`) allow 2–4 pre-rendered exhibit images on a
+    single slide. Typst fractional columns (`2fr`, `1fr`, etc.) are
+    used for exact proportional widths. `hero_left_3` (50/25/25) and
+    `quad` (2×2) are the primary institutional patterns.
+  - **Enhanced `chart_row` infographic** — `width_ratios` parameter for
+    asymmetric column widths; `rows=2` for 2×N grid layouts;
+    `row_height_ratios` and `top_span` for top-span wide+narrow patterns.
+    Extracted `_render_chart_into_ax()` helper to eliminate duplication
+    between single-row and two-row rendering paths.
+  - **16 infographic archetypes** — all rendered via `render_chart()` with
+    the archetype's `chart_type` string. Visually audited: 0 FAIL across
+    all 16 types. Fixed: iceberg label collision (staggered left/right),
+    waffle title+pct legend, sidebar_profile aspect distortion,
+    metaphor_backdrop card stagger layout.
+  - **`professional_exhibit_design` playbook** — 10th design playbook
+    loaded as CORE (full text) in DesignAdvisor. Covers: axis elimination
+    rules, legend elimination heuristics, 3-colour discipline, insight-
+    as-headline title patterns, commentary column layout, 6 information
+    density techniques, 7 exhibit type extensions (Marimekko, entity
+    diagram, label-positioned scatter, divergent bar, staircase line,
+    100% stacked horizontal bar, tick-connected waterfall), process/flow
+    standards, table design rules, typography discipline.
+  - **3 new visual auditor checks** (Checks 12–14):
+    - Check 12 AXIS ELIMINATION: warns when a chart retains both axes
+      where floating labels would suffice.
+    - Check 13 LEGEND NECESSITY: warns when a legend is shown for a
+      single-series chart (redundant noise).
+    - Check 14 INSIGHT TITLE: warns when a slide title is a neutral
+      label rather than an actionable insight statement.
+  - **`multi_chart` added to downgrade map** — overflows from
+    `multi_chart` degrade to `chart_caption` (single chart + caption).
+  - **`DesignAdvisor` SLIDE_TYPE_GUIDE updated** — full `multi_chart`
+    documentation with layout names, hard caps per layout, and usage
+    guidance for multi-exhibit slides.
+
+- **0.3.x** *(2026-04-13)* —
   - **Vishwakarma design philosophy** — four laws (`VISUAL_HIERARCHY`,
     `BRIDGE_FIRST`, `AUDIT_MANDATORY`, `ARCHON_OVERSIGHT`) baked into all
     LLM system prompts via `inkline.intelligence.vishwakarma`.
