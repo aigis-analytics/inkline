@@ -648,8 +648,13 @@ def audit_deck_with_llm(
     if not page_pngs:
         return []
 
+    # Only audit pages that correspond to actual slides — overflow pages
+    # beyond len(slides) are structural artifacts, not real slides, and
+    # auditing them wastes API calls.
+    audit_pngs = page_pngs[:len(slides)]
+
     warnings: list[AuditWarning] = []
-    for i, png in enumerate(page_pngs):
+    for i, png in enumerate(audit_pngs):
         slide_type = slides[i].get("slide_type", "?") if i < len(slides) else "?"
         slide_data = slides[i].get("data", {}) if i < len(slides) else {}
         page_warnings = audit_slide_with_llm(
