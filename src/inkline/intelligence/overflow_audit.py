@@ -352,7 +352,7 @@ def audit_all_chart_images(charts_dir: str | Path) -> list[AuditWarning]:
 #  - Misalignment, weak hierarchy, awkward spacing
 #  - Style inconsistency across slides
 
-def _build_visual_audit_system(brand: str = "") -> str:
+def _build_visual_audit_system(brand: str = "", source_text: str = "") -> str:
     """Build the visual auditor system prompt with FULL design context.
 
     The auditor receives the SAME design knowledge as DesignAdvisor:
@@ -390,6 +390,25 @@ def _build_visual_audit_system(brand: str = "") -> str:
             pattern_context = format_patterns_for_prompt(brand)
         except Exception:
             pass
+
+    # Narrative fidelity instruction — injected into criterion 15
+    if source_text:
+        narrative_instruction = (
+            f"Source content for this slide is provided below. Verify:\n"
+            f"   a) The slide title states the KEY INSIGHT from the source (action title), "
+            f"not just the topic.\n"
+            f"   b) The exhibit (chart/table/infographic) visually proves the claim in the title.\n"
+            f"   c) Key facts and figures from the source appear correctly on the slide.\n"
+            f"   d) No important points from the source are missing or misrepresented.\n"
+            f"   Flag: title contradicts source → ERROR. Missing key insight → WARN. "
+            f"Exhibit doesn't support the claim → WARN. Always include a proposed_redesign "
+            f"for narrative findings.\n\n"
+            f"SOURCE CONTENT:\n{source_text[:2000]}"
+        )
+    else:
+        narrative_instruction = (
+            "No source content provided. Skip this check."
+        )
 
     from inkline.intelligence.vishwakarma import VISHWAKARMA_AUDIT_CRITERIA
 
@@ -476,7 +495,28 @@ stating the analytical conclusion, flag as WARN. A professional action title \
 states the insight: "Revenue grew 34%% YoY driven by enterprise segment". \
 Exception: title slides and section dividers are exempt.
 
-15. POSITIVE — If the slide is well-designed, return []. Don't flag issues \
+15. NARRATIVE FIDELITY — {narrative_instruction}
+
+16. STORYTELLING SHARPNESS — Does this slide tell a clear story or just \
+display data? Ask: "What is the ONE thing a viewer should remember from \
+this slide?" If the answer isn't immediately obvious from the slide, flag \
+as WARN. Criteria for sharp storytelling:
+   - The title is the conclusion, not the topic
+   - The exhibit (chart/table/infographic) is chosen to PROVE the title claim
+   - Supporting text amplifies the insight, not repeats it
+   - Numbers are formatted for impact (e.g. "$3.2B" not "3,200,000,000")
+   Flag: slide that shows lots of data with no clear hero message. WARN.
+
+17. WOW FACTOR — Rate the overall visual impact on a 1-5 scale:
+   5 = Boardroom-ready. Would look at home in a McKinsey deck.
+   4 = Professional and clean. Minor improvement opportunities.
+   3 = Adequate. Conveys information but unremarkable.
+   2 = Needs work. Too dense, too sparse, or visually confusing.
+   1 = Broken or unfit for presentation.
+   If rated 1-2: flag as WARN with "wow_factor" category and specific fix.
+   If rated 5: include as a "positive" finding to confirm quality.
+
+18. POSITIVE — If the slide is well-designed, return []. Don't flag issues \
 that aren't there.
 
 ====================================================================
@@ -500,12 +540,12 @@ OUTPUT FORMAT — STRUCTURED PROPOSALS
 Return a JSON array of findings. Each finding has:
   {{
     "severity": "error|warn|info",
-    "category": "clipping|overflow|overlap|missing_content|whitespace|hierarchy|card_consistency|brand|data_viz|layout_change|typography|positive",
+    "category": "clipping|overflow|overlap|missing_content|whitespace|hierarchy|card_consistency|brand|data_viz|layout_change|typography|narrative|storytelling|wow_factor|positive",
     "message": "<what's wrong and how to fix>",
     "proposed_redesign": null or {{"slide_type": "...", "data": {{...}}}}
   }}
 
-IMPORTANT: For "layout_change" findings (table→infographic), include a
+IMPORTANT: For "layout_change" and "narrative" findings, include a
 "proposed_redesign" with a COMPLETE slide spec using the recommended type.
 Use the SLIDE TYPE CATALOGUE above to construct valid data schemas.
 
@@ -522,6 +562,7 @@ def audit_slide_with_llm(
     slide_index: int = -1,
     slide_type: str = "",
     slide_data: dict | None = None,
+    source_text: str = "",
     brand: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
@@ -536,6 +577,13 @@ def audit_slide_with_llm(
     IMPORTANT: ``api_key`` is never auto-read from ``ANTHROPIC_API_KEY`` env.
     Pass it explicitly only if you want to permit API fallback. Without it,
     if the bridge is also unavailable, the call is skipped cleanly.
+
+    Parameters
+    ----------
+    source_text : str, optional
+        The source content this slide is supposed to convey. When provided,
+        the auditor checks narrative fidelity — whether the slide accurately
+        and compellingly represents the key insight from the source.
     """
     image_path = Path(image_path)
     if not image_path.exists():
@@ -549,8 +597,12 @@ def audit_slide_with_llm(
 
     img_b64 = base64.standard_b64encode(image_path.read_bytes()).decode("utf-8")
 
-    # Use brand-specific system prompt if brand is provided
-    system_prompt = _build_visual_audit_system(brand) if brand else _VISUAL_AUDIT_SYSTEM
+    # Build system prompt — always include brand + source_text for narrative fidelity
+    system_prompt = (
+        _build_visual_audit_system(brand, source_text)
+        if (brand or source_text)
+        else _VISUAL_AUDIT_SYSTEM
+    )
 
     # Include slide data context so auditor knows what content was intended
     data_context = ""
@@ -673,6 +725,7 @@ def audit_deck_with_llm(
     slides: list[dict],
     *,
     brand: str = "",
+    source_narrative: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
     page_dir: str | Path | None = None,
@@ -686,6 +739,15 @@ def audit_deck_with_llm(
 
     Uses pymupdf if available (fast), else falls back to recompiling the
     Typst source via typst.compile(format='png').
+
+    Parameters
+    ----------
+    source_narrative : str, optional
+        The source document or report content the deck is summarising.
+        When provided, each slide audit includes a narrative fidelity check:
+        does this slide accurately and compellingly convey the key insight
+        from the source? Per-slide source can also be embedded in
+        ``slide["data"]["source_section"]`` — that takes precedence.
     """
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
@@ -710,11 +772,14 @@ def audit_deck_with_llm(
     for i, png in enumerate(audit_pngs):
         slide_type = slides[i].get("slide_type", "?") if i < len(slides) else "?"
         slide_data = slides[i].get("data", {}) if i < len(slides) else {}
+        # Per-slide source_section takes precedence over global narrative
+        slide_source = slide_data.get("source_section", "") or source_narrative
         page_warnings = audit_slide_with_llm(
             png,
             slide_index=i + 1,
             slide_type=slide_type,
             slide_data=slide_data,
+            source_text=slide_source,
             brand=brand,
             api_key=api_key,
             model=model,

@@ -316,6 +316,7 @@ def export_typst_slides(
     subtitle: str = "",
     font_paths: Optional[list[str | Path]] = None,
     image_root: Optional[str | Path] = None,
+    source_narrative: str = "",
     audit: bool = True,
     auto_fix: bool = True,
     max_overflow_attempts: int = 6,
@@ -350,6 +351,12 @@ def export_typst_slides(
         Additional font directories.
     image_root : Path, optional
         Root directory for image resolution.
+    source_narrative : str, optional
+        The source document or report text the deck is summarising.
+        Passed to the visual auditor so it can check whether each slide
+        faithfully conveys the key insight from the source (narrative
+        fidelity). Per-slide source can also be embedded in
+        ``slide["data"]["source_section"]``, which takes precedence.
     audit : bool
         Enable quality assurance loop (overflow detection + visual audit).
         Pass ``False`` only in tests or draft previews. Default: True.
@@ -565,7 +572,9 @@ def export_typst_slides(
         if audit:
             log.info("Design dialogue round %d: auditing %d slides...",
                      visual_attempt + 1, len(slides))
-            llm_warnings = audit_deck_with_llm(output_path, slides, brand=brand)
+            llm_warnings = audit_deck_with_llm(
+                output_path, slides, brand=brand, source_narrative=source_narrative,
+            )
             post_warnings.extend(llm_warnings)
 
             llm_errors = [w for w in llm_warnings if w.severity == "error"]
@@ -595,8 +604,12 @@ def export_typst_slides(
             try:
                 from inkline.intelligence.design_advisor import DesignAdvisor
                 advisor = DesignAdvisor(brand=brand, template=template, mode="llm")
+                # Pass source narrative so DesignAdvisor preserves key content when redesigning
+                source_sections = (
+                    [{"narrative": source_narrative}] if source_narrative else None
+                )
                 revised = advisor.revise_slides_from_review(
-                    slides, actionable,
+                    slides, actionable, original_sections=source_sections,
                 )
                 if revised != slides:
                     slides = revised

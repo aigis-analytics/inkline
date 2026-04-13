@@ -511,6 +511,31 @@ class DesignAdvisor:
                     llm_slides, sections,
                 )
 
+                # Inject per-slide source_section for narrative fidelity audit.
+                # Match each non-structural slide to its best source section
+                # by title word overlap so the visual auditor knows what the
+                # slide was supposed to convey.
+                _exempt = {"title", "closing", "section_divider"}
+                for slide in llm_slides:
+                    if slide.get("slide_type") in _exempt:
+                        continue
+                    if slide.get("data", {}).get("source_section"):
+                        continue  # Already set (e.g. exact mode)
+                    slide_words = set(
+                        (slide.get("data", {}).get("title") or "").lower().split()
+                    ) - {"the", "a", "an", "of", "and", "for", "in", "to", "with"}
+                    if not slide_words:
+                        continue
+                    best_score, best_text = 0, ""
+                    for sec in sections:
+                        sec_words = set(sec.get("title", "").lower().split())
+                        score = len(slide_words & sec_words)
+                        if score > best_score:
+                            best_score = score
+                            best_text = sec.get("narrative", "")
+                    if best_text:
+                        slide.setdefault("data", {})["source_section"] = best_text[:2000]
+
                 return llm_slides
             except Exception as e:
                 log.warning("LLM mode failed, falling back to rules: %s", e)

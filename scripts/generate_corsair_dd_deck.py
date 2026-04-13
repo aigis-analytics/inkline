@@ -114,6 +114,28 @@ for i, s in enumerate(slides):
     title = s.get("data", {}).get("title") or s.get("data", {}).get("company", "")
     print(f"  [{i+1:2d}] {stype:22s} — {str(title)[:55]}")
 
+# Inject per-slide source sections for precise narrative fidelity audit.
+# Match each slide to the section it was generated from by title word overlap.
+# title/closing/section_divider slides are exempt (no narrative to check).
+_EXEMPT_TYPES = {"title", "closing", "section_divider"}
+for slide in slides:
+    if slide.get("slide_type") in _EXEMPT_TYPES:
+        continue
+    slide_title_words = set(
+        (slide.get("data", {}).get("title") or "").lower().split()
+    ) - {"the", "a", "an", "of", "and", "for", "in", "to", "with"}
+    if not slide_title_words:
+        continue
+    best_score, best_narrative = 0, ""
+    for sec in raw_sections:
+        sec_words = set(sec.get("title", "").lower().split())
+        score = len(slide_title_words & sec_words)
+        if score > best_score:
+            best_score = score
+            best_narrative = sec.get("narrative", "")
+    if best_narrative:
+        slide.setdefault("data", {})["source_section"] = best_narrative[:2000]
+
 # Save debug JSON
 debug_json = OUTPUT.with_suffix(".slides.json")
 debug_json.write_text(json.dumps(slides, indent=2, default=str), encoding="utf-8")
@@ -129,6 +151,7 @@ try:
         title="Project Corsair — Board-Level Due Diligence",
         date="28 February 2026",
         subtitle="Proposed Acquisition of Byron Energy LLC",
+        source_narrative=md_text,  # Pass full report for narrative fidelity audit
         audit=True,
         auto_fix=True,
     )
