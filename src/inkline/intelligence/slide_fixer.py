@@ -366,18 +366,29 @@ def apply_graduated_fixes(
     Returns (slides, source, needs_rerender).
     - needs_rerender=True: slides were modified, must regenerate Typst source
     - needs_rerender=False: only source was modified, can recompile directly
+
+    Attempt order (deliberately conservative — never adds slides early):
+    1. Content reduction  — trim text, drop footnote, remove last item
+    2. Spacing/font       — shrink font size, reduce padding in Typst source
+    3. Type downgrade     — replace complex layout with simpler one (no new slides)
+    4. Selective split    — ONLY content/table slides with many items get split
+    5+ Aggressive combo   — content reduction + type downgrade together
     """
     if attempt == 1:
         return _fix_content_reduction(slides, source, overflow_indices)
     elif attempt == 2:
         return _fix_source_spacing(slides, source, overflow_indices)
     elif attempt == 3:
-        return _fix_slide_splitting(slides, source, overflow_indices)
-    elif attempt == 4:
-        # Nuclear option: downgrade complex types to content/split
+        # Type downgrade before split: converts chart_caption/split/dashboard etc.
+        # to a simpler layout WITHOUT adding slides. Always safer than splitting.
         return _fix_type_downgrade(slides, source, overflow_indices)
+    elif attempt == 4:
+        # Selective split: ONLY content/table slides. Chart/card/split slides
+        # overflow due to layout constraints, not item count — splitting them
+        # creates two identically-overflowing slides and makes things worse.
+        return _fix_slide_splitting(slides, source, overflow_indices)
     elif attempt >= 5:
-        # Last resort: aggressive truncation + type downgrade again
+        # Last resort: aggressive content reduction + another downgrade pass
         slides, source, changed = _fix_content_reduction(slides, source, overflow_indices)
         slides2, source2, changed2 = _fix_type_downgrade(slides, source, overflow_indices)
         return slides2, source2, changed or changed2
@@ -484,22 +495,42 @@ def _fix_slide_splitting(
     source: str,
     indices: list[int],
 ) -> tuple[list[dict[str, Any]], str, bool]:
-    """Attempt 3: split overflowing slides into two."""
-    # Sort indices in reverse so we can insert without shifting
+    """Attempt 4: split content/table slides that have too many items.
+
+    ONLY applies to ``content`` and ``table`` slide types. All other types
+    (chart_caption, split, dashboard, three_card, four_card, comparison, etc.)
+    overflow due to layout constraints, not item count. Splitting them creates
+    two identically-overflowing slides and causes the total page count to grow.
+    Those types must be handled by type downgrade (attempt 3) instead.
+
+    A minimum of 4 items is required before splitting; splitting a slide with
+    2-3 items produces degenerate single-item slides.
+    """
+    # Only these types benefit from content splitting
+    _SPLITTABLE_TYPES = {"content", "table"}
+
     new_slides = list(slides)
     for idx in sorted(indices, reverse=True):
         if idx >= len(new_slides):
             continue
         slide = new_slides[idx]
         stype = slide.get("slide_type", "")
-        data = slide.get("data", {})
 
+        if stype not in _SPLITTABLE_TYPES:
+            log.info(
+                "Overflow fix attempt 4: skipping split of slide %d (%s) — "
+                "layout type, not content overflow; type downgrade handles this",
+                idx, stype,
+            )
+            continue
+
+        data = slide.get("data", {})
         split_pair = _split_one_slide(stype, data)
         if split_pair:
             a, b = split_pair
             new_slides[idx] = {"slide_type": stype, "data": a}
             new_slides.insert(idx + 1, {"slide_type": stype, "data": b})
-            log.info("Overflow fix attempt 3: split slide %d (%s) into two", idx, stype)
+            log.info("Overflow fix attempt 4: split slide %d (%s) into two", idx, stype)
 
     if len(new_slides) != len(slides):
         return new_slides, source, True  # needs_rerender=True
@@ -510,10 +541,14 @@ def _split_one_slide(
     stype: str,
     data: dict[str, Any],
 ) -> Optional[tuple[dict, dict]]:
-    """Split a single slide's data into two halves."""
+    """Split a single slide's data into two halves.
+
+    Requires at least 4 items so each half gets at least 2 — splitting a 3-item
+    slide into 1+2 produces a degenerate near-empty slide.
+    """
     for field in _CONTENT_FIELDS.get(stype, []):
         items = _get_nested(data, field)
-        if items and isinstance(items, list) and len(items) > 2:
+        if items and isinstance(items, list) and len(items) >= 4:
             mid = len(items) // 2
             a = dict(data)
             b = dict(data)
@@ -542,18 +577,24 @@ def _fix_type_downgrade(
       four_card     → three_card   (remove last card)
       table         → content (if many rows, convert to bullet list)
     """
-    # Types ordered by overflow risk (most → least)
+    # Types ordered by overflow risk (most → least).
     # Each type is downgraded to a simpler equivalent that fits on one page.
+    # chart_caption was previously absent — it overflows when chart height + title
+    # + bullets exceed the slide content area. Downgrade removes the chart image
+    # and converts to a plain split/content layout.
     _DOWNGRADE_MAP = {
-        "feature_grid": "content",
-        "comparison":   "split",
-        "split":        "content",   # split with heavy content → flat list
-        "dashboard":    "chart_caption",
-        "four_card":    "three_card",
-        "three_card":   "content",   # if three_card still overflows → list
-        "table":        "content",
-        "timeline":     "content",   # timeline with many items → list
-        "icon_stat":    "content",
+        "chart_caption": "split",    # drop chart image; keep title + bullets as two-col
+        "dashboard":     "chart_caption",  # drop stat boxes; keep chart + bullets
+        "feature_grid":  "content",
+        "comparison":    "split",
+        "split":         "content",  # split with heavy content → flat list
+        "four_card":     "three_card",
+        "three_card":    "content",  # if three_card still overflows → list
+        "table":         "content",
+        "timeline":      "content",  # timeline with many items → list
+        "icon_stat":     "kpi_strip",  # icon_stat → compact strip (no desc text)
+        "kpi_strip":     "content",  # last resort for kpi_strip overflow
+        "progress_bars": "content",
     }
     modified = False
     for idx in indices:
@@ -568,7 +609,48 @@ def _fix_type_downgrade(
         data = dict(slide.get("data", {}))
         new_data: dict[str, Any] = {}
 
-        if stype == "feature_grid" and target == "content":
+        if stype == "chart_caption" and target == "split":
+            # Drop the chart image; preserve title + bullets as a two-column layout.
+            # The caption becomes the left column heading; bullets go to the right.
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            caption = data.get("caption", "Key findings")
+            bullets = data.get("bullets", [])
+            new_data["left_title"] = caption or "Analysis"
+            new_data["left_items"] = bullets[:3]
+            new_data["right_title"] = "Implications"
+            new_data["right_items"] = bullets[3:6] if len(bullets) > 3 else []
+
+        elif stype == "icon_stat" and target == "kpi_strip":
+            # icon_stat with desc text overflows; kpi_strip is more compact.
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            stats = data.get("stats", [])
+            kpis = []
+            for s in stats[:5]:
+                if isinstance(s, dict):
+                    kpis.append({
+                        "value": s.get("value", ""),
+                        "label": s.get("label", ""),
+                        "highlight": False,
+                    })
+            new_data["kpis"] = kpis
+
+        elif stype in ("kpi_strip", "progress_bars") and target == "content":
+            new_data["title"] = data.get("title", "")
+            new_data["section"] = data.get("section", "")
+            items_raw = data.get("kpis", data.get("bars", []))
+            items = []
+            for item in items_raw[:6]:
+                if isinstance(item, dict):
+                    label = item.get("label") or item.get("title") or ""
+                    value = item.get("value") or item.get("pct", "")
+                    items.append(f"{label}: {value}".strip(": ") if value else label)
+                else:
+                    items.append(str(item))
+            new_data["items"] = items
+
+        elif stype == "feature_grid" and target == "content":
             # Convert feature cards to bullet strings
             new_data["title"] = data.get("title", "")
             new_data["section"] = data.get("section", "")
@@ -647,10 +729,10 @@ def _fix_type_downgrade(
                     items.append(str(card))
             new_data["items"] = items[:6]
 
-        elif stype in ("timeline", "icon_stat") and target == "content":
+        elif stype == "timeline" and target == "content":
             new_data["title"] = data.get("title", "")
             new_data["section"] = data.get("section", "")
-            field = "milestones" if stype == "timeline" else "stats"
+            field = "milestones"
             items_raw = data.get(field, [])
             items = []
             for item in items_raw[:6]:
