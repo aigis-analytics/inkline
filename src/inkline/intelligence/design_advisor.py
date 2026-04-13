@@ -318,28 +318,39 @@ class DesignAdvisor:
             )
             return self.llm_caller(system_prompt, user_prompt)
 
-        # Try bridge (short connect timeout so failures are fast)
-        try:
-            import requests as _req
+        # Try bridge (short connect timeout so failures are fast).
+        # Skip for very large prompts (>50K user chars) — the bridge's claude -p
+        # subprocess hits a 300s timeout and the API is faster for large contexts.
+        total_chars = len(system_prompt) + len(user_prompt)
+        bridge_viable = total_chars <= 80_000
+        if not bridge_viable:
             log.info(
-                "DesignAdvisor LLM bridge %s (%d sys / %d user chars)...",
-                self.bridge_url, len(system_prompt), len(user_prompt),
+                "DesignAdvisor skipping bridge (prompt too large: %d chars) — going direct to API",
+                total_chars,
             )
-            resp = _req.post(
-                f"{self.bridge_url}/prompt",
-                json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
-                timeout=(5, 240),  # 5s connect, 240s read
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("response"):
+
+        if bridge_viable:
+            try:
+                import requests as _req
                 log.info(
-                    "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
-                    len(data["response"]), data.get("source", "?"),
+                    "DesignAdvisor LLM bridge %s (%d sys / %d user chars)...",
+                    self.bridge_url, len(system_prompt), len(user_prompt),
                 )
-                return data["response"]
-        except Exception as e:
-            log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
+                resp = _req.post(
+                    f"{self.bridge_url}/prompt",
+                    json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
+                    timeout=(5, 240),  # 5s connect, 240s read
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("response"):
+                    log.info(
+                        "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
+                        len(data["response"]), data.get("source", "?"),
+                    )
+                    return data["response"]
+            except Exception as e:
+                log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
 
         # Anthropic SDK fallback
         try:
