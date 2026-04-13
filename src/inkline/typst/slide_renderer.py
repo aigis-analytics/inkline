@@ -1265,12 +1265,12 @@ class TypstSlideRenderer:
             charts = charts[:4]
             while len(charts) < 4:
                 charts.append({})
-            cells = "\n    ".join(_chart_cell(c, height="6.5cm") for c in charts)
+            cells = ",\n    ".join(_chart_cell(c, height="6.5cm") for c in charts)
             grid_body = f"""grid(
     columns: (1fr, 1fr),
     rows: (auto, auto),
     gutter: 10pt,
-    {cells}
+    {cells},
   )"""
 
         elif layout == "top_bottom":
@@ -1278,13 +1278,13 @@ class TypstSlideRenderer:
             top = charts[:1]
             bottom = charts[1:4]
             n_bot = max(len(bottom), 1)
-            bot_cols = "(1fr, " + ", ".join(["1fr"] * (n_bot - 1)) + ")" if n_bot > 1 else "(1fr,)"
-            top_cell = _chart_cell(top[0], height="5.5cm") if top else "block()[]"
-            bot_cells = "\n      ".join(_chart_cell(c, height="4.5cm") for c in bottom)
+            bot_cols = "(" + ", ".join(["1fr"] * n_bot) + ",)"
+            top_cell = _chart_cell(top[0], height="5.5cm") if top else "block(width: 100%)[]"
+            bot_cells = ",\n      ".join(_chart_cell(c, height="4.5cm") for c in bottom)
             bot_grid = f"""grid(
       columns: {bot_cols},
       gutter: 10pt,
-      {bot_cells}
+      {bot_cells},
     )""" if bottom else ""
             grid_body = f"""stack(
     spacing: 8pt,
@@ -1296,11 +1296,11 @@ class TypstSlideRenderer:
             col_spec, n_expected = LAYOUTS.get(layout, ("(1fr, 1fr)", 2))
             charts = charts[:n_expected]
             chart_h = "6.0cm" if n_expected <= 2 else "5.5cm"
-            cells = "\n    ".join(_chart_cell(c, height=chart_h) for c in charts)
+            cells = ",\n    ".join(_chart_cell(c, height=chart_h) for c in charts)
             grid_body = f"""grid(
     columns: {col_spec},
     gutter: 12pt,
-    {cells}
+    {cells},
   )"""
 
         footnote_block = (
@@ -1309,6 +1309,9 @@ class TypstSlideRenderer:
         )
 
         return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
