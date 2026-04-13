@@ -19,6 +19,13 @@ The caller is a plain ``Callable[[system, user], str]`` so it satisfies the
 ``inkline.intelligence.design_advisor.LLMCaller`` type and works as a drop-in
 replacement for the public Anthropic SDK path. No API key is consumed.
 
+This module also exposes :func:`ensure_bridge_running`, which checks whether
+the Claude bridge HTTP server is up at a given URL and, if not, attempts to
+start it automatically from ``~/.config/inkline/claude_bridge.py`` (the
+personal brands private config directory). This is called automatically by
+:class:`~inkline.intelligence.design_advisor.DesignAdvisor` before every LLM
+call so that API credits are never consumed when a bridge can be started.
+
 Requirements
 ------------
 - ``claude`` CLI on $PATH (Claude Code must be installed and authenticated).
@@ -34,6 +41,8 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import time
+from pathlib import Path
 from typing import Callable
 
 log = logging.getLogger(__name__)
@@ -135,8 +144,85 @@ def build_claude_code_caller(
     return caller
 
 
+def ensure_bridge_running(
+    bridge_url: str = "http://localhost:8082",
+    startup_wait: float = 4.0,
+) -> bool:
+    """Ensure the Claude bridge HTTP server is reachable.
+
+    1. Checks the bridge health endpoint.  If healthy → returns ``True``.
+    2. If not reachable, looks for a bridge script at
+       ``~/.config/inkline/claude_bridge.py`` (the personal brands private
+       config directory) and starts it as a detached background process.
+    3. Waits up to ``startup_wait`` seconds for it to become healthy.
+    4. Returns ``True`` if the bridge is reachable after these steps, else ``False``.
+
+    This is called automatically by ``DesignAdvisor._call_llm`` before every
+    LLM request so that API credits are never consumed when a bridge is
+    available.
+
+    Parameters
+    ----------
+    bridge_url:
+        Base URL of the bridge server (default: ``http://localhost:8082``).
+    startup_wait:
+        Seconds to wait after launching the bridge process before giving up.
+    """
+    try:
+        import requests as _req
+        r = _req.get(f"{bridge_url}/health", timeout=1)
+        if r.status_code == 200 and r.json().get("status") == "ok":
+            log.debug("ensure_bridge_running: bridge already healthy at %s", bridge_url)
+            return True
+    except Exception:
+        pass
+
+    # Not reachable — try to start from personal config
+    bridge_script = Path.home() / ".config" / "inkline" / "claude_bridge.py"
+    if not bridge_script.exists():
+        log.info(
+            "ensure_bridge_running: bridge not running and no script found at %s",
+            bridge_script,
+        )
+        return False
+
+    log.info(
+        "ensure_bridge_running: bridge not running — starting %s", bridge_script
+    )
+    try:
+        subprocess.Popen(
+            ["python3", str(bridge_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        log.warning("ensure_bridge_running: failed to start bridge: %s", exc)
+        return False
+
+    # Poll for healthy status
+    deadline = time.monotonic() + startup_wait
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        try:
+            import requests as _req
+            r = _req.get(f"{bridge_url}/health", timeout=1)
+            if r.status_code == 200 and r.json().get("status") == "ok":
+                log.info("ensure_bridge_running: bridge started and healthy at %s", bridge_url)
+                return True
+        except Exception:
+            pass
+
+    log.warning(
+        "ensure_bridge_running: bridge started but did not become healthy within %.1fs",
+        startup_wait,
+    )
+    return False
+
+
 __all__ = [
     "ClaudeCodeNotInstalled",
     "build_claude_code_caller",
     "claude_code_available",
+    "ensure_bridge_running",
 ]

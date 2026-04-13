@@ -324,6 +324,15 @@ class DesignAdvisor:
             )
             return self.llm_caller(system_prompt, user_prompt)
 
+        # Ensure bridge is running before attempting to connect — auto-starts from
+        # ~/.config/inkline/claude_bridge.py if present.  Zero-cost (1s timeout
+        # health check), never blocks if bridge is already up.
+        try:
+            from inkline.intelligence.claude_code import ensure_bridge_running
+            ensure_bridge_running(self.bridge_url)
+        except Exception:
+            pass  # Non-fatal — proceed to bridge attempt regardless
+
         # Try bridge — narrative truncation in _build_user_prompt() keeps prompts
         # under ~80K total (47K system + 33K user), within bridge processing limits.
         # Read timeout matches bridge's dynamic timeout (180s + 3s/KB, max 600s).
