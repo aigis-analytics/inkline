@@ -239,7 +239,7 @@ class TypstSlideRenderer:
     gutter: 16pt,
     align: horizon,
     {f'image("{logo_path}", height: 4.2cm),' if logo_path else 'none,'}
-    text(weight: "bold", size: 72pt, font: "{heading_font}", tracking: -2pt)[#upper("{_esc(company)}")]
+    text(weight: "bold", size: 60pt, font: "{heading_font}", tracking: -1pt)[#upper("{_esc(company)}")]
   )
 
   #v(0.6cm)
@@ -306,13 +306,13 @@ class TypstSlideRenderer:
             if i == highlight_idx:
                 # Accent card
                 cm = card(
-                    f'{card_title(c.get("title", ""), t["title_fg"])}\n      #v(6pt)\n      #text(size: 10.5pt, fill: {_rgb(t["title_fg"])})[{_esc(c.get("body", ""))}]',
+                    f'{card_title(c.get("title", ""), t["title_fg"])}\n      #v(6pt)\n      #text(size: 10pt, fill: {_rgb(t["title_fg"])})[{_esc(c.get("body", ""))}]',
                     fill=t["accent"],
                     text_color=t["title_fg"],
                 )
             else:
                 cm = card(
-                    f'{card_title(c.get("title", ""), t["text"])}\n      #v(6pt)\n      #text(size: 10.5pt, fill: {_rgb(t["muted"])})[{_esc(c.get("body", ""))}]',
+                    f'{card_title(c.get("title", ""), t["text"])}\n      #v(6pt)\n      #text(size: 10pt, fill: {_rgb(t["muted"])})[{_esc(c.get("body", ""))}]',
                     fill=t["card_fill"],
                     border=t["border"],
                     text_color=t["text"],
@@ -324,6 +324,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
