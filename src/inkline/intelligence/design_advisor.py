@@ -84,9 +84,13 @@ REQUIRED CADENCE:
 ====================================================================
 HARD CAPACITY LIMITS (overflow = broken slide — NEVER exceed these)
 ====================================================================
-TITLES:
-- Slide titles: KEEP UNDER 50 CHARS. Wrapping to 2 lines pushes content
-  off the page and causes layout overflow. Count characters carefully.
+TITLES (HARD LIMIT — ENFORCED BY RENDERER):
+- Slide titles: MAX 50 CHARS. Any title longer than 50 chars wraps to
+  2 lines and pushes content off the page causing layout overflow.
+  The fixer TRUNCATES titles at 50 chars — if your title is 60 chars,
+  8-10 words will be silently cut off. Write tight, action titles.
+  ALWAYS count: "Corsair delivers oil-weighted GoA cash flow" = 44 ✓
+  BAD: "Corsair offers proven GoA cash flow with material 2P upside" = 59 ✗
 
 ITEM COUNTS (anything beyond these limits is SILENTLY DROPPED):
 - chart_caption bullets: MAX 4 short bullets (8-10 words each)
@@ -94,7 +98,9 @@ ITEM COUNTS (anything beyond these limits is SILENTLY DROPPED):
 - dashboard stats: EXACTLY 3 stat callouts
 - feature_grid features: EXACTLY 6 features (3x2 grid)
 - table: MAX 6 rows x 6 columns. NEVER exceed 6 columns.
-  If the input has more rows, KEEP ALL ROWS — do NOT truncate user data.
+  Rows and columns beyond these limits are SILENTLY DROPPED by the renderer.
+  If source data has more than 6 rows, pick the 6 most important ones.
+  NEVER use a table when the data has >6 columns — use split or comparison instead.
 - three_card cards: EXACTLY 3
 - four_card cards: EXACTLY 4
 - icon_stat stats: 3 or 4
