@@ -61,10 +61,15 @@ CHART_CONTAINER_CM: dict[str, float] = {
     "chart": 8.5,
 }
 
-# Max text lengths
-MAX_TITLE_CHARS = 75
+# Max text lengths — must stay in sync with SLIDE_TYPE_GUIDE hard caps
+MAX_TITLE_CHARS = 50   # titles >50 chars wrap to 2 lines and cause overflow
 MAX_BULLET_CHARS = 200
 MAX_CELL_CHARS = 50
+
+# Table hard limits (independent of SLIDE_CAPACITY which may be set higher
+# for content-allocation purposes in layout_selector)
+TABLE_MAX_ROWS = 6
+TABLE_MAX_COLS = 6
 
 
 # =========================================================================
@@ -112,6 +117,30 @@ def validate_and_fix_slides(
                         "action": "truncated_items",
                         "from": len(items), "to": capacity,
                     })
+
+        # --- Table-specific hard limits (visual cap, independent of SLIDE_CAPACITY) ---
+        if stype == "table":
+            rows = data.get("rows", [])
+            if len(rows) > TABLE_MAX_ROWS:
+                data["rows"] = rows[:TABLE_MAX_ROWS]
+                fixes.append({
+                    "slide": i, "field": "rows",
+                    "action": "table_rows_capped",
+                    "from": len(rows), "to": TABLE_MAX_ROWS,
+                })
+            # Enforce column limit on headers + every row
+            headers = data.get("headers", [])
+            if len(headers) > TABLE_MAX_COLS:
+                data["headers"] = headers[:TABLE_MAX_COLS]
+                fixes.append({
+                    "slide": i, "field": "headers",
+                    "action": "table_cols_capped",
+                    "from": len(headers), "to": TABLE_MAX_COLS,
+                })
+                # Trim every row to match
+                for j, row in enumerate(data.get("rows", [])):
+                    if isinstance(row, (list, tuple)) and len(row) > TABLE_MAX_COLS:
+                        data["rows"][j] = list(row)[:TABLE_MAX_COLS]
 
         # --- Text length per item ---
         for field_name in _CONTENT_FIELDS.get(stype, []):
@@ -347,10 +376,10 @@ def _fix_content_reduction(
             del data["footnote"]
             modified = True
 
-        # Shorten title
+        # Shorten title to hard cap (50 chars)
         title = data.get("title", "")
-        if len(title) > 60:
-            data["title"] = _truncate_at_word(title, 55)
+        if len(title) > MAX_TITLE_CHARS:
+            data["title"] = _truncate_at_word(title, MAX_TITLE_CHARS)
             modified = True
 
         # Reduce item count by ~20%
@@ -462,7 +491,8 @@ def _split_one_slide(
             b = dict(data)
             _set_nested(a, field, items[:mid])
             _set_nested(b, field, items[mid:])
-            b["title"] = data.get("title", "") + " (cont.)"
+            base = _truncate_at_word(data.get("title", ""), MAX_TITLE_CHARS - 8)
+            b["title"] = base + " (cont.)"
             return a, b
     return None
 
@@ -625,6 +655,11 @@ def _fix_type_downgrade(
 
         # Clean up None values
         new_data = {k: v for k, v in new_data.items() if v is not None}
+
+        # Always enforce title cap on downgraded slides
+        t = new_data.get("title", "")
+        if len(t) > MAX_TITLE_CHARS:
+            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS)
 
         slides[idx] = {"slide_type": target, "data": new_data}
         log.info(
