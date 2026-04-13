@@ -652,9 +652,13 @@ class DesignAdvisor:
         CORE_PLAYBOOKS = ["slide_layouts"]
         SUMMARY_PLAYBOOKS = ["template_catalog", "typography", "color_theory"]
 
+        from inkline.intelligence.vishwakarma import VISHWAKARMA_SYSTEM_PREAMBLE
+
         parts = [
             "You are Inkline's DesignAdvisor — an expert graphic designer and visual storyteller.",
             "You design compelling, professional slide decks that communicate information with maximum impact.",
+            "",
+            VISHWAKARMA_SYSTEM_PREAMBLE,
             "",
             "=" * 60,
             "PRIME DIRECTIVE: NEVER INVENT FACTS",

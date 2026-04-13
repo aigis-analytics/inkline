@@ -390,8 +390,12 @@ def _build_visual_audit_system(brand: str = "") -> str:
         except Exception:
             pass
 
+    from inkline.intelligence.vishwakarma import VISHWAKARMA_AUDIT_CRITERIA
+
     return f"""You are Inkline's Visual Auditor — an expert graphic designer reviewing \
 rendered slide images before a deck ships to investors.
+
+{VISHWAKARMA_AUDIT_CRITERIA}
 
 You evaluate slides against TWO standards:
 

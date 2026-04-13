@@ -30,6 +30,7 @@ from inkline.intelligence.design_advisor import DesignAdvisor, LLMCaller
 from inkline.intelligence.claude_code import (
     build_claude_code_caller,
     claude_code_available,
+    ensure_bridge_running,
     ClaudeCodeNotInstalled,
 )
 from inkline.intelligence.overflow_audit import (
@@ -47,6 +48,15 @@ from inkline.intelligence.template_catalog import (
     load_manifest,
     suggest_archetype,
 )
+from inkline.intelligence.archon import Archon, Issue, PhaseResult
+from inkline.intelligence.vishwakarma import (
+    VISHWAKARMA_SYSTEM_PREAMBLE,
+    VISHWAKARMA_AUDIT_CRITERIA,
+    VISUAL_HIERARCHY,
+    BRIDGE_FIRST,
+    AUDIT_MANDATORY,
+    ARCHON_OVERSIGHT,
+)
 
 __all__ = [
     "DesignAdvisor",
@@ -54,6 +64,7 @@ __all__ = [
     # Claude Code subscription bridge
     "build_claude_code_caller",
     "claude_code_available",
+    "ensure_bridge_running",
     "ClaudeCodeNotInstalled",
     # Audit
     "audit_deck",
@@ -68,4 +79,15 @@ __all__ = [
     "list_archetypes",
     "load_manifest",
     "suggest_archetype",
+    # Archon oversight
+    "Archon",
+    "Issue",
+    "PhaseResult",
+    # Vishwakarma philosophy
+    "VISHWAKARMA_SYSTEM_PREAMBLE",
+    "VISHWAKARMA_AUDIT_CRITERIA",
+    "VISUAL_HIERARCHY",
+    "BRIDGE_FIRST",
+    "AUDIT_MANDATORY",
+    "ARCHON_OVERSIGHT",
 ]
