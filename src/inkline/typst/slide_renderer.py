@@ -1397,6 +1397,8 @@ def _esc(text) -> str:
         .replace("@", "\\@")
         .replace("<", "\\<")
         .replace(">", "\\>")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
     )
 
 

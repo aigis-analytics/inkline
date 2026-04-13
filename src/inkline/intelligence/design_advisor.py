@@ -389,7 +389,7 @@ class DesignAdvisor:
         )
         response = client.messages.create(
             model=self.model,
-            max_tokens=8192,
+            max_tokens=16000,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
