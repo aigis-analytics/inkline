@@ -88,15 +88,29 @@ def _auto_render_charts(
     This function renders those charts via matplotlib before Typst compilation,
     so the image files exist when the compiler needs them.
     """
+    # Collect charts to render from all slide types:
+    # - Top-level data.chart_request (chart/chart_caption/dashboard slides)
+    # - Nested data.charts[i].chart_request (multi_chart slides)
+    # Each entry: (slide, chart_entry_or_None, chart_req, full_path)
+    # chart_entry_or_None: the specific chart dict within data.charts[], or None for top-level
     charts_to_render = []
     for slide in slides:
         data = slide.get("data", {})
+        # Top-level chart_request
         chart_req = data.get("chart_request")
         image_path = data.get("image_path")
         if chart_req and image_path:
             full_path = Path(root) / image_path
             if not full_path.exists():
-                charts_to_render.append((slide, chart_req, full_path))
+                charts_to_render.append((slide, None, chart_req, full_path))
+        # Nested chart_requests inside multi_chart slides
+        for chart_entry in data.get("charts", []):
+            c_req = chart_entry.get("chart_request")
+            c_path = chart_entry.get("image_path")
+            if c_req and c_path:
+                full_path = Path(root) / c_path
+                if not full_path.exists():
+                    charts_to_render.append((slide, chart_entry, c_req, full_path))
 
     if not charts_to_render:
         return
@@ -108,14 +122,16 @@ def _auto_render_charts(
         return
 
     # Determine chart dimensions based on slide type
+    # multi_chart sub-charts are sized to fit their cell (smaller than full-slide charts)
     CHART_SIZES = {
         "chart_caption": (7.0, 3.0),
         "dashboard": (6.5, 3.4),
         "chart": (9.0, 4.5),
+        "multi_chart": (5.5, 3.0),   # per-cell size for multi_chart layouts
     }
     default_size = (7.0, 3.5)
 
-    for slide, chart_req, full_path in charts_to_render:
+    for slide, chart_entry, chart_req, full_path in charts_to_render:
         chart_type = chart_req.get("chart_type", "")
         chart_data = chart_req.get("chart_data", {})
         if not chart_type or not chart_data:
@@ -134,8 +150,12 @@ def _auto_render_charts(
         except Exception as e:
             log.warning("Failed to auto-render chart %s: %s", full_path.name, e)
             # Remove the image_path so the slide doesn't reference a missing file
-            slide["data"].pop("image_path", None)
-            slide["data"].pop("chart_request", None)
+            if chart_entry is not None:
+                chart_entry.pop("image_path", None)
+                chart_entry.pop("chart_request", None)
+            else:
+                slide["data"].pop("image_path", None)
+                slide["data"].pop("chart_request", None)
 
 
 def _preflight_images(slides: list, root: str) -> None:
