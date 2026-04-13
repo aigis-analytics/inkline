@@ -91,8 +91,9 @@ def _auto_render_charts(
     # Collect charts to render from all slide types:
     # - Top-level data.chart_request (chart/chart_caption/dashboard slides)
     # - Nested data.charts[i].chart_request (multi_chart slides)
-    # Each entry: (slide, chart_entry_or_None, chart_req, full_path)
+    # Each entry: (slide, chart_entry_or_None, chart_req, full_path, chart_index)
     # chart_entry_or_None: the specific chart dict within data.charts[], or None for top-level
+    # chart_index: position within data.charts[] (for multi_chart slot size lookup)
     charts_to_render = []
     for slide in slides:
         data = slide.get("data", {})
@@ -102,15 +103,15 @@ def _auto_render_charts(
         if chart_req and image_path:
             full_path = Path(root) / image_path
             if not full_path.exists():
-                charts_to_render.append((slide, None, chart_req, full_path))
+                charts_to_render.append((slide, None, chart_req, full_path, 0))
         # Nested chart_requests inside multi_chart slides
-        for chart_entry in data.get("charts", []):
+        for chart_idx, chart_entry in enumerate(data.get("charts", [])):
             c_req = chart_entry.get("chart_request")
             c_path = chart_entry.get("image_path")
             if c_req and c_path:
                 full_path = Path(root) / c_path
                 if not full_path.exists():
-                    charts_to_render.append((slide, chart_entry, c_req, full_path))
+                    charts_to_render.append((slide, chart_entry, c_req, full_path, chart_idx))
 
     if not charts_to_render:
         return
@@ -121,24 +122,36 @@ def _auto_render_charts(
         log.warning("matplotlib not available — cannot auto-render %d chart(s)", len(charts_to_render))
         return
 
-    # Determine chart dimensions based on slide type
-    # multi_chart sub-charts are sized to fit their cell (smaller than full-slide charts)
-    CHART_SIZES = {
+    # Base sizes for non-multi_chart slide types (in inches)
+    _CHART_SIZES = {
         "chart_caption": (7.0, 3.0),
         "dashboard": (6.5, 3.4),
         "chart": (9.0, 4.5),
-        "multi_chart": (5.5, 3.0),   # per-cell size for multi_chart layouts
     }
-    default_size = (7.0, 3.5)
+    _DEFAULT_SIZE = (7.0, 3.5)
 
-    for slide, chart_entry, chart_req, full_path in charts_to_render:
+    for slide, chart_entry, chart_req, full_path, chart_idx in charts_to_render:
         chart_type = chart_req.get("chart_type", "")
         chart_data = chart_req.get("chart_data", {})
         if not chart_type or not chart_data:
             log.warning("Skipping chart_request with missing type or data: %s", full_path.name)
             continue
 
-        w, h = CHART_SIZES.get(slide["slide_type"], default_size)
+        if slide["slide_type"] == "multi_chart":
+            # Slot-based sizing: compute the exact cell dimensions for this layout
+            # and chart position so the PNG fills the Typst slot with no letterboxing.
+            try:
+                from inkline.typst.slide_renderer import get_multi_chart_slot
+                layout = slide.get("data", {}).get("layout", "equal_2")
+                n_charts = len(slide.get("data", {}).get("charts", []))
+                w_cm, h_cm = get_multi_chart_slot(layout, chart_idx, n_charts)
+                w = w_cm / 2.54   # cm → inches
+                h = h_cm / 2.54
+            except Exception:
+                w, h = _DEFAULT_SIZE
+        else:
+            w, h = _CHART_SIZES.get(slide["slide_type"], _DEFAULT_SIZE)
+
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -146,7 +159,7 @@ def _auto_render_charts(
                 chart_type, chart_data, str(full_path),
                 brand_name=brand, width=w, height=h,
             )
-            log.info("Auto-rendered chart: %s (%s)", full_path.name, chart_type)
+            log.info("Auto-rendered chart: %s (%s, %.2f\"×%.2f\")", full_path.name, chart_type, w, h)
         except Exception as e:
             log.warning("Failed to auto-render chart %s: %s", full_path.name, e)
             # Remove the image_path so the slide doesn't reference a missing file

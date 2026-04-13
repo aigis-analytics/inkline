@@ -99,7 +99,7 @@ def validate_and_fix_slides(
         # --- Title length ---
         title = data.get("title", "")
         if len(title) > MAX_TITLE_CHARS:
-            truncated = _truncate_at_word(title, MAX_TITLE_CHARS)
+            truncated = _truncate_at_word(title, MAX_TITLE_CHARS, ellipsis=False)
             data["title"] = truncated
             fixes.append({
                 "slide": i, "field": "title", "action": "truncated",
@@ -424,7 +424,7 @@ def _fix_content_reduction(
         # Shorten title to hard cap (50 chars)
         title = data.get("title", "")
         if len(title) > MAX_TITLE_CHARS:
-            data["title"] = _truncate_at_word(title, MAX_TITLE_CHARS)
+            data["title"] = _truncate_at_word(title, MAX_TITLE_CHARS, ellipsis=False)
             modified = True
 
         # Reduce item count by ~20%
@@ -564,7 +564,7 @@ def _split_one_slide(
             b = dict(data)
             _set_nested(a, field, items[:mid])
             _set_nested(b, field, items[mid:])
-            base = _truncate_at_word(data.get("title", ""), MAX_TITLE_CHARS - 8)
+            base = _truncate_at_word(data.get("title", ""), MAX_TITLE_CHARS - 8, ellipsis=False)
             b["title"] = base + " (cont.)"
             return a, b
     return None
@@ -779,7 +779,7 @@ def _fix_type_downgrade(
         # Always enforce title cap on downgraded slides
         t = new_data.get("title", "")
         if len(t) > MAX_TITLE_CHARS:
-            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS)
+            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS, ellipsis=False)
 
         slides[idx] = {"slide_type": target, "data": new_data}
         log.info(
@@ -849,7 +849,7 @@ def _fix_nuclear_downgrade(
         # Enforce title cap
         t = new_data.get("title", "")
         if len(t) > MAX_TITLE_CHARS:
-            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS)
+            new_data["title"] = _truncate_at_word(t, MAX_TITLE_CHARS, ellipsis=False)
 
         slides[idx] = {"slide_type": "content", "data": new_data}
         log.info(
@@ -1138,15 +1138,20 @@ def _audit_chart_data(
 # HELPERS
 # =========================================================================
 
-def _truncate_at_word(text: str, max_chars: int) -> str:
-    """Truncate text at the last word boundary before max_chars."""
+def _truncate_at_word(text: str, max_chars: int, ellipsis: bool = True) -> str:
+    """Truncate text at the last word boundary before max_chars.
+
+    ellipsis=False: used for slide titles (action titles should end cleanly,
+    not with '...' which implies a sentence continuation that doesn't exist).
+    ellipsis=True (default): used for body text/bullets where truncation is expected.
+    """
     if len(text) <= max_chars:
         return text
     truncated = text[:max_chars]
     last_space = truncated.rfind(" ")
     if last_space > max_chars * 0.6:
         truncated = truncated[:last_space]
-    return truncated.rstrip() + "..."
+    return truncated.rstrip() + ("..." if ellipsis else "")
 
 
 def _get_nested(data: dict, dotted_key: str) -> Any:

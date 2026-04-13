@@ -48,6 +48,111 @@ class DeckSpec:
 
 
 # ---------------------------------------------------------------------------
+# Multi-chart layout slot sizes
+# ---------------------------------------------------------------------------
+# Exact cell dimensions (width_cm, height_cm) for each chart image slot in
+# multi_chart layouts. Derived from actual page geometry:
+#   page: 25.4cm × 14.29cm, margins: left/right=1.4cm, top=1.4cm, bottom=1.2cm
+#   content_width = 22.6cm, content_height = 11.69cm
+#   multi_chart header overhead ≈ 1.62cm → body ≈ 10.07cm
+#   conservative body used: 9.8cm (accounts for footnote + rounding)
+#   chart cell title overhead (8pt text + v(3pt)) ≈ 0.4cm
+#
+# These dimensions are imported by _auto_render_charts in __init__.py to size
+# matplotlib figures exactly, so chart images fill their slots with no
+# letterboxing or empty space — the PowerPoint-placeholder model.
+#
+# For top_bottom: dict key includes chart index (0=top, 1+=bottom).
+# bottom_n is the number of bottom charts (1, 2, or 3); used for column width.
+_MC_W = 22.6   # content width
+_MC_BH = 9.4   # available body height (leaves ~0.4cm safety margin vs theoretical ~9.8cm)
+_MC_G10 = 10 * 2.54 / 72   # 10pt gutter in cm
+_MC_G12 = 12 * 2.54 / 72   # 12pt gutter
+_MC_G8 = 8 * 2.54 / 72     # 8pt stack spacing
+_MC_TOH = 0.4              # chart title overhead (8pt + 3pt)
+
+MULTI_CHART_SLOT_SIZES: dict[str, list[tuple[float, float]]] = {
+    # quad: 2×2 grid, gutter 10pt. Each cell = half width, half height.
+    "quad": [
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row0 col0
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row0 col1
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row1 col0
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row1 col1
+    ],
+    # equal_2: 2 columns, gutter 12pt. Full body height.
+    "equal_2": [
+        ((_MC_W - _MC_G12) / 2, _MC_BH - _MC_TOH),
+        ((_MC_W - _MC_G12) / 2, _MC_BH - _MC_TOH),
+    ],
+    # equal_3: 3 columns, 2×gutter 12pt.
+    "equal_3": [
+        ((_MC_W - 2 * _MC_G12) / 3, _MC_BH - _MC_TOH),
+        ((_MC_W - 2 * _MC_G12) / 3, _MC_BH - _MC_TOH),
+        ((_MC_W - 2 * _MC_G12) / 3, _MC_BH - _MC_TOH),
+    ],
+    # equal_4: 4 columns, 3×gutter 12pt.
+    "equal_4": [
+        ((_MC_W - 3 * _MC_G12) / 4, _MC_BH - _MC_TOH),
+        ((_MC_W - 3 * _MC_G12) / 4, _MC_BH - _MC_TOH),
+        ((_MC_W - 3 * _MC_G12) / 4, _MC_BH - _MC_TOH),
+        ((_MC_W - 3 * _MC_G12) / 4, _MC_BH - _MC_TOH),
+    ],
+    # hero_left: 2fr (hero) + 1fr (small), gutter 12pt.
+    "hero_left": [
+        ((_MC_W - _MC_G12) * 2 / 3, _MC_BH - _MC_TOH),   # hero
+        ((_MC_W - _MC_G12) * 1 / 3, _MC_BH - _MC_TOH),   # small
+    ],
+    # hero_left_3: 2fr hero + 1fr + 1fr, 2×gutter 12pt.
+    "hero_left_3": [
+        ((_MC_W - 2 * _MC_G12) * 2 / 4, _MC_BH - _MC_TOH),  # hero
+        ((_MC_W - 2 * _MC_G12) * 1 / 4, _MC_BH - _MC_TOH),  # small
+        ((_MC_W - 2 * _MC_G12) * 1 / 4, _MC_BH - _MC_TOH),  # small
+    ],
+    # hero_right_3: 1fr + 1fr + 2fr hero, 2×gutter 12pt.
+    "hero_right_3": [
+        ((_MC_W - 2 * _MC_G12) * 1 / 4, _MC_BH - _MC_TOH),  # small
+        ((_MC_W - 2 * _MC_G12) * 1 / 4, _MC_BH - _MC_TOH),  # small
+        ((_MC_W - 2 * _MC_G12) * 2 / 4, _MC_BH - _MC_TOH),  # hero
+    ],
+    # top_bottom: stack(8pt). Top 55%, bottom 45% of body height.
+    # Index 0 = top (full width). Indices 1-3 = bottom (width depends on n_bottom).
+    # Bottom widths assume 2 bottom charts; caller adjusts for 1 or 3.
+    "top_bottom": [
+        (_MC_W, (_MC_BH - _MC_G8) * 0.55 - _MC_TOH),                  # [0] top
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [1] bot (2-col default)
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [2] bot
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [3] bot (3-col)
+    ],
+}
+
+# Convenience accessor for _auto_render_charts
+def get_multi_chart_slot(layout: str, chart_index: int, n_charts: int) -> tuple[float, float]:
+    """Return (width_cm, height_cm) for a chart slot.
+
+    For top_bottom, adjusts bottom-chart widths based on actual n_bottom charts.
+    """
+    slots = MULTI_CHART_SLOT_SIZES.get(layout)
+    if not slots:
+        return (5.5, 3.0)  # safe fallback
+
+    if layout == "top_bottom" and chart_index > 0:
+        # Bottom charts: recalculate width based on actual number of bottom charts
+        n_bottom = n_charts - 1
+        if n_bottom == 1:
+            w = _MC_W
+        elif n_bottom == 3:
+            w = (_MC_W - 2 * _MC_G10) / 3
+        else:
+            w = (_MC_W - _MC_G10) / 2  # default: 2 bottom charts
+        h = (_MC_BH - _MC_G8) * 0.45 - _MC_TOH
+        return (w, h)
+
+    # All other layouts: use slot table, clamped to list length
+    idx = min(chart_index, len(slots) - 1)
+    return slots[idx]
+
+
+# ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
 
@@ -1247,10 +1352,20 @@ class TypstSlideRenderer:
         charts = d.get("charts", [])
         footnote = d.get("footnote", "")
 
-        def _chart_cell(c: dict, height: str = "100%") -> str:
+        def _chart_cell(c: dict, height: str | None = None) -> str:
+            """Render a single chart cell.
+
+            height: Typst dimension string (e.g. "4.3cm") for the image slot.
+            When None, the image fills width=100% at its natural aspect ratio
+            (correct when the matplotlib figure was pre-sized to match the slot).
+            """
             img = c.get("image_path", "")
             ctitle = _esc(c.get("title", ""))
-            img_block = self._image_markup(img, height=height, width="100%", fit='"contain"')
+            # Use width: 100% + natural height when pre-sized; otherwise constrain.
+            if height is not None:
+                img_block = self._image_markup(img, height=height, width="100%", fit='"contain"')
+            else:
+                img_block = self._image_markup(img, width="100%")
             if ctitle:
                 return f"""block(width: 100%)[
       #text(weight: "bold", size: 8pt, fill: {_rgb(t['muted'])})[#upper("{ctitle}")]
@@ -1258,6 +1373,16 @@ class TypstSlideRenderer:
       #align(center, {img_block})
     ]"""
             return f'block(width: 100%)[#align(center + horizon, {img_block})]'
+
+        # Retrieve pre-computed slot heights from module-level constants.
+        # These match the matplotlib figsize sent by _auto_render_charts so images
+        # fill their slots exactly — no letterboxing, no empty space.
+        _slots = MULTI_CHART_SLOT_SIZES.get(layout, [])
+        def _slot_h(idx: int) -> str:
+            """Return Typst height string for chart slot at index."""
+            if idx < len(_slots):
+                return f"{_slots[idx][1]:.2f}cm"
+            return "9.0cm"  # fallback
 
         # Layout → Typst grid column specification
         LAYOUTS = {
@@ -1274,7 +1399,9 @@ class TypstSlideRenderer:
             charts = charts[:4]
             while len(charts) < 4:
                 charts.append({})
-            cells = ",\n    ".join(_chart_cell(c, height="4.0cm") for c in charts)
+            # All quad slots have the same height
+            quad_h = _slot_h(0)
+            cells = ",\n    ".join(_chart_cell(c, height=quad_h) for c in charts)
             grid_body = f"""grid(
     columns: (1fr, 1fr),
     rows: (auto, auto),
@@ -1288,8 +1415,11 @@ class TypstSlideRenderer:
             bottom = charts[1:4]
             n_bot = max(len(bottom), 1)
             bot_cols = "(" + ", ".join(["1fr"] * n_bot) + ",)"
-            top_cell = _chart_cell(top[0], height="4.2cm") if top else "block(width: 100%)[]"
-            bot_cells = ",\n      ".join(_chart_cell(c, height="3.2cm") for c in bottom)
+            # Slot heights from table (index 0 = top, index 1+ = bottom)
+            top_h = _slot_h(0)
+            bot_h = _slot_h(min(1, len(_slots) - 1))  # all bottom cells same height
+            top_cell = _chart_cell(top[0], height=top_h) if top else "block(width: 100%)[]"
+            bot_cells = ",\n      ".join(_chart_cell(c, height=bot_h) for c in bottom)
             bot_grid = f"""grid(
       columns: {bot_cols},
       gutter: 10pt,
@@ -1304,8 +1434,10 @@ class TypstSlideRenderer:
         else:
             col_spec, n_expected = LAYOUTS.get(layout, ("(1fr, 1fr)", 2))
             charts = charts[:n_expected]
-            chart_h = "4.8cm" if n_expected <= 2 else "4.2cm"
-            cells = ",\n    ".join(_chart_cell(c, height=chart_h) for c in charts)
+            # Each chart in a single-row layout gets the same height
+            cells = ",\n    ".join(
+                _chart_cell(c, height=_slot_h(i)) for i, c in enumerate(charts)
+            )
             grid_body = f"""grid(
     columns: {col_spec},
     gutter: 12pt,
