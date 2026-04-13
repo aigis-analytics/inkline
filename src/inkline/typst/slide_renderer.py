@@ -188,6 +188,7 @@ class TypstSlideRenderer:
             "feature_grid": self._feature_grid_slide,
             "dashboard": self._dashboard_slide,
             "chart_caption": self._chart_caption_slide,
+            "multi_chart": self._multi_chart_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -1205,6 +1206,116 @@ class TypstSlideRenderer:
       {f'#v(6pt)#text(size: 8pt, fill: {_rgb(t["text"])})[{chr(10)}        {bullets_str}{chr(10)}      ]' if bullets else ''}
     ],
   )
+}}"""
+
+    # -- Multi-chart slide — 2-4 exhibits in configurable grid ------------
+
+    def _multi_chart_slide(self, d: dict) -> str:
+        """Multiple chart images arranged in a configurable grid layout.
+
+        Supports asymmetric proportions and 2-row arrangements, modelled on
+        institutional bank presentation patterns (Pareto, Goldman Sachs, McKinsey).
+
+        data:
+          section: str
+          title: str
+          layout: one of:
+            "equal_2"      — two equal columns (50/50)
+            "equal_3"      — three equal columns (33/33/33)
+            "equal_4"      — four equal columns (25/25/25/25)
+            "hero_left"    — two columns 65/35
+            "hero_left_3"  — three columns 50/25/25 (hero + 2 small)
+            "hero_right_3" — three columns 25/25/50 (2 small + hero)
+            "quad"         — 2×2 grid (4 charts, equal)
+            "top_bottom"   — single full-width chart on top, two below (or vice versa)
+          charts: list of {image_path, title?}   (2–4 charts; 4 for quad/top_bottom)
+          footnote: str
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        layout = d.get("layout", "equal_2")
+        charts = d.get("charts", [])
+        footnote = d.get("footnote", "")
+
+        def _chart_cell(c: dict, height: str = "100%") -> str:
+            img = c.get("image_path", "")
+            ctitle = _esc(c.get("title", ""))
+            img_block = self._image_markup(img, height=height, width="100%", fit='"contain"')
+            if ctitle:
+                return f"""block(width: 100%)[
+      #text(weight: "bold", size: 8pt, fill: {_rgb(t['muted'])})[#upper("{ctitle}")]
+      #v(3pt)
+      #align(center, {img_block})
+    ]"""
+            return f'block(width: 100%)[#align(center + horizon, {img_block})]'
+
+        # Layout → Typst grid column specification
+        LAYOUTS = {
+            "equal_2":      ("(1fr, 1fr)", 2),
+            "equal_3":      ("(1fr, 1fr, 1fr)", 3),
+            "equal_4":      ("(1fr, 1fr, 1fr, 1fr)", 4),
+            "hero_left":    ("(2fr, 1fr)", 2),
+            "hero_left_3":  ("(2fr, 1fr, 1fr)", 3),
+            "hero_right_3": ("(1fr, 1fr, 2fr)", 3),
+        }
+
+        if layout == "quad":
+            # 2×2 grid — 4 charts in two rows of two
+            charts = charts[:4]
+            while len(charts) < 4:
+                charts.append({})
+            cells = "\n    ".join(_chart_cell(c, height="6.5cm") for c in charts)
+            grid_body = f"""grid(
+    columns: (1fr, 1fr),
+    rows: (auto, auto),
+    gutter: 10pt,
+    {cells}
+  )"""
+
+        elif layout == "top_bottom":
+            # Top: single wide chart; Bottom: up to 3 equal charts
+            top = charts[:1]
+            bottom = charts[1:4]
+            n_bot = max(len(bottom), 1)
+            bot_cols = "(1fr, " + ", ".join(["1fr"] * (n_bot - 1)) + ")" if n_bot > 1 else "(1fr,)"
+            top_cell = _chart_cell(top[0], height="5.5cm") if top else "block()[]"
+            bot_cells = "\n      ".join(_chart_cell(c, height="4.5cm") for c in bottom)
+            bot_grid = f"""grid(
+      columns: {bot_cols},
+      gutter: 10pt,
+      {bot_cells}
+    )""" if bottom else ""
+            grid_body = f"""stack(
+    spacing: 8pt,
+    {top_cell},
+    {bot_grid}
+  )"""
+
+        else:
+            col_spec, n_expected = LAYOUTS.get(layout, ("(1fr, 1fr)", 2))
+            charts = charts[:n_expected]
+            chart_h = "6.0cm" if n_expected <= 2 else "5.5cm"
+            cells = "\n    ".join(_chart_cell(c, height=chart_h) for c in charts)
+            grid_body = f"""grid(
+    columns: {col_spec},
+    gutter: 12pt,
+    {cells}
+  )"""
+
+        footnote_block = (
+            f'\n  #v(4pt)\n  #text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{_esc(footnote)}]'
+            if footnote else ""
+        )
+
+        return f"""#{{
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(8pt)
+
+  {grid_body}
+  {footnote_block}
 }}"""
 
     # -- Chart slide with side caption -------------------------------------

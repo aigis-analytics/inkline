@@ -175,6 +175,8 @@ def render_chart(
         # Institutional exhibit types
         "marimekko": _render_marimekko,
         "entity_flow": _render_entity_flow,
+        "divergent_bar": _render_divergent_bar,
+        "horizontal_stacked_bar": _render_horizontal_stacked_bar,
     }
 
     renderer = renderers.get(chart_type)
@@ -2137,17 +2139,29 @@ def _render_infographic_metaphor_backdrop(data, *, colors, accent, bg, text_colo
 # ---------------------------------------------------------------------------
 
 def _render_infographic_chart_row(data, *, colors, accent, bg, text_color, muted, width, height):
-    """Side-by-side mini charts composited into one figure.
+    """Side-by-side (or 2-row) mini charts composited into one figure.
 
     data:
         charts: list of {chart_type, data, title}   (2-4 charts)
+        width_ratios: list of ints  (optional — relative column widths, e.g. [2,1,1] for 50%+25%+25%)
+        rows: int  (1 or 2 — set rows=2 for a 2×N grid; charts fills row-major order)
+        row_height_ratios: list of ints  (optional — relative row heights for 2-row layouts)
+
+    Layouts supported:
+      - rows=1 (default): all charts in one horizontal strip
+          width_ratios=[1,1,1] → equal thirds
+          width_ratios=[2,1,1] → 50%+25%+25% (hero-left-3)
+          width_ratios=[2,1]   → 67%+33% (hero-left)
+      - rows=2: 2×N grid (N charts per row = total_charts/2)
+          charts=[a,b,c,d] fills: top=[a,b], bottom=[c,d]
+          top_span: index of chart that spans full width in first row (optional)
     """
     import tempfile
     import numpy as np
     from pathlib import Path as _Path
-    from matplotlib.gridspec import GridSpec
+    from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
-    charts = data.get("charts", [])[:4]
+    charts = data.get("charts", [])[:8]  # max 8 for 2×4 grid
     n = len(charts)
     if n == 0:
         fig, ax = _plt.subplots(figsize=(width, height))
@@ -2156,46 +2170,110 @@ def _render_infographic_chart_row(data, *, colors, accent, bg, text_color, muted
         fig.tight_layout()
         return fig
 
+    rows = data.get("rows", 1)
+    width_ratios = data.get("width_ratios", None)
+    row_height_ratios = data.get("row_height_ratios", None)
+
+    # --- 2-row layout ---
+    if rows == 2:
+        n_per_row = max(1, n // 2)
+        top_charts = charts[:n_per_row]
+        bot_charts = charts[n_per_row:n_per_row * 2]
+
+        # Top row may span full width (for "top_bottom" style: wide top + narrow bottom)
+        top_span = data.get("top_span", False)  # single chart spanning full top width
+
+        n_top = 1 if top_span else len(top_charts)
+        n_bot = len(bot_charts)
+
+        h_ratios = row_height_ratios or [1, 1]
+        outer_gs = GridSpec(2, 1, figure=None, hspace=0.18,
+                            height_ratios=h_ratios)
+        fig = _plt.figure(figsize=(width, height))
+        fig.patch.set_facecolor(bg)
+
+        def _render_row(gs_slot, row_charts, w_ratios=None):
+            nc = len(row_charts)
+            if nc == 0:
+                return
+            inner_gs = GridSpecFromSubplotSpec(
+                1, nc,
+                subplot_spec=outer_gs[gs_slot],
+                wspace=0.10,
+                width_ratios=w_ratios or [1] * nc,
+            )
+            for j, spec in enumerate(row_charts):
+                _render_chart_into_ax(fig, inner_gs[j], spec, width / nc, height / 2 - 0.3)
+
+        top_w_ratios = None if top_span else width_ratios
+        _render_row(0, top_charts if not top_span else top_charts[:1], top_w_ratios)
+        _render_row(1, bot_charts)
+
+        fig.tight_layout()
+        return fig
+
+    # --- 1-row layout ---
     fig = _plt.figure(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    gs = GridSpec(1, n, figure=fig, wspace=0.08)
 
-    sub_w = width / n
-    sub_h = height - 0.4  # leave room for title
+    w_ratios = width_ratios or [1] * n
+    if len(w_ratios) < n:
+        w_ratios = w_ratios + [1] * (n - len(w_ratios))
 
+    gs = GridSpec(1, n, figure=fig, wspace=0.10, width_ratios=w_ratios)
+
+    # Compute sub-chart widths proportionally
+    total_ratio = sum(w_ratios[:n]) or n
     for i, chart_spec in enumerate(charts):
-        chart_type = chart_spec.get("chart_type", "bar")
-        chart_data = chart_spec.get("data", {})
-        chart_title = chart_spec.get("title", "")
-
-        # Render to a temp file
-        tmp = _Path(tempfile.mktemp(suffix=".png"))
-        try:
-            render_chart(
-                chart_type, chart_data, tmp,
-                brand_colors=colors,
-                accent=accent, bg=bg, text_color=text_color, muted=muted,
-                width=sub_w, height=sub_h, dpi=150,
-                color_mode="palette",
-            )
-            ax_sub = fig.add_subplot(gs[i])
-            ax_sub.set_facecolor(bg)
-            if tmp.exists():
-                img = _plt.imread(str(tmp))
-                ax_sub.imshow(img, aspect="auto")
-            ax_sub.axis("off")
-            if chart_title:
-                ax_sub.set_title(chart_title, fontsize=9, fontweight="bold",
-                                 color=text_color, pad=4)
-        finally:
-            if tmp.exists():
-                try:
-                    tmp.unlink()
-                except OSError:
-                    pass
+        sub_w = width * (w_ratios[i] / total_ratio)
+        _render_chart_into_ax(fig, gs[i], chart_spec, sub_w, height - 0.4)
 
     fig.tight_layout()
     return fig
+
+
+def _render_chart_into_ax(fig, subplot_spec, chart_spec, sub_w, sub_h):
+    """Render one chart into a GridSpec subplot slot via temp PNG."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    # Pull shared params from the chart_spec context if available
+    _cctx = chart_spec.get("_ctx", {})
+    colors = _cctx.get("colors", None)
+    accent = _cctx.get("accent", "#1B2A4A")
+    bg = _cctx.get("bg", "#FFFFFF")
+    text_color = _cctx.get("text_color", "#111827")
+    muted = _cctx.get("muted", "#6B7280")
+
+    chart_type = chart_spec.get("chart_type", "line_chart")
+    chart_data = chart_spec.get("data", {})
+    chart_title = chart_spec.get("title", "")
+
+    tmp = _Path(tempfile.mktemp(suffix=".png"))
+    try:
+        # render_chart is defined in this module — call directly
+        render_chart(  # noqa: F821 — defined at module scope
+            chart_type, chart_data, tmp,
+            brand_colors=colors,
+            accent=accent, bg=bg, text_color=text_color, muted=muted,
+            width=max(sub_w, 1.5), height=max(sub_h, 1.0), dpi=150,
+            color_mode="palette",
+        )
+        ax_sub = fig.add_subplot(subplot_spec)
+        ax_sub.set_facecolor(bg)
+        if tmp.exists():
+            img = _plt.imread(str(tmp))
+            ax_sub.imshow(img, aspect="auto")
+        ax_sub.axis("off")
+        if chart_title:
+            ax_sub.set_title(chart_title, fontsize=9, fontweight="bold",
+                             color=text_color, pad=4)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -2537,4 +2615,223 @@ def _render_entity_flow(data, *, colors, accent, bg, text_color, muted, width, h
                 fontsize=11, fontweight="bold", color=text_color, zorder=6)
 
     fig.tight_layout(rect=[0, 0, 1, 1])
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 19. Divergent bar chart (above/below zero baseline)
+# ---------------------------------------------------------------------------
+
+def _render_divergent_bar(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Vertical bar chart where bars can be positive (above zero) OR negative (below zero).
+
+    Used for net flows, inflow/outflow, fund flows, EBITDA bridge variations.
+    Positive bars use primary color; negative bars use secondary/muted color.
+    Value labels float above/below each bar tip.
+
+    data:
+        items: list of {label: str, value: float}
+        positive_label: str  (optional legend label for positive bars)
+        negative_label: str  (optional legend label for negative bars)
+        y_label: str  (optional — default: use floating unit label instead)
+        show_zero_line: bool  (default True)
+        title: str  (optional — rendered as chart title within the exhibit)
+
+    Example::
+
+        {
+            "items": [
+                {"label": "Jan", "value": -1.4},
+                {"label": "Feb", "value": 2.5},
+                {"label": "Mar", "value": 3.5},
+                {"label": "Apr", "value": 1.4},
+                {"label": "May", "value": -8.2},
+                {"label": "Jun", "value": 7.1},
+            ],
+            "positive_label": "Net inflow",
+            "negative_label": "Net outflow",
+            "y_label": "USDbn",
+        }
+    """
+    import numpy as np
+    from matplotlib.patches import Patch
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+
+    items = data.get("items", [])
+    pos_label = data.get("positive_label", "Inflow")
+    neg_label = data.get("negative_label", "Outflow")
+    y_label = data.get("y_label", "")
+    show_zero = data.get("show_zero_line", True)
+    chart_title = data.get("title", "")
+
+    if not items:
+        ax.axis("off")
+        fig.tight_layout()
+        return fig
+
+    labels = [it.get("label", "") for it in items]
+    values = [it.get("value", 0) for it in items]
+    x = list(range(len(labels)))
+
+    pos_color = colors[0] if colors else accent
+    neg_color = colors[1] if len(colors) > 1 else muted
+
+    bar_colors = [pos_color if v >= 0 else neg_color for v in values]
+    bars = ax.bar(x, values, color=bar_colors, width=0.65, edgecolor="white", linewidth=0.5, zorder=3)
+
+    # Value labels above/below bar tips
+    for i, (v, bar) in enumerate(zip(values, bars)):
+        va = "bottom" if v >= 0 else "top"
+        offset = 0.03 * (max(abs(v) for v in values) or 1) * (1 if v >= 0 else -1)
+        ax.text(i, v + offset, f"{v:+.1f}" if abs(v) < 100 else f"{v:+,.0f}",
+                ha="center", va=va, fontsize=8, color=text_color, zorder=4)
+
+    # Zero baseline
+    if show_zero:
+        ax.axhline(0, color=muted, lw=1.5, zorder=2)
+
+    # Axis styling — minimal
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.yaxis.set_visible(False)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=8.5, color=text_color)
+    ax.tick_params(axis="x", length=0)
+
+    # Floating y-label above axis (not as axis title)
+    if y_label:
+        ymax = max(abs(v) for v in values) * 1.15 or 1
+        ax.text(-0.6, ymax, y_label, fontsize=7.5, color=muted, va="top")
+
+    # Optional chart title
+    if chart_title:
+        ax.set_title(chart_title, fontsize=10, fontweight="bold", color=text_color, pad=6)
+
+    # Legend — minimal, inside chart, no box
+    legend_handles = [
+        Patch(facecolor=pos_color, label=pos_label),
+        Patch(facecolor=neg_color, label=neg_label),
+    ]
+    ax.legend(handles=legend_handles, loc="upper right", frameon=False,
+              fontsize=8, labelcolor=text_color)
+
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 20. Horizontal stacked bar (100% composition / transition)
+# ---------------------------------------------------------------------------
+
+def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, height):
+    """100% stacked horizontal bar chart for composition/transition over time.
+
+    Used for showing how a mix shifts year-over-year (e.g., crypto → HPC/AI revenue).
+    - Y-axis: categorical time periods (years, cohorts)
+    - X-axis: percentage 0–100%
+    - Each bar is 100% wide, split into segments
+    - 2 colors by default (declining segment, growing segment)
+    - No bar value labels (proportions communicate via bar length)
+    - Gridlines at 25% intervals, hairline
+
+    data:
+        periods: list of {label: str, segments: [{label: str, value: float}]}
+        title: str  (optional)
+        x_label: str  (optional, e.g. "% of revenue")
+        gridline_interval: float  (default 25.0)
+
+    Example::
+
+        {
+            "title": "Income from crypto vs HPC/AI",
+            "periods": [
+                {"label": "2024", "segments": [{"label": "Crypto", "value": 95},   {"label": "HPC/AI", "value": 5}]},
+                {"label": "2025", "segments": [{"label": "Crypto", "value": 70},   {"label": "HPC/AI", "value": 30}]},
+                {"label": "2026", "segments": [{"label": "Crypto", "value": 40},   {"label": "HPC/AI", "value": 60}]},
+                {"label": "2027", "segments": [{"label": "Crypto", "value": 15},   {"label": "HPC/AI", "value": 85}]},
+                {"label": "2028", "segments": [{"label": "Crypto", "value": 5},    {"label": "HPC/AI", "value": 95}]},
+            ],
+        }
+    """
+    import numpy as np
+    from matplotlib.patches import Patch
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+
+    periods = data.get("periods", [])
+    chart_title = data.get("title", "")
+    x_label = data.get("x_label", "")
+    grid_interval = data.get("gridline_interval", 25.0)
+
+    if not periods:
+        ax.axis("off")
+        fig.tight_layout()
+        return fig
+
+    period_labels = [p.get("label", "") for p in periods]
+    n_periods = len(period_labels)
+
+    # Collect all segment names in order (from first period)
+    all_seg_names = []
+    for seg in (periods[0].get("segments", []) if periods else []):
+        name = seg.get("label", "")
+        if name not in all_seg_names:
+            all_seg_names.append(name)
+
+    # Build segment value matrix: shape (n_periods, n_segs)
+    seg_matrix = []
+    for period in periods:
+        seg_map = {s.get("label", ""): s.get("value", 0) for s in period.get("segments", [])}
+        row = [seg_map.get(nm, 0) for nm in all_seg_names]
+        total = sum(row) or 1
+        # Normalize to 100%
+        seg_matrix.append([v / total * 100 for v in row])
+
+    n_segs = len(all_seg_names)
+    bar_h = 0.65
+
+    for seg_i, seg_name in enumerate(all_seg_names):
+        seg_color = colors[seg_i % len(colors)] if colors else accent
+        lefts = [sum(seg_matrix[pi][j] for j in range(seg_i)) for pi in range(n_periods)]
+        vals = [seg_matrix[pi][seg_i] for pi in range(n_periods)]
+        ax.barh(list(range(n_periods)), vals, left=lefts, height=bar_h,
+                color=seg_color, edgecolor="white", linewidth=0.3, label=seg_name)
+
+    # Gridlines at fixed % intervals
+    for gv in range(0, 101, int(grid_interval)):
+        ax.axvline(gv, color=muted, lw=0.4, alpha=0.5, zorder=1)
+
+    ax.set_yticks(range(n_periods))
+    ax.set_yticklabels(period_labels, fontsize=9, color=text_color)
+    ax.set_xlim(0, 100)
+    ax.set_xticks(range(0, 101, int(grid_interval)))
+    ax.set_xticklabels([f"{v}%" for v in range(0, 101, int(grid_interval))],
+                       fontsize=8, color=muted)
+
+    # Axis chrome reduction
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_color(muted)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.tick_params(axis="both", length=0)
+
+    if x_label:
+        ax.set_xlabel(x_label, fontsize=8, color=muted)
+
+    if chart_title:
+        ax.set_title(chart_title, fontsize=10, fontweight="bold", color=text_color, pad=6)
+
+    # Legend — centered below chart
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.18),
+              ncol=n_segs, frameon=False, fontsize=9, labelcolor=text_color)
+
+    fig.tight_layout()
     return fig

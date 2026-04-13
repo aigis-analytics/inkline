@@ -150,6 +150,13 @@ VISUAL HEROES (prefer these):
   HARD CAP: 5 short bullets max.
 - chart: Bare embedded chart image (full width). data: {section, title, image_path, footnote}
   Use ONLY when the chart speaks entirely for itself. Prefer chart_caption.
+- multi_chart: Multiple charts in a configurable grid. data: {section, title, layout, charts [{image_path, title?}], footnote}
+  Layouts: "equal_2" (50/50), "equal_3" (33/33/33), "equal_4" (25x4), "hero_left" (65/35),
+           "hero_left_3" (50/25/25), "hero_right_3" (25/25/50), "quad" (2×2), "top_bottom" (wide top + row below).
+  Use for: Pareto-style multi-exhibit slides — market dashboards, 4-panel data pages, 3-donut rows,
+           side-by-side comparisons with asymmetric emphasis.
+  Each chart in `charts` list needs an image_path AND a chart_request to auto-render.
+  HARD CAPS: equal_2/hero_left=2 charts, equal_3/hero_left_3/hero_right_3=3 charts, equal_4/quad/top_bottom=4 charts.
 - bar_chart: Native horizontal bars. data: {section, title, bars [{label, value, pct (0-100)}], footnote}
 - progress_bars: Labelled percentage bars. data: {section, title, bars [{label, pct, value?}], footnote}
 
