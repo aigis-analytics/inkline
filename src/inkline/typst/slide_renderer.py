@@ -91,12 +91,16 @@ class TypstSlideRenderer:
             args = ", ".join(f'{k.replace("_", "-")}: {v}' for k, v in kwargs.items())
             return f'image("{image_path}", {args})' if args else f'image("{image_path}")'
 
-        # Typst-native placeholder: colored rect with text
+        # Typst-native placeholder: colored rect with text.
+        # Use caller-supplied height/width kwargs so placeholder takes the same
+        # space as the real image would — otherwise height: 100% fills the page.
         t = self.t
         label = image_path or "Chart not available"
+        ph_height = kwargs.get("height", "5cm")
+        ph_width = kwargs.get("width", "100%")
         return (
             f'block(fill: {_rgb(t["card_fill"])}, stroke: 1pt + {_rgb(t["border"])}, '
-            f'width: 100%, height: 100%, radius: 4pt)['
+            f'width: {ph_width}, height: {ph_height}, radius: 4pt)['
             f'#align(center + horizon, text(size: 9pt, fill: {_rgb(t["muted"])}, style: "italic")['
             f'"Chart not available\\n{label}"'
             f'])]'
@@ -1265,7 +1269,7 @@ class TypstSlideRenderer:
             charts = charts[:4]
             while len(charts) < 4:
                 charts.append({})
-            cells = ",\n    ".join(_chart_cell(c, height="6.5cm") for c in charts)
+            cells = ",\n    ".join(_chart_cell(c, height="4.5cm") for c in charts)
             grid_body = f"""grid(
     columns: (1fr, 1fr),
     rows: (auto, auto),
@@ -1279,8 +1283,8 @@ class TypstSlideRenderer:
             bottom = charts[1:4]
             n_bot = max(len(bottom), 1)
             bot_cols = "(" + ", ".join(["1fr"] * n_bot) + ",)"
-            top_cell = _chart_cell(top[0], height="5.5cm") if top else "block(width: 100%)[]"
-            bot_cells = ",\n      ".join(_chart_cell(c, height="4.5cm") for c in bottom)
+            top_cell = _chart_cell(top[0], height="4.5cm") if top else "block(width: 100%)[]"
+            bot_cells = ",\n      ".join(_chart_cell(c, height="3.5cm") for c in bottom)
             bot_grid = f"""grid(
       columns: {bot_cols},
       gutter: 10pt,
@@ -1295,7 +1299,7 @@ class TypstSlideRenderer:
         else:
             col_spec, n_expected = LAYOUTS.get(layout, ("(1fr, 1fr)", 2))
             charts = charts[:n_expected]
-            chart_h = "6.0cm" if n_expected <= 2 else "5.5cm"
+            chart_h = "4.8cm" if n_expected <= 2 else "4.2cm"
             cells = ",\n    ".join(_chart_cell(c, height=chart_h) for c in charts)
             grid_body = f"""grid(
     columns: {col_spec},
