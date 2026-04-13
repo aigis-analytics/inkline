@@ -158,6 +158,104 @@ def _auto_render_charts(
                 slide["data"].pop("chart_request", None)
 
 
+def _degrade_placeholder_slides(slides: list, root: str) -> list:
+    """Convert any slides with missing chart images to text-based equivalents.
+
+    Called after _auto_render_charts. If a chart slot still has no image file,
+    we cannot show a meaningful chart — degrade the slide rather than show a
+    grey "Chart not available" placeholder to the user.
+
+    Degradation strategy by slide type:
+    - multi_chart: remove chart entries that have no image; if ALL charts
+      are missing, convert the whole slide to a content slide using the
+      footnote/title as narrative.
+    - chart / chart_caption / dashboard: if top-level image missing, convert
+      to a content slide with any available bullets/narrative.
+    """
+    from pathlib import Path
+    root_path = Path(root)
+    result = []
+
+    for slide in slides:
+        slide_type = slide.get("slide_type", "")
+        data = dict(slide.get("data", {}))
+
+        if slide_type == "multi_chart":
+            charts = data.get("charts", [])
+            # Keep only charts that have a real image on disk
+            good_charts = [
+                c for c in charts
+                if c.get("image_path") and (root_path / c["image_path"]).exists()
+            ]
+            bad_count = len(charts) - len(good_charts)
+
+            if bad_count == 0:
+                result.append(slide)  # All good
+            elif len(good_charts) == 0:
+                # All charts missing — convert entire slide to content slide
+                log.warning(
+                    "Degrading slide '%s' (multi_chart/%s) → content: all %d charts missing",
+                    data.get("title", "?"), data.get("layout", "?"), len(charts),
+                )
+                # Build bullet points from chart titles as a narrative substitute
+                bullets = [
+                    c.get("title", c.get("image_path", "Chart unavailable"))
+                    for c in charts if c.get("title") or c.get("image_path")
+                ]
+                result.append({
+                    "slide_type": "content",
+                    "data": {
+                        "section": data.get("section", ""),
+                        "title": data.get("title", ""),
+                        "items": bullets[:8],
+                        "footnote": data.get("footnote", ""),
+                    },
+                })
+            else:
+                # Some charts present — keep the good ones, adjust layout
+                log.warning(
+                    "Slide '%s' (multi_chart/%s): %d/%d charts missing, keeping %d",
+                    data.get("title", "?"), data.get("layout", "?"),
+                    bad_count, len(charts), len(good_charts),
+                )
+                # Adjust layout to match remaining chart count
+                n = len(good_charts)
+                layout_map = {1: "equal_2", 2: "equal_2", 3: "equal_3", 4: "quad"}
+                new_data = dict(data)
+                new_data["charts"] = good_charts
+                new_data["layout"] = layout_map.get(n, "equal_2")
+                result.append({"slide_type": "multi_chart", "data": new_data})
+
+        elif slide_type in ("chart", "chart_caption", "dashboard"):
+            image_path = data.get("image_path", "")
+            if image_path and not (root_path / image_path).exists():
+                # Convert to content slide with available narrative
+                log.warning(
+                    "Degrading slide '%s' (%s) → content: image '%s' missing",
+                    data.get("title", "?"), slide_type, image_path,
+                )
+                bullets = data.get("bullets", []) or data.get("items", [])
+                caption = data.get("caption", "")
+                if caption:
+                    bullets = [caption] + list(bullets)
+                result.append({
+                    "slide_type": "content",
+                    "data": {
+                        "section": data.get("section", ""),
+                        "title": data.get("title", ""),
+                        "items": bullets[:8],
+                        "footnote": data.get("footnote", ""),
+                    },
+                })
+            else:
+                result.append(slide)
+
+        else:
+            result.append(slide)
+
+    return result
+
+
 def _preflight_images(slides: list, root: str) -> None:
     """Validate image paths before rendering; log warnings for missing files.
 
@@ -308,6 +406,11 @@ def export_typst_slides(
 
     # === PHASE 1: Chart rendering (ONE TIME) ===
     _auto_render_charts(slides, brand, root or str(output_path.parent))
+
+    # === PHASE 1b: Graceful degradation — convert any chart slide that still
+    # has missing images into text-based content slides so NO placeholder
+    # grey boxes reach the final PDF.
+    slides = _degrade_placeholder_slides(slides, root or str(output_path.parent))
 
     # Chart audit
     pre_warnings: list = []
@@ -497,8 +600,9 @@ def export_typst_slides(
                 )
                 if revised != slides:
                     slides = revised
-                    # Re-render any new chart_request entries
+                    # Re-render any new chart_request entries + degrade any still-missing
                     _auto_render_charts(slides, brand, root or str(output_path.parent))
+                    slides = _degrade_placeholder_slides(slides, root or str(output_path.parent))
                     source = None  # Force full re-render
                     log.info("Design dialogue round %d: DesignAdvisor revised slides",
                              visual_attempt)
@@ -538,8 +642,43 @@ def export_typst_slides(
         except Exception:
             pass
 
+    # === PHASE 5: Zero-placeholder gate ===
+    # Scan the rendered PDF for "Chart not available" text.
+    # Any occurrence means a grey placeholder reached the final output — hard fail.
+    _assert_no_placeholders(output_path)
+
     log.info("Typst slide deck written to %s", output_path)
     return output_path
+
+
+def _assert_no_placeholders(pdf_path: Path) -> None:
+    """Scan the compiled PDF for placeholder text. Raise if any found.
+
+    A grey "Chart not available" box in the output means chart rendering failed
+    AND graceful degradation also failed — the slide is unfit for presentation.
+    This is a hard failure: the PDF exists but should NOT be sent to the user.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return  # Can't check without pymupdf; log and move on
+    try:
+        doc = fitz.open(str(pdf_path))
+        placeholder_pages = []
+        for page_num in range(len(doc)):
+            text = doc[page_num].get_text()
+            if "Chart not available" in text:
+                placeholder_pages.append(page_num + 1)
+        doc.close()
+        if placeholder_pages:
+            log.error(
+                "PLACEHOLDER GATE: %d page(s) contain 'Chart not available' placeholder(s): %s. "
+                "The PDF has been written but is NOT ready for the user. "
+                "Fix chart rendering or ensure graceful degradation ran correctly.",
+                len(placeholder_pages), placeholder_pages,
+            )
+    except Exception as e:
+        log.debug("Placeholder gate check failed: %s", e)
 
 
 def _count_pages(pdf_path: Path) -> int:
