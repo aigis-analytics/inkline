@@ -504,33 +504,29 @@ def audit_slide_with_llm(
     brand: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
+    bridge_url: str = "http://localhost:8082",
 ) -> list[AuditWarning]:
     """Send a rendered slide PNG to Claude and ask for a visual audit.
 
-    Returns AuditWarning objects with Claude's findings. If no API key
-    is available, returns empty silently.
-    """
-    # Visual audit requires an EXPLICITLY supplied api_key — never auto-read
-    # ANTHROPIC_API_KEY from the environment, as that would silently burn API
-    # credits on every slide render. Pass api_key only when the caller
-    # deliberately opts into paid vision calls.
-    if not api_key:
-        return []
+    Routing order:
+    1. LLM bridge ``/vision`` endpoint (Claude Max — zero API cost)
+    2. Anthropic SDK with explicitly supplied ``api_key`` (paid fallback)
 
+    IMPORTANT: ``api_key`` is never auto-read from ``ANTHROPIC_API_KEY`` env.
+    Pass it explicitly only if you want to permit API fallback. Without it,
+    if the bridge is also unavailable, the call is skipped cleanly.
+    """
     image_path = Path(image_path)
     if not image_path.exists():
         return []
 
     try:
-        import anthropic
         import base64
-        import json
+        import json as _json
     except ImportError:
         return []
 
     img_b64 = base64.standard_b64encode(image_path.read_bytes()).decode("utf-8")
-
-    client = anthropic.Anthropic(api_key=api_key)
 
     # Use brand-specific system prompt if brand is provided
     system_prompt = _build_visual_audit_system(brand) if brand else _VISUAL_AUDIT_SYSTEM
@@ -538,7 +534,6 @@ def audit_slide_with_llm(
     # Include slide data context so auditor knows what content was intended
     data_context = ""
     if slide_data:
-        import json as _json
         data_context = (
             f"\n\nOriginal slide data (what was INTENDED to render):\n"
             f"```json\n{_json.dumps(slide_data, indent=2, default=str)[:800]}\n```\n\n"
@@ -558,34 +553,67 @@ def audit_slide_with_llm(
         f"include a proposed_redesign with a complete slide spec."
     )
 
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=2048,
-            system=system_prompt,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": img_b64,
-                        },
-                    },
-                    {"type": "text", "text": user_text},
-                ],
-            }],
-        )
-    except Exception as e:
-        return [AuditWarning(
-            slide_index=slide_index, slide_type=slide_type,
-            severity="info",
-            message=f"LLM visual audit skipped: {str(e)[:80]}",
-        )]
+    text = None
 
-    text = response.content[0].text.strip()
+    # --- 1. Try bridge /vision (Claude Max, zero API cost) ---
+    try:
+        import requests as _req
+        resp = _req.post(
+            f"{bridge_url}/vision",
+            json={
+                "prompt": user_text,
+                "system": system_prompt,
+                "image_base64": img_b64,
+                "image_media_type": "image/png",
+            },
+            timeout=(1, 120),  # 1s connect, 120s read
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("response"):
+                text = data["response"]
+    except Exception:
+        pass
+
+    # --- 2. Anthropic SDK fallback (only if explicitly supplied api_key) ---
+    if text is None:
+        if not api_key:
+            return [AuditWarning(
+                slide_index=slide_index, slide_type=slide_type,
+                severity="info",
+                message="LLM visual audit skipped: bridge unavailable and no api_key supplied",
+            )]
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model=model,
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": img_b64,
+                            },
+                        },
+                        {"type": "text", "text": user_text},
+                    ],
+                }],
+            )
+            text = response.content[0].text.strip()
+        except Exception as e:
+            return [AuditWarning(
+                slide_index=slide_index, slide_type=slide_type,
+                severity="info",
+                message=f"LLM visual audit skipped: {str(e)[:80]}",
+            )]
+
+    text = (text or "").strip()
     # Strip markdown fences if present
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
@@ -627,19 +655,19 @@ def audit_deck_with_llm(
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
     page_dir: str | Path | None = None,
+    bridge_url: str = "http://localhost:8082",
 ) -> list[AuditWarning]:
     """Render each PDF page to PNG and run LLM visual audit on each.
+
+    Tries the LLM bridge ``/vision`` endpoint first (Claude Max, free).
+    Falls back to Anthropic SDK only if ``api_key`` is explicitly supplied.
+    Never auto-reads ANTHROPIC_API_KEY from the environment.
 
     Uses pymupdf if available (fast), else falls back to recompiling the
     Typst source via typst.compile(format='png').
     """
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
-        return []
-
-    # Visual audit requires an EXPLICITLY supplied api_key — never auto-read
-    # ANTHROPIC_API_KEY from the environment to avoid silently burning credits.
-    if not api_key:
         return []
 
     # Render PDF pages to PNGs in a temp/output dir
@@ -669,6 +697,7 @@ def audit_deck_with_llm(
             brand=brand,
             api_key=api_key,
             model=model,
+            bridge_url=bridge_url,
         )
         warnings.extend(page_warnings)
 
