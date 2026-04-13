@@ -163,22 +163,48 @@ def _preflight_images(slides: list, root: str) -> None:
 
     Slides with missing image_path are left as-is — the renderer will
     substitute a Typst-native placeholder at render time.
+
+    Also counts how many chart slots still have placeholders after auto-render
+    and emits a WARNING if > 0, so the issue is visible at summary level.
     """
     from pathlib import Path
     root_path = Path(root)
     image_slide_types = {"chart", "chart_caption", "dashboard"}
+    placeholder_count = 0
+    total_chart_slots = 0
+
     for slide in slides:
-        if slide.get("slide_type") not in image_slide_types:
-            continue
-        image_path = slide.get("data", {}).get("image_path", "")
-        if not image_path:
-            continue
-        full = root_path / image_path
-        if not full.exists():
-            log.warning(
-                "Pre-flight: image '%s' not found for %s slide — renderer will use placeholder",
-                image_path, slide["slide_type"],
-            )
+        data = slide.get("data", {})
+        # Top-level image for chart/chart_caption/dashboard slides
+        if slide.get("slide_type") in image_slide_types:
+            image_path = data.get("image_path", "")
+            if image_path:
+                total_chart_slots += 1
+                full = root_path / image_path
+                if not full.exists():
+                    placeholder_count += 1
+                    log.warning(
+                        "Pre-flight: image '%s' not found for %s slide — renderer will use placeholder",
+                        image_path, slide["slide_type"],
+                    )
+        # Nested images in multi_chart slides
+        for chart_entry in data.get("charts", []):
+            image_path = chart_entry.get("image_path", "")
+            if image_path:
+                total_chart_slots += 1
+                full = root_path / image_path
+                if not full.exists():
+                    placeholder_count += 1
+                    log.warning(
+                        "Image not found, using placeholder: %s", image_path
+                    )
+
+    if placeholder_count > 0:
+        log.warning(
+            "Pre-flight: %d/%d chart slots will render as placeholders — "
+            "check chart_request entries and auto-render coverage",
+            placeholder_count, total_chart_slots,
+        )
 
 
 def export_typst_slides(
