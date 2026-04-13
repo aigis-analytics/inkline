@@ -49,7 +49,7 @@ SLIDE_TYPES = [
     "table", "split", "chart", "bar_chart", "kpi_strip",
     "timeline", "process_flow", "icon_stat", "progress_bars",
     "pyramid", "comparison", "feature_grid", "dashboard",
-    "chart_caption", "closing",
+    "chart_caption", "multi_chart", "closing",
 ]
 
 # Slide type descriptions for the LLM

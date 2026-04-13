@@ -481,7 +481,7 @@ def _fix_source_spacing(
         new_src = re.sub(r'size: 10\.5pt', 'size: 9pt', new_src)
         new_src = re.sub(r'size: 10pt', 'size: 9pt', new_src)
         new_src = re.sub(r'size: 9\.5pt', 'size: 8pt', new_src)
-        new_src = re.sub(r'size: 9pt', 'size: 7\.5pt', new_src)
+        new_src = re.sub(r'size: 9pt', 'size: 7.5pt', new_src)
         # Reduce card padding
         new_src = re.sub(r'inset: 14pt', 'inset: 10pt', new_src)
         new_src = re.sub(r'inset: 12pt', 'inset: 8pt', new_src)
