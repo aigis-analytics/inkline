@@ -2795,7 +2795,8 @@ def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, mute
         seg_matrix.append([v / total * 100 for v in row])
 
     n_segs = len(all_seg_names)
-    bar_h = 0.65
+    # Scale bar height to fill vertical space — wider bars for few periods
+    bar_h = min(0.82, max(0.35, 4.0 / max(n_periods, 1)))
 
     for seg_i, seg_name in enumerate(all_seg_names):
         seg_color = colors[seg_i % len(colors)] if colors else accent
