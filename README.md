@@ -325,9 +325,21 @@ src/inkline/
 All LLM-driven design decisions in Inkline are governed by four laws baked into
 the system prompts and routing logic:
 
-1. **Visual hierarchy** — Infographic-first decision ladder: icon/KPI strips →
-   chart exhibits → structural visuals → data tables → text bullets. Text bullets
-   are a last resort; ≥ 50% of slides should be tier 1 or 2.
+1. **Visual hierarchy** — Infographic-first decision ladder with five tiers:
+
+   | Tier | What | Examples |
+   |------|------|---------|
+   | 1A | KPI / native infographic | `kpi_strip`, `icon_stat`, `progress_bars`, `feature_grid` |
+   | 1B | Structural infographic (matplotlib) | `iceberg`, `waffle`, `hexagonal_honeycomb`, `radial_pinwheel`, `ladder`, `funnel_kpi_strip`, `persona_dashboard`, `metaphor_backdrop`, + 7 more |
+   | 1C | Multi-exhibit slide | `multi_chart` (8 asymmetric layouts), `chart_row` (composite PNG) |
+   | 2 | Institutional exhibit | `marimekko`, `entity_flow`, `divergent_bar`, `horizontal_stacked_bar`, `chart_caption`, `dashboard` |
+   | 3 | Structural visual | `three_card`, `four_card`, `comparison`, `split`, `timeline`, `process_flow` |
+   | 4 | Data table | `table` (≤ 6×6) |
+   | 5 | Text bullets | `content` — last resort, ≤ 1 per deck |
+
+   Scoring rule: ≥ 40% Tier 1, ≥ 20% Tier 2; every deck must include at least
+   one Tier 1B/1C exhibit and one Tier 2 institutional exhibit where data supports it.
+
 2. **Bridge first** — Every LLM call (text and vision) routes through the local
    Claude bridge (`localhost:8082`) before touching the Anthropic API. Zero
    incremental API cost when Claude Max is running.

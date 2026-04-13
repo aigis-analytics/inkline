@@ -884,13 +884,23 @@ TABLE_MAX_COLS     = 6
 Four laws baked into all Inkline LLM system prompts and routing logic:
 
 **I. Visual hierarchy** — 5-tier decision ladder (must prefer higher tiers):
-- Tier 1 (infographic): `icon_stat`, `kpi_strip`, `feature_grid`, `pyramid`, `progress_bars`
-- Tier 2 (chart exhibit): `chart_caption`, `dashboard`, `bar_chart`
-- Tier 3 (structural visual): `three_card`, `four_card`, `comparison`, `split`, `timeline`, `process_flow`
-- Tier 4 (data table): `table` — ≤ 6×6 only
-- Tier 5 (text bullets): `content` — at most 1 per deck
 
-Scoring rule: ≥ 50% slides should be Tier 1 or 2; ≤ 1 `content` slide per deck.
+- **Tier 1A** (KPI / native infographic): `kpi_strip`, `icon_stat`, `progress_bars`, `feature_grid`
+- **Tier 1B** (structural infographic — matplotlib rendered): `iceberg`, `waffle`, `pyramid_detailed`,
+  `ladder`, `radial_pinwheel`, `dual_donut`, `petal_teardrop`, `hexagonal_honeycomb`,
+  `semicircle_taxonomy`, `process_curved_arrows`, `funnel_kpi_strip`, `funnel_ribbon`,
+  `persona_dashboard`, `sidebar_profile`, `metaphor_backdrop`
+- **Tier 1C** (multi-exhibit): `multi_chart` (2–4 exhibits, 8 asymmetric layouts),
+  `chart_row` (composite PNG with `width_ratios`)
+- **Tier 2** (institutional exhibit): `marimekko`, `entity_flow`, `divergent_bar`,
+  `horizontal_stacked_bar`, `chart_caption`, `dashboard`
+- **Tier 3** (structural visual): `three_card`, `four_card`, `comparison`, `split`, `timeline`, `process_flow`
+- **Tier 4** (data table): `table` — ≤ 6×6 only
+- **Tier 5** (text bullets): `content` — at most 1 per deck
+
+Scoring rule: ≥ 40% slides should be Tier 1 (any sub-tier); ≥ 20% should be Tier 2;
+≤ 1 `content` slide per deck. Every deck should contain at least one Tier 1B or 1C
+exhibit and at least one Tier 2 institutional exhibit where data supports it.
 
 **II. Bridge first** — All LLM calls (text + vision) try the local bridge
 before the Anthropic API. Prevents accidental API credit spend.
