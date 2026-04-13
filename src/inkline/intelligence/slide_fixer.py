@@ -62,9 +62,10 @@ CHART_CONTAINER_CM: dict[str, float] = {
 }
 
 # Max text lengths — must stay in sync with SLIDE_TYPE_GUIDE hard caps
-MAX_TITLE_CHARS = 50   # titles >50 chars wrap to 2 lines and cause overflow
+MAX_TITLE_CHARS = 50    # titles >50 chars wrap to 2 lines and cause overflow
 MAX_BULLET_CHARS = 200
 MAX_CELL_CHARS = 50
+MAX_CARD_BODY_CHARS = 80  # card body text: ~2 short sentences; longer → overflow on three_card/four_card
 
 # Table hard limits (independent of SLIDE_CAPACITY which may be set higher
 # for content-allocation purposes in layout_selector)
@@ -104,6 +105,33 @@ def validate_and_fix_slides(
                 "slide": i, "field": "title", "action": "truncated",
                 "from": len(title), "to": len(truncated),
             })
+
+        # --- Card body length (three_card, four_card, feature_grid) ---
+        # Long card bodies cause overflow because all cards render at the same
+        # height and the tallest card determines the container height.
+        if stype in ("three_card", "four_card"):
+            field = "cards"
+            for j, card in enumerate(data.get(field, [])):
+                if isinstance(card, dict):
+                    body = card.get("body", "")
+                    if len(body) > MAX_CARD_BODY_CHARS:
+                        card["body"] = _truncate_at_word(body, MAX_CARD_BODY_CHARS)
+                        fixes.append({
+                            "slide": i, "field": f"{field}[{j}].body",
+                            "action": "card_body_truncated",
+                            "from": len(body), "to": MAX_CARD_BODY_CHARS,
+                        })
+        if stype == "feature_grid":
+            for j, feat in enumerate(data.get("features", [])):
+                if isinstance(feat, dict):
+                    body = feat.get("body", "")
+                    if len(body) > MAX_CARD_BODY_CHARS:
+                        feat["body"] = _truncate_at_word(body, MAX_CARD_BODY_CHARS)
+                        fixes.append({
+                            "slide": i, "field": f"features[{j}].body",
+                            "action": "card_body_truncated",
+                            "from": len(body), "to": MAX_CARD_BODY_CHARS,
+                        })
 
         # --- Content capacity ---
         capacity = SLIDE_CAPACITY.get(stype)

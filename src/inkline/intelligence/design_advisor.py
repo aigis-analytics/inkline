@@ -338,7 +338,7 @@ class DesignAdvisor:
             resp = _req.post(
                 f"{self.bridge_url}/prompt",
                 json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
-                timeout=(5, bridge_read_timeout),
+                timeout=(1, bridge_read_timeout),  # 1s connect (fast-fail if bridge down)
             )
             resp.raise_for_status()
             data = resp.json()
