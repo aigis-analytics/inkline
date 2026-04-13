@@ -102,12 +102,77 @@ SLIDE_TEMPLATES: dict[str, dict] = {
     },
 }
 
-# Merge design.md styles (dmd_stripe, dmd_vercel, etc.) into SLIDE_TEMPLATES
+# Merge built-in curated design system styles into SLIDE_TEMPLATES
 try:
     from inkline.intelligence.design_md_styles import DESIGN_MD_TEMPLATES
     SLIDE_TEMPLATES.update(DESIGN_MD_TEMPLATES)
 except Exception:
-    pass  # Non-blocking: design_md_styles is optional
+    pass  # Non-blocking: curated styles are optional
+
+
+def _load_user_templates() -> None:
+    """Scan user-controlled directories for additional slide templates.
+
+    Each ``.py`` file found is imported; any top-level ``dict`` with a
+    ``"desc"`` key is registered into ``SLIDE_TEMPLATES``.  Errors never raise.
+
+    Search order (first-win per template name):
+    1. Every path in ``$INKLINE_TEMPLATES_DIR`` (colon-separated)
+    2. ``~/.config/inkline/templates/``
+    3. ``./inkline_templates/`` (current working directory)
+
+    Example template file (``~/.config/inkline/templates/mycorp_templates.py``)::
+
+        my_bd_template = {
+            "desc": "In-house board deck — charcoal header, gold accent",
+            "title_bg_override": "#1A1A1A",
+            "title_fg_override": "#FFFFFF",
+            "accent2_override": "#C9A84C",
+        }
+    """
+    import importlib.util
+    import logging
+    import os
+    from pathlib import Path
+
+    _log = logging.getLogger("inkline.typst")
+
+    search_dirs: list[Path] = []
+    if env := os.environ.get("INKLINE_TEMPLATES_DIR"):
+        search_dirs.extend(Path(p) for p in env.split(os.pathsep) if p)
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    search_dirs.append(xdg / "inkline" / "templates")
+    search_dirs.append(Path.cwd() / "inkline_templates")
+
+    for search_dir in search_dirs:
+        if not search_dir.is_dir():
+            continue
+        for py_file in sorted(search_dir.glob("*.py")):
+            if py_file.stem.startswith("_"):
+                continue
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f"inkline._user_templates.{py_file.stem}", py_file
+                )
+                if spec is None or spec.loader is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[arg-type]
+                registered = 0
+                for attr_name in dir(mod):
+                    obj = getattr(mod, attr_name)
+                    if isinstance(obj, dict) and "desc" in obj and not attr_name.startswith("_"):
+                        key = attr_name.lower()
+                        if key not in SLIDE_TEMPLATES:
+                            SLIDE_TEMPLATES[key] = obj
+                            registered += 1
+                if registered:
+                    _log.debug("Loaded %d user templates from %s", registered, py_file)
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("Failed to load user templates from %s: %s", py_file, exc)
+
+
+_load_user_templates()
 
 
 def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:

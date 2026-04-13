@@ -15,8 +15,8 @@ You describe *what* you want to say. Inkline handles the design.
 - **20 slide layouts** — hero stats, timelines, pyramids, comparisons,
   waterfalls, dashboards, feature grids, infographics
 - **11 chart types** — line, waterfall, donut, heatmap, radar, gauge…
-- **771-template archetype catalog** — searchable index of real-world slide
-  designs (SlideModel + Genspark) plus 16 structured archetype recipes
+- **771-template archetype catalog** — searchable index of curated slide
+  designs plus 16 structured archetype recipes
   (`iceberg`, `funnel_ribbon`, `waffle`, `dual_donut`, `pyramid`…) the
   design advisor can copy
 - **Brand plugin system** — 1 public brand + unlimited custom brands
@@ -70,8 +70,8 @@ illegible contrast, off-brand colours — that hard limits cannot detect.
 ### 5. "We can't afford a visual designer for every report"
 Inkline's design advisor consumes nine playbooks (hierarchy, colour theory,
 typography, data viz, infographics, slide layouts, document design, visual
-libraries, template catalog) and a 771-template archetype catalog. It makes
-design decisions a junior analyst wouldn't.
+libraries, template catalog) and a 771-template archetype catalog of curated
+slide designs. It makes design decisions a junior analyst wouldn't.
 
 ### 6. "Our brand assets are confidential — we can't commit them to the public toolkit"
 Inkline splits public and private cleanly. The package ships with a

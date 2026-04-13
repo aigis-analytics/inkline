@@ -3,11 +3,11 @@
 **Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
 Inkline turns structured data or Markdown into publication-quality, brand-consistent
-output. It ships with 90 built-in themes, 37 slide templates (10 curated + 27 from
-[getdesign.md](https://getdesign.md)), 20 slide layouts, 11 chart types, a 1-brand
+output. It ships with 90 built-in themes, 37 slide templates (10 curated + 27
+additional design system styles), 20 slide layouts, 11 chart types, a 1-brand
 public registry (extensible via plugins), an LLM-driven design advisor with a
 pluggable caller (Anthropic SDK or Claude Code subprocess — no API key required),
-8 design playbooks (chart selection, typography, color theory, etc.), a 771-template
+9 design playbooks (chart selection, typography, color theory, etc.), a 771-template
 archetype catalog, and a two-layer audit (structural + Claude vision) that keeps
 content inside the slide frame and on-brand.
 
@@ -129,6 +129,13 @@ warm_themes = list_themes(category="warm")
 matches = search_themes("gold")
 ```
 
+**Private / custom themes** — drop a `.py` file in one of these directories
+and any `dict` with a `"name"` key is auto-registered:
+
+1. Every path in `$INKLINE_THEMES_DIR`
+2. `~/.config/inkline/themes/`
+3. `./inkline_themes/` in the current working directory
+
 ## Brands
 
 Inkline ships with a single public brand — `minimal` — and an open
@@ -180,26 +187,32 @@ MyCorpBrand = BaseBrand(
 `line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
 `stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`
 
-## Slide templates (37)
+## Slide templates (37+)
 
-10 built-in templates plus 27 design system styles from [getdesign.md](https://getdesign.md):
+10 curated built-in templates plus 27 additional design system styles, with support
+for unlimited private custom templates via the plugin system (see below):
 
 **Built-in:** `executive`, `minimalism`, `newspaper`, `investor`, `consulting`,
 `pitch`, `dark`, `editorial`, `boardroom`, `brand`
 
-**Design.md styles:** `dmd_stripe`, `dmd_vercel`, `dmd_notion`, `dmd_apple`,
+**Additional styles:** `dmd_stripe`, `dmd_vercel`, `dmd_notion`, `dmd_apple`,
 `dmd_spotify`, `dmd_tesla`, `dmd_airbnb`, `dmd_coinbase`, `dmd_shopify`,
 `dmd_figma`, `dmd_framer`, `dmd_cursor`, `dmd_warp`, `dmd_supabase`,
 `dmd_uber`, `dmd_ferrari`, `dmd_bmw`, `dmd_mongodb`, `dmd_intercom`,
 `dmd_webflow`, `dmd_miro`, `dmd_posthog`, `dmd_raycast`, `dmd_revolut`,
 `dmd_superhuman`, `dmd_zapier`, `dmd_claude`
 
-Each `dmd_*` template extracts color palettes, typography, and visual style from
-the company's design system spec and applies them as theme overrides.
+**Private / custom templates** — drop a `.py` file in one of these directories
+and any `dict` with a `"desc"` key is auto-registered as a new template:
+
+1. Every path in `$INKLINE_TEMPLATES_DIR`
+2. `~/.config/inkline/templates/`
+3. `./inkline_templates/` in the current working directory
 
 ```python
-# Use Stripe's design system aesthetic
+# Use any template by name
 export_typst_slides(slides=slides, brand="minimal", template="dmd_stripe")
+export_typst_slides(slides=slides, brand="mycorp", template="my_boardroom")  # private
 ```
 
 ## Overflow audit
@@ -250,7 +263,7 @@ src/inkline/
     ├── layout_selector.py
     ├── chart_advisor.py
     ├── playbooks/           # 9 design playbooks (colour, typography, layouts, …)
-    └── design_md_styles/    # 27 curated design systems (getdesign.md)
+    └── design_md_styles/    # 27 additional design system styles
 ```
 
 ## Vishwakarma design philosophy

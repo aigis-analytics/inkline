@@ -4,8 +4,8 @@ Each theme is a dict of color tokens that can be passed to
 TypstSlideRenderer or TypstDocumentRenderer. Themes are organized
 by category for easy discovery.
 
-Categories:
-  - Consulting & Professional Services (MBB, Big 4 inspired)
+Built-in categories (90 themes):
+  - Consulting & Professional Services
   - Corporate & Finance
   - Tech & Startup
   - Dark Mode
@@ -19,9 +19,30 @@ Categories:
   - Minimal & Monochrome
   - Curated palettes & industry-specific
 
+Private / custom themes
+-----------------------
+Drop a ``.py`` file in any of these directories and any top-level ``dict``
+with a ``"name"`` key will be auto-registered as an additional theme:
+
+1. Every path in ``$INKLINE_THEMES_DIR`` (colon-separated, like ``$PATH``)
+2. ``~/.config/inkline/themes/`` (default user config directory)
+3. ``./inkline_themes/`` in the current working directory
+
+Example (``~/.config/inkline/themes/mycorp_themes.py``)::
+
+    MY_DARK = {
+        "name": "My Corp Dark",
+        "desc": "In-house dark theme",
+        "bg": "#0D0D0D",
+        "title_bg": "#1A1A1A",
+        "title_fg": "#FFFFFF",
+        "text": "#E5E5E5",
+        ...
+    }
+
 Usage:
-    from inkline.typst.themes import ALL_THEMES, STRIPE_DARK
-    theme = ALL_THEMES["stripe_dark"]
+    from inkline.typst.themes import ALL_THEMES, get_theme
+    theme = get_theme("stripe_dark")
 """
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1754,6 +1775,63 @@ THEME_CATEGORIES = {
     "minimal": ["minimalism", "pearl", "slate", "ash", "onyx", "vercel", "vercel_dark"],
     "industry": ["healthcare", "energy", "real_estate", "education", "legal", "data_science"],
 }
+
+
+def _load_user_themes() -> None:
+    """Scan user-controlled directories for additional theme dicts.
+
+    Each ``.py`` file found is imported; any top-level ``dict`` with a
+    ``"name"`` key is registered into ``ALL_THEMES``.  Errors in user files
+    are logged as warnings and never raise.
+
+    Search order (first-win per theme name):
+    1. Every path in ``$INKLINE_THEMES_DIR`` (colon-separated)
+    2. ``~/.config/inkline/themes/``
+    3. ``./inkline_themes/`` (current working directory)
+    """
+    import importlib.util
+    import logging
+    import os
+    from pathlib import Path
+
+    _log = logging.getLogger("inkline.typst.themes")
+
+    search_dirs: list[Path] = []
+    if env := os.environ.get("INKLINE_THEMES_DIR"):
+        search_dirs.extend(Path(p) for p in env.split(os.pathsep) if p)
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    search_dirs.append(xdg / "inkline" / "themes")
+    search_dirs.append(Path.cwd() / "inkline_themes")
+
+    for search_dir in search_dirs:
+        if not search_dir.is_dir():
+            continue
+        for py_file in sorted(search_dir.glob("*.py")):
+            if py_file.stem.startswith("_"):
+                continue
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f"inkline._user_themes.{py_file.stem}", py_file
+                )
+                if spec is None or spec.loader is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[arg-type]
+                registered = 0
+                for attr_name in dir(mod):
+                    obj = getattr(mod, attr_name)
+                    if isinstance(obj, dict) and "name" in obj and not attr_name.startswith("_"):
+                        key = attr_name.lower()
+                        if key not in ALL_THEMES:
+                            ALL_THEMES[key] = obj
+                            registered += 1
+                if registered:
+                    _log.debug("Loaded %d user themes from %s", registered, py_file)
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("Failed to load user themes from %s: %s", py_file, exc)
+
+
+_load_user_themes()
 
 
 def get_theme(name: str) -> dict:

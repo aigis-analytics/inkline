@@ -106,9 +106,9 @@ src/inkline/
 │   │                        #   libraries, template catalog
 │   └── template_catalog/    # 771-template manifest + 16 archetype recipes
 │       ├── __init__.py      # find_templates(), get_archetype_recipe()
-│       ├── slidemodel_manifest.json          (328 templates)
+│       ├── slidemodel_manifest.json          (328 infographic templates)
 │       ├── genspark_professional_manifest.json (128 multi-slide decks)
-│       └── genspark_manifest.json            (315 single-thumb templates)
+│       └── genspark_manifest.json            (315 single-thumbnail templates)
 └── assets/
     └── fonts/               # bundled fonts
 ```
@@ -388,28 +388,27 @@ advisor = DesignAdvisor(brand="aigis", llm_caller=caller, mode="llm")
 
 ### 4.7 Template catalog — `inkline.intelligence.template_catalog`
 
-Searchable index of 771 real slide templates (snapshot 2026-04-09) plus 16
-structured archetype recipes for common infographic patterns. Manifests
-ship as ~1 MB of static JSON inside the package; image previews stay on
-remote CDNs unless `INKLINE_TEMPLATE_CATALOG_DIR` points at a local mirror.
+Searchable index of 771 curated slide templates plus 16 structured archetype
+recipes for common infographic patterns. Manifests ship as ~1 MB of static
+JSON inside the package; image previews can be mirrored locally via
+`INKLINE_TEMPLATE_CATALOG_DIR`.
 
 ```python
 from inkline.intelligence.template_catalog import (
-    load_manifest,         # name -> dict ('slidemodel', 'genspark_professional', 'genspark_creative')
+    load_manifest,         # name -> dict; valid names: 'slidemodel', 'genspark_professional', 'genspark_creative'
     find_templates,        # search by tags / palette / keyword
     list_archetypes,       # 16 names: 'iceberg', 'pyramid', 'waffle', 'funnel_ribbon', ...
     get_archetype_recipe,  # structured recipe: palette_rule, layout, slide_type mapping
     suggest_archetype,     # heuristic given content shape
     get_local_image_dir,
-    resolve_local_image,   # CDN URL -> local mirror path if available
+    resolve_local_image,   # local mirror path if available
 )
 ```
 
-**Sources**
-- **SlideModel** — 328 templates from `infographics` and `data-visualization`
-  tags. Hex palette, tags, item ID, slide count, gallery URLs.
-- **Genspark Professional** — 128 multi-slide decks (12-20 page screenshots each).
-- **Genspark Creative** — 315 single-thumbnail prompt-driven templates.
+The catalog ships as ~1 MB of static JSON manifests (771 templates total):
+- 328 infographic and data-visualisation templates with hex palettes and tag metadata
+- 128 multi-slide professional deck layouts (12-20 pages each)
+- 315 single-thumbnail creative templates with prompt-driven titles
 
 **16 archetypes** wired to renderer recipes: `iceberg`, `sidebar_profile`,
 `funnel_kpi_strip`, `persona_dashboard`, `radial_pinwheel`,
@@ -565,17 +564,51 @@ list_brands()          # ['minimal', 'mycorp', ...]
 
 ## 6. Themes
 
-90 themes in 13 categories registered in `inkline.typst.themes`. Each theme is a
-dict with the same keys as a brand theme (bg, title_bg, accent, chart_colors, etc.).
+90 built-in themes in 13 categories registered in `inkline.typst.themes`. Each theme
+is a dict with the same keys as a brand theme (`bg`, `title_bg`, `accent`,
+`chart_colors`, etc.).
+
+### Private / custom themes
+
+User themes are auto-loaded at import time from:
+1. `$INKLINE_THEMES_DIR` (colon-separated paths)
+2. `~/.config/inkline/themes/` (default)
+3. `./inkline_themes/` (current working directory)
+
+Any `.py` file in these directories is scanned; top-level `dict` instances with
+a `"name"` key are registered into `ALL_THEMES`. Errors are logged as warnings
+and never raise.
 
 ### Slide templates (layout-style overrides)
 
-10 templates in `inkline.typst.theme_registry.SLIDE_TEMPLATES`:
-`brand` (brand-only, no overrides), `executive`, `minimalism`, `newspaper`,
-`investor`, `consulting`, `pitch`, `dark`, `editorial`, `boardroom`.
+37+ templates in `inkline.typst.theme_registry.SLIDE_TEMPLATES`:
+- **10 curated built-in:** `brand`, `executive`, `minimalism`, `newspaper`,
+  `investor`, `consulting`, `pitch`, `dark`, `editorial`, `boardroom`
+- **27 additional design system styles:** `dmd_stripe`, `dmd_vercel`, `dmd_notion`,
+  etc.
 
 A template applies fixed overrides for `title_bg`, `title_fg`, and optionally
 `accent`, `accent2`, `bg`, `card_fill`, `surface`, `text`, `muted`, `border`.
+
+### Private / custom templates
+
+User templates are auto-loaded at import time from:
+1. `$INKLINE_TEMPLATES_DIR` (colon-separated paths)
+2. `~/.config/inkline/templates/` (default)
+3. `./inkline_templates/` (current working directory)
+
+Any `.py` file containing `dict` instances with a `"desc"` key is registered.
+Template dicts use `_override`-suffixed keys (e.g., `"title_bg_override"`).
+
+```python
+# ~/.config/inkline/templates/my_templates.py
+my_boardroom = {
+    "desc": "In-house board deck — charcoal header, gold accent",
+    "title_bg_override": "#1A1A1A",
+    "title_fg_override": "#FFFFFF",
+    "accent2_override": "#C9A84C",
+}
+```
 
 ---
 
