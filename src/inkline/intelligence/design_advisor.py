@@ -364,16 +364,24 @@ class DesignAdvisor:
         # Read timeout matches bridge's dynamic timeout (180 + 4s/KB + 60s buffer, max 600s).
         try:
             import requests as _req
-            total_chars = len(system_prompt) + len(user_prompt)
-            bridge_read_timeout = min(900, max(300, 180 + (total_chars // 1000) * 4 + 60)) + 30  # +30s safety
             log.info(
-                "DesignAdvisor LLM bridge %s (%d sys / %d user chars, timeout=%ds)...",
-                self.bridge_url, len(system_prompt), len(user_prompt), bridge_read_timeout,
+                "DesignAdvisor LLM bridge %s (%d sys / %d user chars)...",
+                self.bridge_url, len(system_prompt), len(user_prompt),
             )
+            # Poll /status until bridge is idle before sending — avoids 502 when a
+            # previous run is still finishing after we killed the calling script.
+            for _attempt in range(60):  # up to 5 minutes wait
+                try:
+                    _st = _req.get(f"{self.bridge_url}/status", timeout=3).json()
+                    if not _st.get("active", True):
+                        break
+                except Exception:
+                    pass
+                import time as _time; _time.sleep(5)
             resp = _req.post(
                 f"{self.bridge_url}/prompt",
                 json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
-                timeout=(1, bridge_read_timeout),  # 1s connect (fast-fail if bridge down)
+                timeout=(5, None),  # 5s connect; no read timeout — bridge decides when done
             )
             resp.raise_for_status()
             data = resp.json()
