@@ -964,6 +964,35 @@ class TypstSlideRenderer:
 
     # -- Icon stat slide ---------------------------------------------------
 
+    # Mapping of LLM-friendly text names → Unicode emoji.
+    # LLMs often produce names like "chart-bar" instead of emoji characters;
+    # this table ensures they render as actual glyphs in Typst.
+    _ICON_NAME_TO_EMOJI: dict[str, str] = {
+        # Finance / business
+        "money": "💰", "dollar": "💵", "chart": "📊", "chart-bar": "📊",
+        "chart-line": "📈", "trending-up": "📈", "trending-down": "📉",
+        "briefcase": "💼", "bank": "🏦", "handshake": "🤝",
+        # Oil & gas / energy
+        "oil": "🛢", "oil-drum": "🛢", "oil-barrel": "🛢", "barrel": "🛢",
+        "flame": "🔥", "fire": "🔥", "gas": "⛽", "drill": "⛏",
+        "pipeline": "🔧", "platform": "🏗", "offshore": "⚓",
+        # Status
+        "warning": "⚠️", "alert": "⚠️", "error": "❌", "critical": "🔴",
+        "check": "✅", "tick": "✅", "success": "✅", "ok": "✅",
+        "info": "ℹ️", "question": "❓",
+        # Awards / metrics
+        "trophy": "🏆", "award": "🏆", "star": "⭐", "medal": "🥇",
+        "target": "🎯", "bullseye": "🎯",
+        # General
+        "clock": "⏱", "calendar": "📅", "pin": "📌", "map": "🗺",
+        "gear": "⚙️", "settings": "⚙️", "rocket": "🚀", "flag": "🚩",
+        "lock": "🔒", "key": "🔑", "shield": "🛡", "eye": "👁",
+        "people": "👥", "person": "👤", "team": "👥",
+        "building": "🏢", "home": "🏠", "location": "📍",
+        "document": "📄", "file": "📁", "search": "🔍",
+        "phone": "📞", "email": "📧", "globe": "🌍",
+    }
+
     def _icon_stat_slide(self, d: dict) -> str:
         """Big number + emoji/icon + label — statistical infographic style.
 
@@ -984,7 +1013,11 @@ class TypstSlideRenderer:
         stat_blocks = []
         for i, s in enumerate(stats):
             value = _esc(s.get("value", ""))
-            icon = s.get("icon", "")
+            raw_icon = s.get("icon", "")
+            # Resolve text icon names (e.g. "chart-bar") to emoji glyphs.
+            icon = self._ICON_NAME_TO_EMOJI.get(
+                raw_icon.lower().strip(), raw_icon
+            ) if isinstance(raw_icon, str) and raw_icon else raw_icon
             label = _esc(s.get("label", ""))
             desc = _esc(s.get("desc", ""))
 
