@@ -3,15 +3,16 @@
 **Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
 Inkline turns structured data or Markdown into publication-quality, brand-consistent
-output. It ships with 90 built-in themes, 37 slide templates (10 curated + 27
-additional design system styles), 21 slide layouts, 20+ chart/exhibit types
-(standard charts + 16 infographic archetypes + institutional exhibit types),
-a 1-brand public registry (extensible via plugins), an LLM-driven design advisor
-with a pluggable caller (Anthropic SDK or Claude Code subprocess — no API key
-required), 10 design playbooks (chart selection, typography, color theory,
-professional exhibit design, etc.), a 771-template archetype catalog, and a
-two-layer audit (structural + Claude vision) that keeps content inside the slide
-frame and on-brand.
+output with **encoded taste** — the outputs it produces are always within the range
+that a designer with good judgement would approve, without user handholding.
+
+Ships with: 90 built-in themes, 37 slide templates, 21 slide layouts, 31 chart/exhibit
+types (11 standard + 5 institutional + 5 derived-from-pitchbook + 16 infographic
+archetypes), a 1-brand public registry (extensible via plugins), an LLM-driven design
+advisor driven by a structured **decision framework** (not an option menu), 10 design
+playbooks, a 771-template archetype catalog, a two-layer audit (structural + Claude
+vision), and a **self-learning feedback loop** that improves chart selection quality
+over time as users accept, reject, or modify slides.
 
 ```bash
 pip install inkline                # core: Markdown → HTML
@@ -223,6 +224,34 @@ MyCorpBrand = BaseBrand(
 )
 ```
 
+## Design system — encoded taste (v0.5)
+
+Inkline encodes aesthetic quality as three layers that always fire:
+
+**Layer 1 — Decision framework:** The LLM advisor answers three questions
+(data shape → message type → exhibit type), then looks up the answer in a
+decision matrix. No option menu, no entropy. 27 rules seeded from Pareto
+Securities, Launchpad, and Goldman/McKinsey chart grammar. Confidence scores
+update with every feedback event.
+
+**Layer 3 — TasteEnforcer:** Ten deterministic rules run before rendering
+regardless of LLM output:
+- Bar charts always get `style: "clean"` (no axes, direct value labels)
+- Donuts with ≤ 6 segments always get `label_style: "direct"` (radial labels, no legend)
+- Scatter with named points always gets `label_style: "annotated"` (callout boxes)
+- `accent_index` auto-inferred on bar charts if not set (highlights highest value)
+- Panel charts inside multi_chart have embedded titles cleared automatically
+
+**Self-learning loop:** User feedback (explicit + implicit from conversation) updates
+rule confidence. Users can also ingest reference PDFs to extract new design patterns.
+
+```bash
+inkline learn                          # process feedback log, update DM confidence
+inkline ingest /path/to/pitchbook.pdf  # extract patterns from a reference deck
+```
+
+---
+
 ## Slide types (21)
 
 **Standard:** `title`, `content`, `three_card`, `four_card`, `stat`, `table`,
@@ -266,12 +295,22 @@ Supported layouts:
 | `hero_right_3` | 25 / 25 / 50 | Two context panels + hero |
 | `quad` | 2×2 grid | Full four-panel data page |
 | `top_bottom` | Wide top + row below | Summary chart + detail exhibits |
+| `three_top_wide` | 3 small top + 1 wide bottom | Overview trio + main exhibit |
+| `left_stack` | 1 hero left + 2 stacked right | Feature + two supporting |
+| `right_stack` | 2 stacked left + 1 hero right | Two context + hero right |
+| `mosaic_5` | 2 top + 3 bottom | Rich mosaic analysis page |
+| `six_grid` | 3×2 equal grid | Comprehensive 6-exhibit summary |
 
-## Chart types (20+)
+## Chart types (31+)
 
 ### Standard charts (11)
 `line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
 `stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`
+
+**Enhanced in v0.5:** `style: "clean"` on bars removes axes and adds direct
+value labels. `accent_index`/`accent_series` marks one element in accent colour.
+`label_style: "direct"` on donuts removes the legend. `label_style: "annotated"`
+on scatter adds callout boxes per point.
 
 ### Institutional exhibit types (4)
 | Type | Description |
@@ -280,6 +319,19 @@ Supported layouts:
 | `entity_flow` | Legal/org structure diagram with tiered grey palette (dark=focal, mid=intermediary, light=peripheral) |
 | `divergent_bar` | Vertical bars above/below zero baseline; floating value labels; no y-axis |
 | `horizontal_stacked_bar` | 100% stacked horizontal bars showing composition shift over time |
+
+### Pitchbook-derived chart types (5, new in v0.5)
+
+Derived from Pareto Securities and Launchpad reference decks. All registered in
+the decision matrix with proven (data_structure, message_type) mappings.
+
+| Type | Best for |
+|------|----------|
+| `dumbbell` | Before/after pairs, spread migration, analyst estimate vs actual |
+| `transition_grid` | Business model transitions, revenue mix shifts over time |
+| `scoring_matrix` | Capability comparison matrices (scores 0–3 render as ○◔◕●) |
+| `gantt` | Construction programmes, project roadmaps, parallel workstreams |
+| `multi_timeline` | M&A/fundraising timelines with duration + phase + task detail |
 
 ### Infographic archetypes (16, rendered via `chart_row`)
 `iceberg`, `sidebar_profile`, `funnel_kpi_strip`, `persona_dashboard`,
@@ -344,6 +396,11 @@ inkline serve --port 9000          # custom port
 inkline serve --no-browser         # start without opening browser
 inkline bridge                     # bridge only (headless, for programmatic use)
 inkline mcp                        # MCP server for Claude Desktop / Claude.ai (stdio)
+
+# Design system / self-learning (v0.5)
+inkline learn                      # process feedback log, update decision matrix
+inkline ingest pitchbook.pdf       # extract design patterns from a reference PDF
+inkline ingest pitchbook.pdf --name pareto_q2  # with custom identifier
 ```
 
 ## Repository layout
@@ -356,26 +413,37 @@ src/inkline/
 ├── pptx/             # python-pptx backend
 ├── slides/           # Google Slides API
 ├── typst/            # Typst backend (default)
-│   ├── slide_renderer.py    # 21 slide layouts (incl. multi_chart)
-│   ├── chart_renderer.py    # 20+ chart/exhibit renderers
+│   ├── slide_renderer.py    # 21 slide layouts (incl. multi_chart, 13 layouts)
+│   ├── chart_renderer.py    # 31 chart/exhibit renderers
+│   ├── taste_enforcer.py    # TasteEnforcer — 10 deterministic taste rules
 │   ├── theme_registry.py    # template → theme generation
 │   └── themes/              # 90 themes in 13 categories
-├── intelligence/     # Design advisor + overflow audit
-│   ├── design_advisor.py    # DesignAdvisor — LLM design planning + revision
-│   ├── slide_fixer.py       # Closed-loop overflow fixer (6 graduated fix levels)
-│   ├── overflow_audit.py    # Structural + Claude vision audit (15 checks)
-│   ├── claude_code.py       # Bridge caller + ensure_bridge_running()
-│   ├── archon.py            # Pipeline supervisor: phase tracking + issue log
-│   ├── vishwakarma.py       # Design philosophy constants (4 laws)
-│   ├── playbooks/           # 10 design playbooks (colour, typography, layouts, …)
-│   └── design_md_styles/    # 27 additional design system styles
+├── intelligence/     # Design advisor + overflow audit + self-learning
+│   ├── design_advisor.py          # DesignAdvisor — decision framework + _inject_decision_matrix()
+│   ├── decision_matrix_default.yaml # 27 seed rules (Pareto/Launchpad/Goldman)
+│   ├── aggregator.py              # Aggregator — feedback events → confidence updates
+│   ├── deck_analyser.py           # DeckAnalyser — PDF → chart heuristics → DM candidates
+│   ├── feedback.py                # capture_feedback(), detect_implicit_feedback()
+│   ├── pattern_memory.py          # per-brand YAML pattern store
+│   ├── slide_fixer.py             # closed-loop overflow fixer (6 graduated levels)
+│   ├── overflow_audit.py          # structural + Claude vision audit (15 checks)
+│   ├── claude_code.py             # bridge caller + ensure_bridge_running()
+│   ├── archon.py                  # pipeline supervisor: phase tracking + issue log
+│   ├── vishwakarma.py             # design philosophy constants (4 laws)
+│   ├── playbooks/                 # 10 design playbooks
+│   └── design_md_styles/          # 27 additional design system styles
 └── app/              # Standalone app layer (pip install inkline[app])
-    ├── claude_bridge.py     # HTTP bridge → claude CLI (port 8082)
-    │                        #   POST /prompt, POST /upload, GET /output/{f}
-    ├── mcp_server.py        # MCP server — 4 tools for Claude Desktop / Claude.ai
-    ├── cli.py               # inkline serve / bridge / mcp entry points
+    ├── claude_bridge.py   # HTTP bridge → claude CLI (port 8082)
+    │                      #   POST /prompt, POST /upload, GET /output/{f}
+    │                      #   _record_implicit_feedback() on every /prompt
+    ├── mcp_server.py      # MCP server — 7 tools for Claude Desktop / Claude.ai
+    │                      #   inkline_generate_deck, inkline_render_slides,
+    │                      #   inkline_list_templates, inkline_list_themes,
+    │                      #   inkline_submit_feedback, inkline_ingest_reference_deck,
+    │                      #   inkline_learn
+    ├── cli.py             # inkline serve / bridge / mcp / learn / ingest
     └── static/
-        └── index.html       # Thin WebUI: file upload, chat, live PDF preview
+        └── index.html     # thin WebUI: file upload, chat, live PDF preview
 ```
 
 ## Vishwakarma design philosophy

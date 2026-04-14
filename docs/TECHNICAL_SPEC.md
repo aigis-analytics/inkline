@@ -1,6 +1,6 @@
 # Inkline — Technical Specification
 
-**Version:** 0.3.5
+**Version:** 0.5.0
 **Language:** Python 3.11+
 **License:** MIT
 **Status:** Production
@@ -30,6 +30,13 @@ embedded fonts and crisp vector graphics.
    offline; LLM advisor activates when `ANTHROPIC_API_KEY` is set OR via the
    bundled Claude Code subprocess caller (no API key required, uses the
    user's logged-in Pro/Max subscription).
+7. **Encoded taste** — the system produces outputs within the range that a designer
+   with good judgement would approve, without user handholding. Taste is encoded as
+   a three-layer architecture: (1) structured decision framework in the LLM prompt,
+   (2) renderer capabilities with semantic parameters, (3) deterministic post-processing
+   that enforces style rules regardless of LLM output.
+8. **Self-improving** — user feedback and reference deck ingestion continuously update
+   the decision matrix, improving chart selection quality over time.
 
 ---
 
@@ -43,12 +50,26 @@ embedded fonts and crisp vector graphics.
                │
                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    inkline.intelligence                     │
+│  LAYER 1 — Decision Framework (LLM prompt)                  │
+│    DesignAdvisor: 3-step decision sequence (data_structure  │
+│    → message_type → enforce params)                         │
+│    decision_matrix.yaml: 27+ rules, live confidence scores  │
+│    6 Taste Rules + Vishwakarma laws injected into prompt    │
+│                                                             │
 │  ContentAnalyzer → LayoutSelector → ChartAdvisor            │
-│  DesignAdvisor  (rules | advised | llm modes)               │
 │  TemplateCatalog (771 archetypes + 16 structured recipes)   │
 │  OverflowAudit  (15 structural/exhibit checks + vision)     │
+│  Aggregator     (feedback → confidence → rule promotion)    │
+│  DeckAnalyser   (PDF ingestion → DM candidate rules)        │
 │  ClaudeCodeCaller (subprocess bridge, no API key)           │
+└──────────────┬──────────────────────────────────────────────┘
+               │
+               ▼  Phase 0b
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 3 — TasteEnforcer (deterministic, before rendering)  │
+│  10 rules: grouped_bar→clean, donut≤6→direct, scatter→      │
+│  annotated, auto accent_index, panel title suppression, …   │
+│  Always fires regardless of what the LLM requested.         │
 └──────────────┬──────────────────────────────────────────────┘
                │
                ▼
@@ -65,6 +86,19 @@ embedded fonts and crisp vector graphics.
 │  slide_renderer  │      │     │      │                     │
 │  chart_renderer  │      │     │      │                     │
 └─────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────────────────────────────────────┐
+  │  Self-learning feedback loop (background)        │
+  │  User accepts/rejects/modifies slide             │
+  │    → FeedbackEvent → feedback_log.jsonl          │
+  │    → Aggregator updates rule confidence          │
+  │    → Modified chart type → propose new rule      │
+  │    → Candidate promoted at ≥5 obs + ≥70% rate    │
+  │  Reference deck ingestion:                       │
+  │  inkline ingest deck.pdf                         │
+  │    → DeckAnalyser (pymupdf)                      │
+  │    → patterns.md + DM candidate rules            │
+  └──────────────────────────────────────────────────┘
 ```
 
 ### Package layout
@@ -94,13 +128,21 @@ src/inkline/
 │       └── __init__.py      # 90 themes across 13 categories
 ├── intelligence/
 │   ├── __init__.py          # DesignAdvisor, audit_deck, audit_image
-│   ├── design_advisor.py    # Main entry — design_deck(), design_document()
+│   ├── design_advisor.py    # Main entry — design_deck(), _inject_decision_matrix()
+│   ├── decision_matrix_default.yaml  # 27 seed rules (Pareto/Launchpad/GS)
+│   ├── aggregator.py        # Aggregator — feedback → confidence → rule promotion
+│   ├── deck_analyser.py     # DeckAnalyser — PDF → chart detection → DM candidates
 │   ├── claude_code.py       # build_claude_code_caller() — subprocess LLM bridge
 │   ├── content_analyzer.py  # ContentAnalysis, ContentType enum
 │   ├── layout_selector.py   # select_layout(), SLIDE_CAPACITY
 │   ├── chart_advisor.py     # suggest_chart_type()
 │   ├── overflow_audit.py    # audit_deck(), audit_image(), audit_*_with_llm()
 │   │                        #   15 structural checks incl. axis/legend/insight-title
+│   ├── feedback.py          # capture_feedback(), detect_implicit_feedback()
+│   ├── pattern_memory.py    # per-brand YAML pattern store (brand preferences)
+│   ├── slide_fixer.py       # closed-loop overflow fixer (6 graduated levels)
+│   ├── archon.py            # pipeline supervisor: phase tracking + issue log
+│   ├── vishwakarma.py       # design philosophy constants (4 laws)
 │   ├── playbooks/           # 10 playbooks: colour theory, typography, design
 │   │                        #   rules, infographic styles, slide layouts,
 │   │                        #   chart selection, document design, visual
@@ -111,8 +153,32 @@ src/inkline/
 │       ├── slidemodel_manifest.json          (328 infographic templates)
 │       ├── genspark_professional_manifest.json (128 multi-slide decks)
 │       └── genspark_manifest.json            (315 single-thumbnail templates)
+├── typst/
+│   ├── __init__.py          # export_typst_slides(), export_typst_document()
+│   ├── compiler.py          # Typst subprocess wrapper
+│   ├── slide_renderer.py    # TypstSlideRenderer — 21 layouts (incl. multi_chart)
+│   ├── document_renderer.py # Markdown → Typst document
+│   ├── chart_renderer.py    # matplotlib chart generator (31 types)
+│   ├── taste_enforcer.py    # TasteEnforcer — 10 deterministic taste rules
+│   ├── components.py        # Shared Typst primitives (card, badge, footer…)
+│   ├── theme_registry.py    # brand_to_typst_theme(), SLIDE_TEMPLATES
+│   └── themes/
+│       └── __init__.py      # 90 themes across 13 categories
 └── assets/
     └── fonts/               # bundled fonts
+```
+
+**Per-user config at `~/.config/inkline/`:**
+```
+~/.config/inkline/
+├── decision_matrix.yaml     # live DM (bootstrapped from decision_matrix_default.yaml)
+├── feedback_log.jsonl       # all feedback events (one JSON per line)
+├── patterns/                # per-brand YAML pattern memory
+│   └── {brand}.yaml
+└── reference_decks/         # ingested reference decks
+    └── {deck_name}/
+        ├── analysis.json    # structured chart/layout inventory
+        └── patterns.md      # human-readable pattern summary
 ```
 
 ---
@@ -494,7 +560,7 @@ in `intelligence.layout_selector.SLIDE_CAPACITY`.
 | `feature_grid`   | 6 features    | Icon + title + body grid (new in 0.3)        |
 | `dashboard`      | 3 panels      | Multi-panel KPI/chart dashboard (new in 0.3) |
 | `chart_caption`  | 5 caption pts | Chart with structured caption sidebar (new in 0.3) |
-| `multi_chart`    | 2–4 images    | Multi-exhibit grid: 8 asymmetric layouts (new in 0.3.5) |
+| `multi_chart`    | 2–6 images    | Multi-exhibit grid: 13 asymmetric layouts (new in 0.3.5+) |
 | `title`, `closing`| n/a          | Cover and contact slides                     |
 | `chart`          | 1 image       | Embedded PNG, max 20.7×8.5 cm                |
 
@@ -515,6 +581,11 @@ sizes as a final safety net.
 | `hero_right_3` | 1fr / 1fr / 2fr | 3 | Two context panels + hero (25/25/50) |
 | `quad` | (1fr, 1fr) × 2 rows | 4 | Full 2×2 data page |
 | `top_bottom` | stack: 1 wide + 1–3 below | 2–4 | Summary chart + detail exhibits |
+| `three_top_wide` | 3 small top + 1 wide bottom | 4 | Overview trio + main exhibit |
+| `left_stack` | 1 hero left + 2 stacked right | 3 | Feature + two supporting |
+| `right_stack` | 2 stacked left + 1 hero right | 3 | Two context + hero right |
+| `mosaic_5` | 2 top + 3 bottom | 5 | Rich mosaic analysis page |
+| `six_grid` | 3×2 equal grid | 6 | Comprehensive 6-exhibit summary |
 
 ### Geometry (constants in `TypstSlideRenderer`)
 
@@ -661,19 +732,26 @@ is slide-safe. Brand colours are applied in order from `brand.chart_colors`.
 
 ### 7.1 Standard charts (11)
 
-| Chart type     | Input shape                                    |
-|----------------|-----------------------------------------------|
-| `line_chart`   | `{x: [...], series: [{label, values: [...]}...]}`|
-| `area_chart`   | same as `line_chart`                            |
-| `scatter`      | `{points: [[x,y], ...], labels?: [...]}`        |
-| `waterfall`    | `{labels: [...], values: [...]}`                |
-| `donut`        | `{segments: [{label, value}]}` (≤6 segments)   |
-| `pie`          | same as `donut`                                 |
-| `stacked_bar`  | `{categories: [...], series: [{name, values}]}`|
-| `grouped_bar`  | same as `stacked_bar`                          |
-| `heatmap`      | `{x_labels, y_labels, matrix: [[...]]}`        |
-| `radar`        | `{axes: [...], series: [{name, values}]}`      |
-| `gauge`        | `{value: 0-100, label: str}`                   |
+| Chart type     | Input shape | Key params |
+|----------------|-------------|------------|
+| `line_chart`   | `{x, series: [{name, values}]}` | `spine_style: "minimal"`, `grid: false` |
+| `area_chart`   | same as `line_chart` | — |
+| `scatter`      | `{points: [{x, y, label?, value_label?, secondary_label?}]}` | `label_style: "annotated"` (callout boxes) |
+| `waterfall`    | `{items: [{label, value, total?}]}` | `style: "clean"` |
+| `donut`        | `{segments: [{label, value}], center_label?}` | `label_style: "direct"` (radial, no legend) |
+| `pie`          | same as `donut` | same |
+| `stacked_bar`  | `{categories, series: [{name, values}]}` | `style: "clean"`, `accent_series: N` |
+| `grouped_bar`  | same as `stacked_bar` | `style: "clean"`, `accent_index: N` |
+| `heatmap`      | `{x_labels, y_labels, values: [[...]]}` | — |
+| `radar`        | `{axes: [...], series: [{name, values}]}` | — |
+| `gauge`        | `{value: 0-100, label?: str}` | — |
+
+**Enhanced parameters (v0.5):**
+- `style: "clean"` on bar charts: removes y-axis, gridlines, and places value labels directly on bars (Pareto/Goldman style)
+- `accent_index: N` on `grouped_bar`: bar N receives accent colour; all others receive muted palette
+- `accent_series: N` on `stacked_bar`: series N receives accent colour
+- `label_style: "direct"` on `donut`/`pie`: radial labels at segment midpoints, no legend panel
+- `label_style: "annotated"` on `scatter`: callout box with arrow for each named point
 
 ### 7.2 Institutional exhibit types (4)
 
@@ -687,6 +765,18 @@ bank and strategy consulting decks: axis elimination, floating labels,
 | `entity_flow` | `{nodes: [{id, label, tier}], edges: [{from, to, label}]}` | Legal/org structure diagram with tiered grey palette (dark=focal, mid=intermediary, light=peripheral) |
 | `divergent_bar` | `{items: [{label, value}], positive_label?, negative_label?, y_label?}` | Vertical bars above/below zero baseline; floating value labels; no y-axis; shows net flows |
 | `horizontal_stacked_bar` | `{periods: [{label, segments: [{label, value}]}], title?, x_label?}` | 100% stacked horizontal bars; composition shift over time; bar height scales with period count |
+
+### 7.2b New institutional chart types (5, added v0.5)
+
+Derived from Pareto Securities and Launchpad reference decks.
+
+| Chart type | Input shape | Design intent |
+|------------|-------------|---------------|
+| `dumbbell` | `{points: [{label, value_start, value_end, start_label?, end_label?}], accent_direction: "higher_is_better"\|"lower_is_better"}` | Before/after pairs or spread migration. End dot gets accent if direction is favourable. |
+| `transition_grid` | `{rows: [{label, highlight_col}], col_labels: [...], title?}` | Business model transition / revenue mix shift over time. One highlighted cell per row shows "current position". |
+| `scoring_matrix` | `{rows: [{label, scores: [0-3]}], col_labels: [...], title?}` | Capability comparison matrix. Scores 0–3 render as ○◔◕● with graduated cell fills. |
+| `gantt` | `{tracks: [{label, start, end, colour?}], date_range?, title?}` | Parallel workstream / construction programme. Horizontal bars, no gridlines, label inside bar. |
+| `multi_timeline` | `{phases: [{label, sub_label?, duration?, tasks: [str]}], title?}` | Three-band timeline: duration strip (top) / phase name (middle) / task bullets (bottom). Accent dividers between phases. |
 
 ### 7.3 Infographic archetypes (16)
 
@@ -977,6 +1067,125 @@ except Exception as e:
     sys.exit(1)
 ```
 
+### 8.8 Design system — three-layer taste architecture
+
+Inkline v0.5 introduces a structured approach to encoded aesthetic quality.
+
+**Layer 1 — Decision framework (LLM prompt)**
+
+The `DesignAdvisor` system prompt no longer presents an option menu. Instead it
+runs a three-step decision sequence:
+
+1. Identify `data_structure` (one of 13 canonical values: `single_number`,
+   `n_categories_one_value`, `part_of_whole`, `matrix_rows_cols`, etc.)
+2. Identify `message_type` (one of 18 values: `ranking_or_comparison`,
+   `part_of_whole_breakdown`, `process_or_sequence`, etc.)
+3. Look up the matched rule in `decision_matrix.yaml` → get `chart_type` and
+   mandatory `enforce` parameters. Apply them unconditionally.
+
+Six **Taste Rules** are also injected: accent = signal not decoration; axis
+reduction; donut-as-distribution-story; named scatter → annotated; typography-led
+section openers; multi_chart for parallel stories.
+
+**Layer 2 — Renderer capabilities**
+
+All chart renderers accept semantic parameters that encode taste directly:
+`style: "clean"`, `accent_index`, `accent_series`, `label_style`. The LLM can
+set these explicitly; the TasteEnforcer sets them if the LLM doesn't.
+
+**Layer 3 — TasteEnforcer (deterministic)**
+
+`TasteEnforcer` in `inkline/typst/taste_enforcer.py` runs as Phase 0b in
+`export_typst_slides()` — after DesignAdvisor but before rendering. Ten rules
+fire regardless of LLM output:
+
+| Rule | Trigger | Action |
+|------|---------|--------|
+| R-01 | `grouped_bar` without `style` | Force `style: "clean"` |
+| R-02 | `stacked_bar` without `style` | Force `style: "clean"` |
+| R-03 | `donut`/`pie` ≤ 6 segments | Force `label_style: "direct"` |
+| R-04 | `scatter` with named points | Force `label_style: "annotated"` |
+| R-05 | `grouped_bar` missing `accent_index` | Infer from highest value or narrative |
+| R-06 | Panel chart with `chart_title` | Clear title (panel header carries it) |
+| R-07 | `grouped_bar` with > 12 categories | Force `orientation: "horizontal"` |
+| R-08 | `line_chart`/`area_chart` | Force `spine_style: "minimal"`, `grid: false` |
+| R-09 | `dumbbell` missing `accent_direction` | Default `"higher_is_better"` |
+| R-10 | `waterfall` without `style` | Force `style: "clean"` |
+
+The `accent_index` inference (R-05) scans the slide's `narrative` field for
+direction keywords ("highest", "leading", "top") and matches them to category
+names. If no match, defaults to the index of the largest value in the first series.
+
+### 8.9 Self-learning feedback loop
+
+**Decision matrix** (`~/.config/inkline/decision_matrix.yaml`)
+
+Bootstrapped on first run from the bundled `decision_matrix_default.yaml` (27 rules).
+Active rules are injected into every `DesignAdvisor` system prompt via
+`_inject_decision_matrix()`. Rule schema:
+
+```yaml
+- id: DM-005
+  data_structure: n_categories_one_value
+  message_type: ranking_or_comparison
+  density: full_width
+  chart_type: grouped_bar
+  enforce: {style: clean, accent_index: auto}
+  confidence: 0.93       # 0.0–1.0; updated by Aggregator
+  observations: 0        # feedback event count
+  source: [pareto_dc_2026, GS-standard]
+  status: active         # active | candidate | low_confidence | flagged
+```
+
+**Feedback event schema** (`~/.config/inkline/feedback_log.jsonl`)**:**
+
+```json
+{
+  "event_id": "a3f2b1c4",
+  "ts": "2026-04-14T11:32:00Z",
+  "deck_id": "corsair_v6",
+  "slide_index": 4,
+  "action": "modified",           // "accepted" | "rejected" | "modified"
+  "dm_rule_id": "DM-005",
+  "data_structure": "n_categories_one_value",
+  "message_type": "ranking_or_comparison",
+  "modified_to": "dumbbell",
+  "enforce_overrides": {},
+  "source": "explicit"            // "explicit" | "implicit_conversation" | "auditor_accept"
+}
+```
+
+**Aggregator** (`intelligence/aggregator.py`)**:**
+
+| Event | Effect on matched rule |
+|-------|----------------------|
+| `accepted` | confidence += 0.01 (capped at 0.99) |
+| `rejected` | confidence -= 0.05 (floor 0.10); below 0.40 → `status: "flagged"` |
+| `modified` | confidence -= 0.03; `modified_to` → propose candidate rule |
+
+Candidate promotion: `observations ≥ 5` AND `acceptance_rate ≥ 70%` → `status: "active"`
+
+Active demotion: `observations ≥ 10` AND `confidence < 0.40` → `status: "low_confidence"`
+
+**Implicit feedback** (`app/claude_bridge.py`)**:**
+
+The bridge scans every incoming user message for chart correction patterns before
+routing to Claude. Patterns detected:
+
+- *"change the bar chart to a dumbbell"* → `{action: "modified", modified_to: "dumbbell"}`
+- *"make it horizontal"* → `{action: "modified", enforce_overrides: {orientation: "horizontal"}}`
+- *"highlight the 2025 bar"* → `{enforce_overrides: {accent_target: "2025"}}`
+- *"too many labels"* → density feedback signal
+
+**Reference deck ingestion** (`inkline ingest deck.pdf`)**:**
+
+`DeckAnalyser` uses pymupdf to analyse PDF pages:
+- Classifies each page as `chart_slide`, `kpi_strip`, `text_heavy`, `visual_anchor`, `mixed`
+- Detects 8 chart types from drawing path heuristics (rect clusters → bars, circles → donuts, etc.)
+- Extracts dominant colour palette from fill colours
+- Produces `patterns.md` (same format as `design_inspiration_analysis.md`)
+- Appends candidate rules to `decision_matrix.yaml`
+
 ---
 
 ## 9. Typst compile pipeline
@@ -985,14 +1194,18 @@ except Exception as e:
 slides (list[dict])
   │
   ▼
-PHASE 0: brand + template ──▶ theme (dict)
+PHASE 0:  brand + template ──▶ theme (dict)
   │
   ▼
-PHASE 1: chart auto-rendering (one-time; skipped if image_path exists)
+PHASE 0b: TasteEnforcer.apply(slides)              ← NEW in v0.5
+  │       10 deterministic rules: clean style, accent_index inference,
+  │       direct donut labels, annotated scatter, panel title strip
+  ▼
+PHASE 1:  chart auto-rendering (one-time; skipped if image_path exists)
   │
   ▼
-PHASE 2: validate_and_fix_slides() — enforce hard caps (title 50, card 80, table 6×6)
-         equalise_card_heights()   — pad shorter cards to match tallest
+PHASE 2:  validate_and_fix_slides() — enforce hard caps (title 50, card 80, table 6×6)
+          equalise_card_heights()   — pad shorter cards to match tallest
   │
   ▼
 PHASE 3: OUTER LOOP (visual quality, max max_visual_attempts rounds)
@@ -1055,7 +1268,72 @@ Add a dict to `SLIDE_TEMPLATES` in `src/inkline/typst/theme_registry.py` with
 
 ### Add a chart type
 Add a renderer function to `chart_renderer.py` and register it in the dispatch
-in `render_chart()`.
+in `render_chart()`. Always add a normalization block at the top accepting at
+least one alternative schema (e.g., `categories/series` as well as the bespoke
+native format). Then add a DM rule to `decision_matrix_default.yaml` with the
+appropriate `data_structure`, `message_type`, and `enforce` params.
+
+### Extend the decision matrix
+
+Add rules to `~/.config/inkline/decision_matrix.yaml` (runtime) or
+`src/inkline/intelligence/decision_matrix_default.yaml` (shipped default):
+
+```yaml
+- id: DM-028
+  data_structure: n_categories_one_value
+  message_type: geographic_distribution
+  density: full_width
+  chart_type: heatmap
+  enforce: {}
+  confidence: 0.75
+  observations: 0
+  source: [custom]
+  status: active
+```
+
+### Submit feedback programmatically
+
+```python
+# Via MCP tool
+inkline_submit_feedback(
+    deck_id="my_deck",
+    slide_index=3,
+    action="modified",
+    modified_chart_type="dumbbell",
+    dm_rule_id="DM-005",
+    data_structure="n_categories_one_value",
+    message_type="ranking_or_comparison",
+)
+```
+
+### Ingest a reference deck
+
+```bash
+# CLI
+inkline ingest /path/to/pitchbook.pdf --name my_reference_deck
+
+# Python / MCP
+inkline_ingest_reference_deck(
+    pdf_path="/path/to/pitchbook.pdf",
+    deck_name="pareto_q2_2026",
+    deck_context="investment_banking",
+)
+```
+
+### Add a TasteEnforcer rule
+
+Append to `_RULES` in `src/inkline/typst/taste_enforcer.py`:
+
+```python
+{
+    "id": "R-11",
+    "match_type": "radar",
+    "match_context": None,
+    "condition": lambda d: len(d.get("axes", [])) < 4,
+    "enforce": {"chart_type_warning": "radar needs ≥4 axes to be readable"},
+    "reason": "radar charts with <4 axes look like triangles",
+},
+```
 
 ### Add an exhibit type to the advisor
 1. Add a row to the `renderers` dict in `render_chart()`
