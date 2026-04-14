@@ -665,7 +665,7 @@ class TypstSlideRenderer:
         else:
             item_font = 10
 
-        bullets = "\n    ".join(f"- {_esc(item)}" for item in items)
+        bullets = "\n    ".join(f"- {_esc_rich(item, t['accent'])}" for item in items)
 
         body = f"""text(size: {item_font}pt, fill: {_rgb(t['text'])})[
     {bullets}
@@ -879,8 +879,8 @@ class TypstSlideRenderer:
         right_title = d.get("right_title", "")
         right_items = _ensure_string_items(d.get("right_items", []))
 
-        left_bullets = "\n      ".join(f"- {_esc(item)}" for item in left_items[:self.MAX_BULLETS])
-        right_bullets = "\n      ".join(f"- {_esc(item)}" for item in right_items[:self.MAX_BULLETS])
+        left_bullets = "\n      ".join(f"- {_esc_rich(item, t['accent'])}" for item in left_items[:self.MAX_BULLETS])
+        right_bullets = "\n      ".join(f"- {_esc_rich(item, t['accent'])}" for item in right_items[:self.MAX_BULLETS])
 
         body = f"""grid(
     columns: (1fr, 1fr),
@@ -1003,8 +1003,15 @@ class TypstSlideRenderer:
 
         kpis_str = ",\n    ".join(kpi_markups)
         n_cols = len(kpi_markups)
+        vertical = d.get("vertical", False)
 
-        body = f"""grid(
+        if vertical:
+            body = f"""stack(
+    spacing: 8pt,
+    {kpis_str}
+  )"""
+        else:
+            body = f"""grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
     gutter: 8pt,
     {kpis_str}
@@ -1780,8 +1787,8 @@ class TypstSlideRenderer:
                 img_block = self._image_markup(img, width="100%")
             if ctitle:
                 return f"""block(width: 100%)[
-      #text(weight: "bold", size: 8pt, fill: {_rgb(t['muted'])})[#upper[{ctitle}]]
-      #v(3pt)
+      #text(weight: "bold", size: 9pt, fill: {_rgb(t['text'])})[{ctitle}]
+      #v(4pt)
       #align(center, {img_block})
     ]"""
             return f'block(width: 100%)[#align(center + horizon, {img_block})]'
@@ -2057,6 +2064,24 @@ def _esc(text) -> str:
         .replace("[", "\\[")
         .replace("]", "\\]")
     )
+
+
+def _esc_rich(text: str, accent_color: str = "#1A7FA0") -> str:
+    """Escape for Typst AND parse **bold** markdown into Typst bold markup.
+
+    **text** → #text(weight: "bold", fill: rgb("#accent"))[text]
+    """
+    import re
+    parts = re.split(r'\*\*(.+?)\*\*', str(text))
+    out = []
+    for j, part in enumerate(parts):
+        if j % 2 == 0:
+            out.append(_esc(part))
+        else:
+            out.append(
+                f'#text(weight: "bold", fill: rgb("{accent_color}")[{_esc(part)}]'
+            )
+    return "".join(out)
 
 
 def _ensure_string_items(items: list) -> list:

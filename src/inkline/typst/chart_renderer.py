@@ -7,11 +7,11 @@ Supported chart types (data charts):
 - line_chart: single or multi-series time series
 - area_chart: filled line chart
 - scatter: scatter plot with optional size/color encoding
-- waterfall: sequential positive/negative changes
+- waterfall: sequential positive/negative changes. style="clean" removes axes.
 - donut: part-of-whole (max 6 segments)
 - pie: traditional pie chart
-- stacked_bar: vertical stacked bar chart
-- grouped_bar: side-by-side grouped bars
+- stacked_bar: vertical stacked bar chart. style="clean"+accent_series for hero-bar style.
+- grouped_bar: side-by-side grouped bars. style="clean"+accent_index for hero-bar style.
 - heatmap: 2D color matrix
 - radar: spider/radar chart for multi-axis comparison
 - gauge: single-value meter (0-100%)
@@ -33,6 +33,13 @@ Supported infographic types (structural/conceptual diagrams):
 - sidebar_profile: two-panel profile + content layout
 - metaphor_backdrop: backdrop silhouette + overlay cards
 - chart_row: side-by-side mini charts composited into one figure
+
+New design-system exhibit types:
+- dumbbell: before/after dot-and-line chart (bond spreads, performance delta)
+- transition_grid: year × percentage grid for business-model migration
+- scoring_matrix: capability matrix with ○◔◕● fill indicators
+- gantt: parallel-track timeline bars (construction, roadmaps)
+- multi_timeline: 3-band process timeline (duration/phase/tasks)
 """
 
 from __future__ import annotations
@@ -177,6 +184,12 @@ def render_chart(
         "entity_flow": _render_entity_flow,
         "divergent_bar": _render_divergent_bar,
         "horizontal_stacked_bar": _render_horizontal_stacked_bar,
+        # Design-system exhibit types
+        "dumbbell": _render_dumbbell,
+        "transition_grid": _render_transition_grid,
+        "scoring_matrix": _render_scoring_matrix,
+        "gantt": _render_gantt,
+        "multi_timeline": _render_multi_timeline,
     }
 
     renderer = renderers.get(chart_type)
@@ -342,6 +355,7 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
         regular = [p for p in pts if not p.get("highlight")]
         highlighted = [p for p in pts if p.get("highlight")]
 
+        _label_style = data.get("label_style", "simple")
         # Regular points
         if regular:
             xs = [p["x"] for p in regular]
@@ -352,8 +366,23 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
                        edgecolors="white", linewidth=0.5)
             for p in regular:
                 if p.get("label"):
-                    ax.annotate(p["label"], (p["x"], p["y"]), fontsize=7.5,
-                                color=muted, textcoords="offset points", xytext=(5, 5))
+                    if _label_style == "annotated":
+                        _ann_text = p["label"]
+                        if p.get("value_label"):
+                            _ann_text += f"\n{p['value_label']}"
+                        if p.get("secondary_label"):
+                            _ann_text += f"\n{p['secondary_label']}"
+                        ax.annotate(
+                            _ann_text, (p["x"], p["y"]),
+                            textcoords="offset points", xytext=(10, 6),
+                            fontsize=7.5, color=text_color,
+                            bbox=dict(boxstyle="round,pad=0.3", fc=bg, ec=muted,
+                                      alpha=0.92, lw=0.5),
+                            arrowprops=dict(arrowstyle="-", color=muted, lw=0.5),
+                        )
+                    else:
+                        ax.annotate(p["label"], (p["x"], p["y"]), fontsize=7.5,
+                                    color=muted, textcoords="offset points", xytext=(5, 5))
 
         # Highlighted points — large filled circle, bold label, accent colour
         if highlighted:
@@ -467,58 +496,77 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
 # ---------------------------------------------------------------------------
 
 def _render_donut(data, *, colors, accent, bg, text_color, muted, width, height):
-    """Donut chart (max 6 segments) — uses shades of accent for brand consistency.
-
-    Layout: donut on the left, labelled legend on the right. This avoids
-    the chronic clipping problem of pie/donut charts with external labels.
+    """Donut chart (max 8 segments).
 
     data:
         segments: list of {label, value}
-        center_label: str (optional — text in center)
+        center_label: str (optional — text in center hole)
+        label_style?: "legend" (default) | "direct"
+            "legend": donut left 55% + right-side legend (avoids label clipping)
+            "direct": full-width donut, labels positioned radially outside each
+                      wedge — clean, no legend panel, Pareto/Goldman style.
     """
+    import math
+
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
 
-    segments = data.get("segments", [])[:6]
+    segments = data.get("segments", [])[:8]
     labels = [s["label"] for s in segments]
     values = [s["value"] for s in segments]
     total = sum(values) if values else 1
+    label_style = data.get("label_style", "legend")
 
-    # Use shades of accent (mono palette) — NOT rainbow.
     seg_colors = _shades_of(accent, len(segments))
 
-    # Place donut in left ~55% of figure; legend in right ~45%
-    ax.set_position([0.02, 0.05, 0.55, 0.9])
-
-    wedges, autotexts = ax.pie(
-        values, colors=seg_colors, autopct="%1.0f%%",
-        startangle=90, pctdistance=0.78,
-        wedgeprops={"width": 0.42, "edgecolor": bg, "linewidth": 2},
-        textprops={"fontsize": 10, "color": "white", "fontweight": "bold"},
-    )[:2]
-    for t in autotexts:
-        t.set_color("white")
-        t.set_fontsize(10)
-        t.set_fontweight("bold")
-
-    if data.get("center_label"):
-        ax.text(0, 0, data["center_label"], ha="center", va="center",
-                fontsize=15, fontweight="bold", color=text_color)
-
-    # Right-side legend with label + value, vertically centered
-    legend_lines = [
-        f"{labels[i]}  ·  {values[i]}" for i in range(len(segments))
-    ]
-    legend_handles = [
-        _plt.Rectangle((0, 0), 1, 1, color=seg_colors[i]) for i in range(len(segments))
-    ]
-    fig.legend(
-        legend_handles, legend_lines,
-        loc="center left", bbox_to_anchor=(0.6, 0.5),
-        frameon=False, fontsize=11, labelcolor=text_color,
-        handlelength=1.2, handleheight=1.2, handletextpad=0.8,
-        labelspacing=1.0,
-    )
+    if label_style == "direct":
+        # Full-width donut — no legend, radial direct labels
+        ax.set_position([0.05, 0.05, 0.90, 0.90])
+        wedges, _ = ax.pie(
+            values, colors=seg_colors, startangle=90,
+            wedgeprops={"width": 0.42, "edgecolor": bg, "linewidth": 2},
+        )
+        if data.get("center_label"):
+            ax.text(0, 0, data["center_label"], ha="center", va="center",
+                    fontsize=13, fontweight="bold", color=text_color)
+        # Radial direct labels
+        for i, (wedge, val) in enumerate(zip(wedges, values)):
+            angle = (wedge.theta1 + wedge.theta2) / 2.0
+            angle_rad = math.radians(angle)
+            r = 0.72  # outside the donut
+            lx = r * math.cos(angle_rad)
+            ly = r * math.sin(angle_rad)
+            pct = val / total * 100
+            ha = "left" if lx >= 0 else "right"
+            ax.text(lx, ly, f"{labels[i]}\n{pct:.0f}%",
+                    ha=ha, va="center", fontsize=8, color=text_color, linespacing=1.3)
+    else:
+        # Classic legend layout — donut left 55%, legend right 45%
+        ax.set_position([0.02, 0.05, 0.55, 0.9])
+        wedges, autotexts = ax.pie(
+            values, colors=seg_colors, autopct="%1.0f%%",
+            startangle=90, pctdistance=0.78,
+            wedgeprops={"width": 0.42, "edgecolor": bg, "linewidth": 2},
+            textprops={"fontsize": 10, "color": "white", "fontweight": "bold"},
+        )[:2]
+        for t in autotexts:
+            t.set_color("white")
+            t.set_fontsize(10)
+            t.set_fontweight("bold")
+        if data.get("center_label"):
+            ax.text(0, 0, data["center_label"], ha="center", va="center",
+                    fontsize=15, fontweight="bold", color=text_color)
+        legend_lines = [f"{labels[i]}  ·  {values[i]}" for i in range(len(segments))]
+        legend_handles = [
+            _plt.Rectangle((0, 0), 1, 1, color=seg_colors[i]) for i in range(len(segments))
+        ]
+        fig.legend(
+            legend_handles, legend_lines,
+            loc="center left", bbox_to_anchor=(0.6, 0.5),
+            frameon=False, fontsize=11, labelcolor=text_color,
+            handlelength=1.2, handleheight=1.2, handletextpad=0.8,
+            labelspacing=1.0,
+        )
 
     return fig
 
@@ -547,6 +595,10 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
     data:
         categories: list of str (x-axis labels)
         series: list of {name, values}
+        y_label?: str
+        style?: "standard" (default) | "clean"
+        accent_series?: int  — series index to highlight in accent; others use muted shades.
+        title?: str          — embedded title when style="clean".
     """
     import numpy as np
 
@@ -556,16 +608,29 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
 
     categories = data.get("categories", [])
     series = data.get("series", [])
+    style = data.get("style", "standard")
+    accent_series_idx = data.get("accent_series")
+    chart_title = data.get("title", "")
+
     x = np.arange(len(categories))
     bottom = np.zeros(len(categories))
 
-    # Stacked bar — use shades of accent for brand discipline
-    seg_colors = _shades_of(accent, len(series))
-    for i, s in enumerate(series):
-        color = seg_colors[i]
-        vals = s["values"]
-        ax.bar(x, vals, bottom=bottom, color=color, label=s.get("name", ""), width=0.6, edgecolor="white", linewidth=0.5)
-        bottom += np.array(vals)
+    if accent_series_idx is not None:
+        # Hero series in accent; others in muted shades
+        muted_shades = _shades_of(muted, len(series))
+        for i, s in enumerate(series):
+            seg_color = accent if i == accent_series_idx else muted_shades[i % len(muted_shades)]
+            vals = np.array(s.get("values", []))
+            ax.bar(x, vals, bottom=bottom, color=seg_color,
+                   label=s.get("name", ""), width=0.6, edgecolor=bg, linewidth=0.4)
+            bottom += vals
+    else:
+        seg_colors = _shades_of(accent, len(series))
+        for i, s in enumerate(series):
+            vals = np.array(s.get("values", []))
+            ax.bar(x, vals, bottom=bottom, color=seg_colors[i],
+                   label=s.get("name", ""), width=0.6, edgecolor=bg, linewidth=0.4)
+            bottom += vals
 
     ax.set_xticks(x)
     _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
@@ -574,8 +639,24 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
         fig.subplots_adjust(bottom=0.22)
     else:
         ax.set_xticklabels(categories, fontsize=9)
-    ax.legend(frameon=False, fontsize=9, labelcolor=text_color, loc="upper left")
-    ax.grid(axis="y", alpha=0.2, color=muted)
+
+    if style == "clean":
+        ax.yaxis.set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["bottom"].set_color(muted)
+        ax.spines["bottom"].set_linewidth(0.5)
+        ax.tick_params(axis="both", length=0)
+        if chart_title:
+            ax.text(0.02, 0.06, chart_title, transform=ax.transAxes,
+                    fontsize=9, fontweight="bold", color=text_color, va="bottom")
+    else:
+        ax.legend(frameon=False, fontsize=9, labelcolor=text_color, loc="upper left")
+        if data.get("y_label"):
+            ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
+        ax.grid(axis="y", alpha=0.2, color=muted)
+
     fig.tight_layout()
     return fig
 
@@ -590,6 +671,15 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
     data:
         categories: list of str
         series: list of {name, values}
+        y_label?: str
+        style?: "standard" (default) | "clean"
+            "clean" removes y-axis and gridlines, adds direct value labels above
+            bars, and embeds the chart title inside the lower-left of the chart.
+        accent_index?: int or list[int]
+            Category positions (0-based) to highlight in accent colour.
+            All other bars rendered in muted colour.  Ignored when style="standard".
+        title?: str
+            When style="clean", embedded inside the chart body.
     """
     import numpy as np
 
@@ -599,15 +689,38 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
 
     categories = data.get("categories", [])
     series = data.get("series", [])
+    style = data.get("style", "standard")
+    chart_title = data.get("title", "")
+
+    # Normalise accent_index to a frozenset of category positions
+    _ai = data.get("accent_index")
+    if _ai is None:
+        accent_set: set = set()
+    elif isinstance(_ai, int):
+        accent_set = {_ai}
+    else:
+        accent_set = set(_ai)
+
     n_series = len(series)
     x = np.arange(len(categories))
-    bar_width = 0.7 / n_series
+    bar_width = 0.7 / max(n_series, 1)
 
     for i, s in enumerate(series):
-        color = colors[i % len(colors)]
         offset = (i - n_series / 2 + 0.5) * bar_width
-        ax.bar(x + offset, s["values"], bar_width, color=color, label=s.get("name", ""), edgecolor="white", linewidth=0.5)
+        vals = s.get("values", [])
+        if accent_set:
+            # Per-bar colour: accent for highlighted categories, muted for others
+            for j, val in enumerate(vals):
+                bar_color = accent if j in accent_set else muted
+                ax.bar(x[j] + offset, val, bar_width, color=bar_color,
+                       label=(s.get("name", "") if j == 0 else "_nolegend_"),
+                       edgecolor=bg, linewidth=0.4)
+        else:
+            bar_color = colors[i % len(colors)]
+            ax.bar(x + offset, vals, bar_width, color=bar_color,
+                   label=s.get("name", ""), edgecolor=bg, linewidth=0.4)
 
+    # X-axis labels with auto-rotation
     ax.set_xticks(x)
     _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
     if _ml > 10 or _n > 6:
@@ -615,8 +728,39 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
         fig.subplots_adjust(bottom=0.22)
     else:
         ax.set_xticklabels(categories, fontsize=9)
-    ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
-    ax.grid(axis="y", alpha=0.2, color=muted)
+
+    if style == "clean":
+        # Remove y-axis entirely and reduce spine chrome
+        ax.yaxis.set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["bottom"].set_color(muted)
+        ax.spines["bottom"].set_linewidth(0.5)
+        ax.tick_params(axis="both", length=0)
+        # Direct value labels above each bar
+        for patch in ax.patches:
+            h = patch.get_height()
+            if abs(h) > 1e-6:
+                fmt = f"{h:,.0f}" if abs(h) >= 1 else f"{h:.2f}"
+                ax.text(
+                    patch.get_x() + patch.get_width() / 2,
+                    h + ax.get_ylim()[1] * 0.01,
+                    fmt, ha="center", va="bottom", fontsize=8,
+                    color=text_color, fontweight="bold",
+                )
+        # Embedded title: lower-left of chart area, NOT ax.set_title
+        if chart_title:
+            ax.text(0.02, 0.06, chart_title, transform=ax.transAxes,
+                    fontsize=9, fontweight="bold", color=text_color,
+                    va="bottom", ha="left")
+    else:
+        if n_series > 1:
+            ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
+        if data.get("y_label"):
+            ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
+        ax.grid(axis="y", alpha=0.2, color=muted)
+
     fig.tight_layout()
     return fig
 
@@ -2777,6 +2921,322 @@ def _render_divergent_bar(data, *, colors, accent, bg, text_color, muted, width,
               fontsize=8, labelcolor=text_color)
 
     fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Dumbbell chart  (PT-15)
+# ---------------------------------------------------------------------------
+
+def _render_dumbbell(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Dumbbell chart — shows change between two values per row.
+
+    Best for: bond spread migration, before/after comparisons, analyst vs actual.
+
+    data:
+        points: [{label, value_start, value_end, start_label?, end_label?}]
+        start_series_label?: str  (default "Before")
+        end_series_label?: str    (default "After")
+        x_label?: str
+        accent_direction?: "higher_is_better" (default) | "lower_is_better"
+    """
+    from matplotlib.lines import Line2D
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    _style_axes(ax, bg, text_color, muted)
+
+    points = data.get("points", [])
+    direction = data.get("accent_direction", "higher_is_better")
+    start_lbl = data.get("start_series_label", "Before")
+    end_lbl = data.get("end_series_label", "After")
+    sec_color = colors[1] if len(colors) > 1 else muted
+
+    all_vals = [p.get("value_start", 0) for p in points] + [p.get("value_end", 0) for p in points]
+    val_range = max(all_vals) - min(all_vals) if all_vals else 1
+    label_pad = val_range * 0.04 + 1e-9
+
+    for i, p in enumerate(points):
+        vs = float(p.get("value_start", 0))
+        ve = float(p.get("value_end", 0))
+        improved = ve >= vs if direction == "higher_is_better" else ve <= vs
+        end_color = accent if improved else sec_color
+        ax.plot([vs, ve], [i, i], color=muted, linewidth=1.5, zorder=1)
+        ax.scatter([vs], [i], color=muted, s=70, zorder=2, edgecolors=bg, linewidth=1.2)
+        ax.scatter([ve], [i], color=end_color, s=110, zorder=3, edgecolors=bg, linewidth=1.2)
+        ax.text(vs - label_pad, i, f"{vs:g}",
+                ha="right", va="center", fontsize=7.5, color=muted)
+        ax.text(ve + label_pad, i, f"{ve:g}",
+                ha="left", va="center", fontsize=8, color=end_color, fontweight="bold")
+
+    ax.set_yticks(range(len(points)))
+    ax.set_yticklabels([p.get("label", "") for p in points], fontsize=9, color=text_color)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="both", length=0)
+    ax.grid(axis="x", alpha=0.18, color=muted)
+    if data.get("x_label"):
+        ax.set_xlabel(data["x_label"], fontsize=9, color=muted)
+    handles = [
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=muted, markersize=8, label=start_lbl),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=accent, markersize=8, label=end_lbl),
+    ]
+    ax.legend(handles=handles, frameon=False, fontsize=8, labelcolor=text_color, loc="lower right")
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Transition grid  (PT-8)
+# ---------------------------------------------------------------------------
+
+def _render_transition_grid(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Year × percentage grid showing a gradual transition between two states.
+
+    Best for: business-model migrations, revenue-mix shifts, technology transitions.
+
+    data:
+        rows: [{label, highlight_col}]   highlight_col = 0-based column index
+        col_labels: [str]                e.g. ["0%","10%",...,"100%"]
+        from_label?: str                 left edge label (the "old" state)
+        to_label?: str                   right edge label (the "new" state)
+    """
+    import math
+
+    rows = data.get("rows", [])
+    col_labels = data.get("col_labels", [])
+    from_label = data.get("from_label", "")
+    to_label = data.get("to_label", "")
+    if not rows or not col_labels:
+        fig, ax = _plt.subplots(figsize=(width, height))
+        fig.patch.set_facecolor(bg); ax.axis("off"); return fig
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg); ax.set_facecolor(bg); ax.axis("off")
+
+    h = accent.lstrip("#")
+    ar, ag, ab = int(h[0:2], 16)/255, int(h[2:4], 16)/255, int(h[4:6], 16)/255
+    n_rows, n_cols = len(rows), len(col_labels)
+    cw, ch, gx, gy = 1.0, 0.75, 0.07, 0.07
+
+    for ri, row in enumerate(rows):
+        hcol = row.get("highlight_col", 0)
+        yb = (n_rows - 1 - ri) * (ch + gy)
+        for ci in range(n_cols):
+            xb = ci * (cw + gx)
+            if ci == hcol:
+                fill = (ar, ag, ab, 0.88)
+            elif ci < hcol:
+                fill = (ar, ag, ab, 0.12)
+            else:
+                fill = (0.88, 0.88, 0.88, 1.0)
+            rect = _plt.Rectangle((xb, yb), cw, ch, color=fill, linewidth=0.3, edgecolor=bg)
+            ax.add_patch(rect)
+        ax.text(-0.6, yb + ch / 2, row["label"],
+                ha="right", va="center", fontsize=10, fontweight="bold", color=text_color)
+
+    total_w = n_cols * (cw + gx) - gx
+    total_h = n_rows * (ch + gy) - gy
+    for ci, lbl in enumerate(col_labels):
+        ax.text(ci * (cw + gx) + cw / 2, total_h + 0.18, lbl,
+                ha="center", va="bottom", fontsize=7.5, color=muted)
+    if from_label:
+        ax.text(0, -0.45, from_label, ha="left", va="top", fontsize=8.5,
+                color=muted, style="italic")
+    if to_label:
+        ax.text(total_w, -0.45, to_label, ha="right", va="top", fontsize=8.5,
+                color=accent, fontweight="bold")
+    ax.set_xlim(-2.0, total_w + 0.4)
+    ax.set_ylim(-0.7, total_h + 0.55)
+    fig.tight_layout(pad=0.3)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Scoring matrix  (PT-9)
+# ---------------------------------------------------------------------------
+
+def _render_scoring_matrix(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Capability / suitability matrix with visual fill indicators.
+
+    Best for: product comparisons, due-diligence scorecards, capability assessments.
+
+    data:
+        rows: [{label, scores: [int 0-3]}]
+        col_labels: [str]
+        title?: str
+
+    Score 0 = empty  1 = low  2 = medium  3 = high (accent)
+    """
+    rows = data.get("rows", [])
+    col_labels = data.get("col_labels", [])
+    if not rows or not col_labels:
+        fig, ax = _plt.subplots(figsize=(width, height))
+        fig.patch.set_facecolor(bg); ax.axis("off"); return fig
+
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg); ax.set_facecolor(bg); ax.axis("off")
+
+    h = accent.lstrip("#")
+    ar, ag, ab = int(h[0:2], 16)/255, int(h[2:4], 16)/255, int(h[4:6], 16)/255
+    fills = [
+        (0.92, 0.92, 0.92, 1.0),
+        (ar, ag, ab, 0.28),
+        (ar, ag, ab, 0.62),
+        (ar, ag, ab, 0.93),
+    ]
+    symbols = ["○", "◔", "◕", "●"]
+    sym_colors = [muted, text_color, "white", "white"]
+
+    n_rows, n_cols = len(rows), len(col_labels)
+    cw, ch, gx, gy = 1.0, 0.65, 0.06, 0.06
+
+    for ri, row in enumerate(rows):
+        scores = row.get("scores", [])
+        yb = (n_rows - 1 - ri) * (ch + gy)
+        ax.text(-0.4, yb + ch / 2, row["label"],
+                ha="right", va="center", fontsize=9, color=text_color)
+        for ci in range(n_cols):
+            sc = max(0, min(3, int(scores[ci]) if ci < len(scores) else 0))
+            xb = ci * (cw + gx)
+            rect = _plt.Rectangle((xb, yb), cw, ch, color=fills[sc],
+                                  linewidth=0.5, edgecolor=bg)
+            ax.add_patch(rect)
+            ax.text(xb + cw / 2, yb + ch / 2, symbols[sc],
+                    ha="center", va="center", fontsize=13, color=sym_colors[sc])
+
+    total_w = n_cols * (cw + gx) - gx
+    total_h = n_rows * (ch + gy) - gy
+    for ci, lbl in enumerate(col_labels):
+        ax.text(ci * (cw + gx) + cw / 2, total_h + 0.12, lbl,
+                ha="center", va="bottom", fontsize=8, fontweight="bold", color=text_color)
+    ax.set_xlim(-2.8, total_w + 0.3)
+    ax.set_ylim(-0.3, total_h + 0.5)
+    fig.tight_layout(pad=0.3)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Gantt chart  (LP-7)
+# ---------------------------------------------------------------------------
+
+def _render_gantt(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Gantt chart with parallel tracks / phases.
+
+    Best for: construction programmes, product roadmaps, M&A timelines.
+
+    data:
+        tracks: [{label, start, end, color?}]
+            start/end: numeric (relative units) OR string matching a date_labels entry
+        date_labels: [str]   milestone labels for x-axis ticks
+        title?: str
+    """
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg); ax.set_facecolor(bg)
+    _style_axes(ax, bg, text_color, muted)
+
+    tracks = data.get("tracks", [])
+    date_labels = data.get("date_labels", [])
+    n_dates = max(len(date_labels), 1)
+    palette = [accent] + colors
+
+    for i, track in enumerate(tracks):
+        y = len(tracks) - 1 - i
+        start = track.get("start", 0)
+        end = track.get("end", n_dates - 1)
+        if isinstance(start, str) and start in date_labels:
+            start = date_labels.index(start)
+        if isinstance(end, str) and end in date_labels:
+            end = date_labels.index(end) + 0.85
+        bar_color = track.get("color") or palette[i % len(palette)]
+        duration = float(end) - float(start)
+        ax.barh(y, duration, left=float(start), height=0.5,
+                color=bar_color, align="center", edgecolor=bg, linewidth=1)
+        ax.text(float(start) + duration / 2, y, track["label"],
+                ha="center", va="center", fontsize=8, fontweight="bold",
+                color="white", clip_on=True)
+
+    ax.set_xticks(range(n_dates))
+    ax.set_xticklabels(date_labels, fontsize=8, color=muted, rotation=20 if n_dates > 6 else 0, ha="right")
+    ax.set_yticks([])
+    ax.set_xlim(-0.3, n_dates - 0.3)
+    ax.set_ylim(-0.6, len(tracks) - 0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="both", length=0)
+    ax.grid(axis="x", alpha=0.18, color=muted, linestyle="--")
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Multi-level process timeline  (PT-12)
+# ---------------------------------------------------------------------------
+
+def _render_multi_timeline(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Three-band horizontal process timeline: duration / phase name / task bullets.
+
+    Best for: M&A processes, fundraising timelines, product launch plans.
+
+    data:
+        phases: [{label, sub_label?, duration?, tasks: [str]}]   (2–5 phases)
+    """
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg); ax.set_facecolor(bg); ax.axis("off")
+
+    phases = data.get("phases", [])
+    if not phases:
+        return fig
+
+    n = len(phases)
+    pw = 1.0 / n        # width per phase in axes coords
+    h_axis = 0.55       # y of the horizontal timeline spine
+    h_dur = 0.82        # y of duration label
+    h_label = 0.57      # y of phase name
+    h_tasks_top = 0.44  # y of first task bullet
+
+    # Parse accent hex → RGB for alpha usage
+    ha = accent.lstrip("#")
+    acc_rgb = (int(ha[0:2], 16)/255, int(ha[2:4], 16)/255, int(ha[4:6], 16)/255)
+
+    # Horizontal spine
+    ax.axhline(y=h_axis, xmin=0.02, xmax=0.98, color=muted, linewidth=0.8)
+
+    for i, phase in enumerate(phases):
+        xm = (i + 0.5) * pw   # x midpoint
+        xl = i * pw            # x left edge
+
+        # Phase divider
+        if i > 0:
+            ax.axvline(x=xl, ymin=0.08, ymax=0.92,
+                       color=acc_rgb, linewidth=1.2, linestyle="--", alpha=0.55)
+
+        # Duration text (above spine)
+        if phase.get("duration"):
+            ax.text(xm, h_dur, phase["duration"],
+                    ha="center", va="center", fontsize=8.5,
+                    color=muted, style="italic", transform=ax.transAxes)
+
+        # Phase label
+        ax.text(xm, h_label, phase["label"],
+                ha="center", va="center", fontsize=12, fontweight="bold",
+                color=text_color, transform=ax.transAxes)
+
+        if phase.get("sub_label"):
+            ax.text(xm, h_label - 0.09, phase["sub_label"],
+                    ha="center", va="center", fontsize=9,
+                    color=accent, fontweight="bold", transform=ax.transAxes)
+
+        # Task bullets (below spine)
+        for j, task in enumerate(phase.get("tasks", [])[:4]):
+            yt = h_tasks_top - j * 0.12
+            ax.text(xm, yt, f"• {task}",
+                    ha="center", va="top", fontsize=7.5, color=muted,
+                    transform=ax.transAxes)
+
+    fig.tight_layout(pad=0.2)
     return fig
 
 
