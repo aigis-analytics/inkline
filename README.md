@@ -20,8 +20,55 @@ pip install inkline[pdf]           # + WeasyPrint PDF
 pip install inkline[charts]        # + matplotlib chart renderer
 pip install inkline[slides]        # + Google Slides API
 pip install inkline[intelligence]  # + LLM design advisor (Anthropic)
-pip install inkline[all]           # everything
+pip install inkline[app]           # + standalone WebUI + Claude bridge
+pip install inkline[mcp]           # + MCP server for Claude Desktop / Claude.ai
+pip install inkline[all]           # everything (excludes mcp)
 ```
+
+## Standalone app — conversational WebUI
+
+The fastest way to use Inkline for non-technical users, or anyone who wants a
+natural-language interface instead of writing Python.
+
+**Requirements:** [Claude Code](https://docs.claude.com/claude-code) installed and
+authenticated (`claude /login`). Optionally `pandoc` for `.docx` input.
+
+```bash
+pip install "inkline[all]"
+inkline serve                      # opens http://localhost:8082
+```
+
+Upload any file (`.md`, `.docx`, `.pdf`, `.pptx`), type what you want — *"turn this
+into a 10-slide investor pitch"* — and a branded PDF appears in the browser. Continue
+the conversation to refine: *"make slide 3 more visual"*, *"add a revenue chart after
+slide 5"*, *"switch to the Stripe theme"*.
+
+Claude Code handles the entire pipeline: file parsing, content structuring, layout
+selection, rendering, and iterative amendments.
+
+```bash
+inkline serve --port 9000          # custom port
+inkline bridge                     # bridge only, headless
+```
+
+**Claude Desktop / Claude.ai integration (MCP):**
+
+```bash
+pip install "inkline[mcp]"
+inkline mcp                        # start MCP server (stdio)
+```
+
+Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "inkline": { "command": "inkline", "args": ["mcp"] }
+  }
+}
+```
+
+---
 
 ## Quick start
 
@@ -287,8 +334,16 @@ print(format_report(warnings))
 ## CLI
 
 ```bash
+# Document generation (Markdown input, no LLM required)
 inkline-html report.md --brand minimal --title "My Report"
 inkline-pdf  report.md --brand mycorp  --title "Quarterly Review"
+
+# Standalone app (requires Claude Code installed and authenticated)
+inkline serve                      # WebUI at http://localhost:8082 + auto-opens browser
+inkline serve --port 9000          # custom port
+inkline serve --no-browser         # start without opening browser
+inkline bridge                     # bridge only (headless, for programmatic use)
+inkline mcp                        # MCP server for Claude Desktop / Claude.ai (stdio)
 ```
 
 ## Repository layout
@@ -305,19 +360,22 @@ src/inkline/
 │   ├── chart_renderer.py    # 20+ chart/exhibit renderers
 │   ├── theme_registry.py    # template → theme generation
 │   └── themes/              # 90 themes in 13 categories
-└── intelligence/     # Design advisor + overflow audit
-    ├── design_advisor.py    # DesignAdvisor — LLM design planning + revision
-    ├── slide_fixer.py       # Closed-loop overflow fixer (6 graduated fix levels)
-    ├── overflow_audit.py    # Structural + Claude vision audit (15 checks)
-    ├── claude_code.py       # Bridge caller + ensure_bridge_running()
-    ├── archon.py            # Pipeline supervisor: phase tracking + issue log
-    ├── vishwakarma.py       # Design philosophy constants (4 laws)
-    ├── content_analyzer.py
-    ├── layout_selector.py
-    ├── chart_advisor.py
-    ├── playbooks/           # 10 design playbooks (colour, typography, layouts,
-    │                        #   professional exhibit design, …)
-    └── design_md_styles/    # 27 additional design system styles
+├── intelligence/     # Design advisor + overflow audit
+│   ├── design_advisor.py    # DesignAdvisor — LLM design planning + revision
+│   ├── slide_fixer.py       # Closed-loop overflow fixer (6 graduated fix levels)
+│   ├── overflow_audit.py    # Structural + Claude vision audit (15 checks)
+│   ├── claude_code.py       # Bridge caller + ensure_bridge_running()
+│   ├── archon.py            # Pipeline supervisor: phase tracking + issue log
+│   ├── vishwakarma.py       # Design philosophy constants (4 laws)
+│   ├── playbooks/           # 10 design playbooks (colour, typography, layouts, …)
+│   └── design_md_styles/    # 27 additional design system styles
+└── app/              # Standalone app layer (pip install inkline[app])
+    ├── claude_bridge.py     # HTTP bridge → claude CLI (port 8082)
+    │                        #   POST /prompt, POST /upload, GET /output/{f}
+    ├── mcp_server.py        # MCP server — 4 tools for Claude Desktop / Claude.ai
+    ├── cli.py               # inkline serve / bridge / mcp entry points
+    └── static/
+        └── index.html       # Thin WebUI: file upload, chat, live PDF preview
 ```
 
 ## Vishwakarma design philosophy
