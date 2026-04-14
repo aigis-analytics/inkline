@@ -16,13 +16,14 @@
     --text: #e8eaf0;
     --muted: #8890a4;
     --success: #4ade80;
+    --warn: #f59e0b;
     --error: #f87171;
     --radius: 8px;
   }
 
   html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
 
-  #app { display: grid; grid-template-columns: 420px 1fr; height: 100vh; gap: 0; }
+  #app { display: grid; grid-template-columns: 380px 240px 1fr; height: 100vh; gap: 0; }
 
   /* ── Left panel ── */
   #left { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); }
@@ -55,6 +56,177 @@
   #send { background: var(--accent); border: none; border-radius: var(--radius); color: #fff; padding: 0 18px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s; white-space: nowrap; }
   #send:hover:not(:disabled) { background: var(--accent-hover); }
   #send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Middle panel — Pipeline progress ── */
+  #middle {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    overflow-y: auto;
+  }
+
+  #prog-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  #prog-overall {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #prog-bar-wrap {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  #prog-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--success));
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  #prog-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+  }
+
+  #prog-pct { color: var(--accent); font-weight: 600; }
+  #prog-elapsed { color: var(--muted); }
+
+  #prog-phases { padding: 8px 0; }
+
+  .phase-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 5px 16px;
+    gap: 9px;
+  }
+
+  .phase-circle {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: transparent;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: background 0.3s, border-color 0.3s;
+  }
+
+  .phase-circle.running {
+    border-color: transparent;
+    background: conic-gradient(var(--accent) 0deg 270deg, transparent 270deg 360deg);
+    animation: spin-arc 1s linear infinite;
+  }
+
+  .phase-circle.complete {
+    background: var(--success);
+    border-color: var(--success);
+  }
+
+  .phase-circle.error {
+    background: var(--error);
+    border-color: var(--error);
+  }
+
+  @keyframes spin-arc {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .phase-info { flex: 1; min-width: 0; }
+
+  .phase-label {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+
+  .phase-label.muted { color: var(--muted); font-weight: 400; }
+
+  .phase-time {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  .phase-sub {
+    padding: 4px 16px 6px 39px;
+  }
+
+  .sub-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+
+  .sub-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .sub-count {
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .vision-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 5px 16px 6px 39px;
+  }
+
+  .vdot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.25s;
+    flex-shrink: 0;
+  }
+
+  .vdot.done { background: var(--success); }
+  .vdot.warn { background: var(--warn); }
+  .vdot.error { background: var(--error); }
+
+  #prog-idle {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px 16px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  #prog-idle svg { opacity: 0.25; }
+  #prog-idle p { font-size: 11px; line-height: 1.6; }
 
   /* ── Right panel — PDF preview ── */
   #right { display: flex; flex-direction: column; background: var(--bg); }
@@ -104,6 +276,26 @@
     <div id="input-row">
       <textarea id="prompt" placeholder="What would you like to create? e.g. 'Turn this into a 10-slide investor pitch'" rows="3"></textarea>
       <button id="send">Send</button>
+    </div>
+  </div>
+
+  <!-- Middle: Pipeline progress tracker -->
+  <div id="middle">
+    <div id="prog-header">Pipeline</div>
+    <div id="prog-overall" style="display:none">
+      <div id="prog-bar-wrap"><div id="prog-bar"></div></div>
+      <div id="prog-meta">
+        <span id="prog-pct">0%</span>
+        <span id="prog-elapsed"></span>
+      </div>
+    </div>
+    <div id="prog-phases" style="display:none"></div>
+    <div id="prog-idle">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 15"/>
+      </svg>
+      <p>Progress will appear<br>when a run starts.</p>
     </div>
   </div>
 
@@ -197,7 +389,6 @@ async function sendMessage() {
   let prompt = text;
   if (pendingFilePath) {
     prompt = `I've uploaded a file at: ${pendingFilePath}\n\n${text}`;
-    // Clear the pending file after attaching it to the prompt
     pendingFilePath = null;
     fileBadge.style.display = 'none';
     dropZone.style.display = '';
@@ -210,6 +401,7 @@ async function sendMessage() {
   sendBtn.disabled = true;
 
   const thinking = addMessage('assistant thinking', 'Thinking…');
+  startProgressTracking();
 
   try {
     const r = await fetch('/prompt', {
@@ -242,11 +434,9 @@ const pdfFrame      = document.getElementById('pdf-frame');
 const emptyState    = document.getElementById('empty-state');
 
 function checkForPdf(responseText) {
-  // Claude announces "PDF ready: ..." in its response
   const match = responseText.match(/PDF ready:\s*([^\s\n]+\.pdf)/i);
   if (match) {
     const absPath = match[1];
-    // Extract just the filename for the /output/ route
     const parts = absPath.replace(/\\/g, '/').split('/');
     const fn = parts[parts.length - 1];
     showPdf(fn);
@@ -263,6 +453,134 @@ function showPdf(filename) {
   downloadBtn.href = url;
   downloadBtn.download = filename;
   downloadBtn.style.display = 'inline-block';
+}
+
+// ── Pipeline progress tracker ─────────────────────────────────────────────────
+let progEs = null;
+let progPollTimer = null;
+
+function startProgressTracking() {
+  stopProgressTracking();
+  // Show the panel, hide idle state
+  document.getElementById('prog-idle').style.display = 'none';
+  document.getElementById('prog-overall').style.display = '';
+  document.getElementById('prog-phases').style.display = '';
+
+  progEs = new EventSource('/progress');
+  progEs.onmessage = e => {
+    try { updateProgress(JSON.parse(e.data)); } catch(_) {}
+  };
+  progEs.onerror = () => {
+    if (progEs) { progEs.close(); progEs = null; }
+    // Fall back to REST polling every 3s
+    progPollTimer = setInterval(() => {
+      fetch('/status')
+        .then(r => r.json())
+        .then(updateProgress)
+        .catch(() => {});
+    }, 3000);
+  };
+}
+
+function stopProgressTracking() {
+  if (progEs) { progEs.close(); progEs = null; }
+  if (progPollTimer) { clearInterval(progPollTimer); progPollTimer = null; }
+}
+
+function fmtElapsed(s) {
+  if (s == null || s === '') return '';
+  s = Math.round(s);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function updateProgress(state) {
+  if (!state || !Array.isArray(state.phases)) return;
+
+  // Overall bar
+  const pct = state.complete ? 100 : (state.pct || 0);
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent = state.complete ? '100%' : (pct > 0 ? pct + '%' : '—');
+  document.getElementById('prog-elapsed').textContent = fmtElapsed(state.elapsed_s);
+
+  const container = document.getElementById('prog-phases');
+  container.innerHTML = '';
+
+  state.phases.forEach(phase => {
+    // Phase row
+    const row = document.createElement('div');
+    row.className = 'phase-row';
+
+    const circ = document.createElement('div');
+    circ.className = 'phase-circle' + (phase.status !== 'pending' ? ' ' + phase.status : '');
+
+    const info = document.createElement('div');
+    info.className = 'phase-info';
+
+    const label = document.createElement('div');
+    label.className = 'phase-label' + (phase.status === 'pending' ? ' muted' : '');
+    label.textContent = phase.label;
+    info.appendChild(label);
+
+    if (phase.elapsed_s != null) {
+      const t = document.createElement('div');
+      t.className = 'phase-time';
+      t.textContent = fmtElapsed(phase.elapsed_s);
+      info.appendChild(t);
+    } else if (phase.status === 'running') {
+      const t = document.createElement('div');
+      t.className = 'phase-time';
+      t.textContent = fmtElapsed(state.elapsed_s) || '…';
+      info.appendChild(t);
+    }
+
+    row.appendChild(circ);
+    row.appendChild(info);
+    container.appendChild(row);
+
+    // Sub-progress: per-slide design (inside design_advisor_llm)
+    if (phase.name === 'design_advisor_llm' && phase.status === 'running' &&
+        state.slide_design_total > 0) {
+      const sub = document.createElement('div');
+      sub.className = 'phase-sub';
+      const pct2 = Math.round(state.slide_design_done / state.slide_design_total * 100);
+      const bw = document.createElement('div');
+      bw.className = 'sub-bar-wrap';
+      const b = document.createElement('div');
+      b.className = 'sub-bar';
+      b.style.width = pct2 + '%';
+      bw.appendChild(b);
+      const cnt = document.createElement('div');
+      cnt.className = 'sub-count';
+      cnt.textContent = `Slide ${state.slide_design_done} / ${state.slide_design_total}`;
+      sub.appendChild(bw);
+      sub.appendChild(cnt);
+      container.appendChild(sub);
+    }
+
+    // Vision dots (inside export_pdf_with_audit)
+    if (phase.name === 'export_pdf_with_audit' && state.vision_total > 0) {
+      const dots = document.createElement('div');
+      dots.className = 'vision-dots';
+      for (let i = 0; i < state.vision_total; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'vdot' + (i < state.vision_done ? ' done' : '');
+        dots.appendChild(dot);
+      }
+      container.appendChild(dots);
+    }
+  });
+
+  // Error notice
+  if (state.error) {
+    const err = document.createElement('div');
+    err.style.cssText = 'padding:8px 16px;font-size:11px;color:var(--error);word-break:break-word;';
+    err.textContent = state.error;
+    container.appendChild(err);
+  }
+
+  if (state.complete || state.error) {
+    stopProgressTracking();
+  }
 }
 
 // ── Keyboard shortcut: Ctrl/Cmd+Enter to send ────────────────────────────────

@@ -5,6 +5,8 @@ Adapted from the Aria project (u3126117/aria). Exposes:
   POST /vision       — visual audit: base64 PNG + prompt → Claude reads image and responds
   POST /upload       — save an uploaded file, returns its absolute path
   GET  /output/{f}   — serve generated PDFs and charts
+  GET  /status       — current pipeline run state (JSON)
+  GET  /progress     — SSE stream of pipeline progress events
   GET  /             — serve the Inkline WebUI (index.html)
   GET  /health       — liveness check
 
@@ -19,6 +21,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -92,6 +95,143 @@ SYSTEM_PROMPT = _load_system_prompt()
 # ---------------------------------------------------------------------------
 _last_request_time = 0.0
 MIN_REQUEST_INTERVAL = 1.0
+
+
+# ---------------------------------------------------------------------------
+# Pipeline run state — served via /status and /progress
+# ---------------------------------------------------------------------------
+_PHASE_DEFS = [
+    {"name": "parse_markdown",        "label": "Parse Document",  "weight": 0.03},
+    {"name": "design_advisor_llm",    "label": "Design & Plan",   "weight": 0.72},
+    {"name": "save_slide_spec",       "label": "Save Spec",       "weight": 0.02},
+    {"name": "export_pdf_with_audit", "label": "Render & Audit",  "weight": 0.23},
+]
+_PHASE_START_RE  = re.compile(r"\[ARCHON\] Phase: (\S+)")
+_PHASE_END_RE    = re.compile(r"\[ARCHON\] (\S+) → (OK|FAILED) in ([\d.]+)s")
+_SLIDE_DESIGN_RE = re.compile(r"DesignAdvisor Phase 2: \[\s*(\d+)/(\d+)\]")
+
+_run_state: dict = {
+    "active": False, "phases": [], "slide_design_done": 0, "slide_design_total": 0,
+    "vision_done": 0, "vision_total": 0, "complete": False, "error": None,
+    "elapsed_s": 0, "pct": 0,
+}
+_sse_queues: set = set()
+_run_started_at: float = 0.0
+
+
+def _init_run_state() -> None:
+    global _run_started_at
+    _run_started_at = time.monotonic()
+    _run_state.update({
+        "active": True,
+        "phases": [
+            {"name": p["name"], "label": p["label"], "status": "pending", "elapsed_s": None}
+            for p in _PHASE_DEFS
+        ],
+        "slide_design_done": 0, "slide_design_total": 0,
+        "vision_done": 0, "vision_total": 0,
+        "complete": False, "error": None, "elapsed_s": 0, "pct": 0,
+    })
+    _push_state()
+
+
+def _push_state() -> None:
+    _run_state["elapsed_s"] = int(time.monotonic() - _run_started_at) if _run_started_at else 0
+    _run_state["pct"] = _compute_pct()
+    snapshot = {**_run_state, "phases": [dict(p) for p in _run_state.get("phases", [])]}
+    for q in list(_sse_queues):
+        try:
+            q.put_nowait(snapshot)
+        except Exception:
+            pass
+
+
+def _compute_pct() -> int:
+    pct = 0.0
+    for pdef in _PHASE_DEFS:
+        p_status = next(
+            (p for p in _run_state.get("phases", []) if p["name"] == pdef["name"]), None
+        )
+        if not p_status:
+            continue
+        w = pdef["weight"]
+        if p_status["status"] == "complete":
+            pct += w
+        elif p_status["status"] == "running":
+            if pdef["name"] == "design_advisor_llm":
+                done = _run_state.get("slide_design_done", 0)
+                total = _run_state.get("slide_design_total", 0)
+                frac = (0.10 + 0.85 * done / total) if total > 0 else 0.10
+                pct += w * frac
+            elif pdef["name"] == "export_pdf_with_audit":
+                done = _run_state.get("vision_done", 0)
+                total = _run_state.get("vision_total", 0)
+                frac = (0.15 + 0.85 * done / total) if total > 0 else 0.10
+                pct += w * frac
+            else:
+                pct += w * 0.5
+    return min(99, int(pct * 100))
+
+
+def _scan_output_text(text: str) -> None:
+    """Parse ARCHON/DesignAdvisor output and update run state."""
+    changed = False
+    for m in _PHASE_START_RE.finditer(text):
+        for p in _run_state.get("phases", []):
+            if p["name"] == m.group(1) and p["status"] == "pending":
+                p["status"] = "running"
+                changed = True
+    for m in _PHASE_END_RE.finditer(text):
+        for p in _run_state.get("phases", []):
+            if p["name"] == m.group(1) and p["status"] in ("running", "pending"):
+                p["status"] = "complete" if m.group(2) == "OK" else "error"
+                p["elapsed_s"] = float(m.group(3))
+                changed = True
+    for m in _SLIDE_DESIGN_RE.finditer(text):
+        _run_state["slide_design_done"] = int(m.group(1))
+        _run_state["slide_design_total"] = int(m.group(2))
+        changed = True
+    if changed:
+        _push_state()
+
+
+def _process_stream_line(line: str) -> None:
+    """Extract progress signals from a single stream-json event line."""
+    try:
+        event = json.loads(line.strip())
+    except json.JSONDecodeError:
+        return
+    etype = event.get("type", "")
+    texts: list[str] = []
+    # Tool result directly
+    if etype == "tool_result":
+        c = event.get("content", "")
+        if isinstance(c, str):
+            texts.append(c)
+        elif isinstance(c, list):
+            texts.extend(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+    # Tool result inside user message (newer stream-json format)
+    elif etype == "user":
+        for item in event.get("message", {}).get("content", []):
+            if isinstance(item, dict) and item.get("type") == "tool_result":
+                inner = item.get("content", "")
+                if isinstance(inner, str):
+                    texts.append(inner)
+                elif isinstance(inner, list):
+                    texts.extend(b.get("text", "") for b in inner if isinstance(b, dict) and b.get("type") == "text")
+    for t in texts:
+        if t:
+            _scan_output_text(t)
+
+
+def _mark_complete() -> None:
+    _run_state.update({"active": False, "complete": True, "pct": 100})
+    _push_state()
+
+
+def _mark_error(msg: str) -> None:
+    _run_state.update({"active": False, "error": str(msg)[:200]})
+    _push_state()
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +331,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
     ]
 
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
+    _init_run_state()
 
     proc = None
     try:
@@ -214,6 +355,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
         # Stream stdout with inactivity watchdog.
         # Each stream-json event line resets the idle timer.
         stdout_chunks: list[bytes] = []
+        line_buffer = b""
         start_time = time.monotonic()
 
         while True:
@@ -222,6 +364,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
             if elapsed >= HARD_CAP:
                 proc.kill()
                 log.error("Agentic hard cap reached (%ds)", HARD_CAP)
+                _mark_error(f"Hard cap {HARD_CAP}s reached")
                 return web.json_response({"error": f"Hard cap {HARD_CAP}s reached"}, status=504)
 
             try:
@@ -233,6 +376,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
                 proc.kill()
                 elapsed_s = int(time.monotonic() - start_time)
                 log.error("Agentic inactivity timeout (%ds idle, %ds elapsed)", INACTIVITY_LIMIT, elapsed_s)
+                _mark_error(f"No output for {INACTIVITY_LIMIT}s")
                 return web.json_response(
                     {"error": f"No output for {INACTIVITY_LIMIT}s (total {elapsed_s}s elapsed)"},
                     status=504,
@@ -241,6 +385,15 @@ async def handle_prompt(request: web.Request) -> web.Response:
             if not chunk:
                 break  # EOF — process has exited
             stdout_chunks.append(chunk)
+
+            # Real-time progress tracking — parse stream-json lines as they arrive
+            try:
+                line_buffer += chunk
+                while b"\n" in line_buffer:
+                    ln, line_buffer = line_buffer.split(b"\n", 1)
+                    _process_stream_line(ln.decode("utf-8", errors="replace"))
+            except Exception:
+                pass
 
         await proc.wait()
         stdout_raw = b"".join(stdout_chunks)
@@ -254,6 +407,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
                 len(session["text"]), len(session["tool_calls"]),
                 session["num_turns"], session["duration_ms"], elapsed_s,
             )
+            _mark_complete()
             return web.json_response({
                 "response": session["text"],
                 "source": "claude_max",
@@ -267,10 +421,12 @@ async def handle_prompt(request: web.Request) -> web.Response:
         else:
             err = stderr_raw.decode("utf-8").strip()
             log.error("CLI error (rc=%d): %s", proc.returncode, err[:200])
+            _mark_error(f"CLI error rc={proc.returncode}")
             return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
 
     except FileNotFoundError:
         log.error("claude CLI not found on PATH")
+        _mark_error("Claude CLI not installed")
         return web.json_response({
             "error": "Claude CLI not installed. Run: npm install -g @anthropic-ai/claude-code && claude /login"
         }, status=503)
@@ -281,6 +437,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
             except Exception:
                 pass
         log.exception("Unexpected error")
+        _mark_error(str(exc))
         return web.json_response({"error": str(exc)}, status=500)
 
 
@@ -317,6 +474,13 @@ async def handle_vision(request: web.Request) -> web.Response:
         img_bytes = base64.b64decode(img_b64)
     except Exception as exc:
         return web.json_response({"error": f"Invalid base64: {exc}"}, status=400)
+
+    # Track vision progress
+    try:
+        _run_state["vision_total"] = _run_state.get("vision_total", 0) + 1
+        _push_state()
+    except Exception:
+        pass
 
     tmp_path = None
     try:
@@ -366,6 +530,11 @@ async def handle_vision(request: web.Request) -> web.Response:
         if proc.returncode == 0:
             session = _parse_stream_json(stdout.decode("utf-8").strip())
             log.info("Vision audit complete: %d chars response", len(session["text"]))
+            try:
+                _run_state["vision_done"] = _run_state.get("vision_done", 0) + 1
+                _push_state()
+            except Exception:
+                pass
             return web.json_response({"response": session["text"]})
         else:
             err = stderr.decode("utf-8").strip()
@@ -456,6 +625,47 @@ async def handle_health(request: web.Request) -> web.Response:
     })
 
 
+async def handle_status(request: web.Request) -> web.Response:
+    """Return current pipeline run state as JSON (REST poll endpoint)."""
+    snapshot = {**_run_state, "phases": [dict(p) for p in _run_state.get("phases", [])]}
+    return web.json_response(snapshot)
+
+
+async def handle_progress(request: web.Request) -> web.StreamResponse:
+    """SSE stream of pipeline progress events.
+
+    Emits ``data: <json>\\n\\n`` on every state change.
+    Sends a heartbeat comment every 25 s to keep the connection alive.
+    """
+    resp = web.StreamResponse(headers={
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+    await resp.prepare(request)
+
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _sse_queues.add(q)
+    try:
+        # Send current state immediately so the client doesn't wait
+        snapshot = {**_run_state, "phases": [dict(p) for p in _run_state.get("phases", [])]}
+        await resp.write(f"data: {json.dumps(snapshot)}\n\n".encode())
+
+        while True:
+            try:
+                state = await asyncio.wait_for(q.get(), timeout=25.0)
+                await resp.write(f"data: {json.dumps(state)}\n\n".encode())
+                if state.get("complete") or state.get("error"):
+                    break
+            except asyncio.TimeoutError:
+                await resp.write(b": heartbeat\n\n")
+    except Exception:
+        pass
+    finally:
+        _sse_queues.discard(q)
+    return resp
+
+
 # ---------------------------------------------------------------------------
 # App factory + main
 # ---------------------------------------------------------------------------
@@ -465,6 +675,8 @@ def create_app() -> web.Application:
     app.router.add_post("/vision", handle_vision)
     app.router.add_post("/upload", handle_upload)
     app.router.add_get("/output/{filename}", handle_output_file)
+    app.router.add_get("/status", handle_status)
+    app.router.add_get("/progress", handle_progress)
     app.router.add_get("/health", handle_health)
     app.router.add_get("/", handle_index)
     # Serve static assets (JS/CSS if we add them later)
