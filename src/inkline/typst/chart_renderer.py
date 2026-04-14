@@ -419,6 +419,10 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
     bar_colors = []
     for i, (val, total) in enumerate(zip(values, is_total)):
         if total:
+            # When total=True and value=0, infer from running cumulative sum
+            if val == 0:
+                values[i] = cumulative
+                val = cumulative
             bottoms.append(0)
             bar_colors.append(accent)
         else:
@@ -563,7 +567,12 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
         bottom += np.array(vals)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(categories, fontsize=9)
+    _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
+    if _ml > 10 or _n > 6:
+        ax.set_xticklabels(categories, fontsize=7, rotation=30, ha="right")
+        fig.subplots_adjust(bottom=0.22)
+    else:
+        ax.set_xticklabels(categories, fontsize=9)
     ax.legend(frameon=False, fontsize=9, labelcolor=text_color, loc="upper left")
     ax.grid(axis="y", alpha=0.2, color=muted)
     fig.tight_layout()
@@ -599,7 +608,12 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
         ax.bar(x + offset, s["values"], bar_width, color=color, label=s.get("name", ""), edgecolor="white", linewidth=0.5)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(categories, fontsize=9)
+    _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
+    if _ml > 10 or _n > 6:
+        ax.set_xticklabels(categories, fontsize=7, rotation=30, ha="right")
+        fig.subplots_adjust(bottom=0.22)
+    else:
+        ax.set_xticklabels(categories, fontsize=9)
     ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
     ax.grid(axis="y", alpha=0.2, color=muted)
     fig.tight_layout()
@@ -2830,9 +2844,10 @@ def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, mute
             for ci, v in enumerate(_vals[:len(categories)]):
                 ax.text(v + _x_max * 0.02, ci, f"{v:g}", ha="left", va="center",
                         fontsize=8, color=text_color)
+            _ylabel_fs = 7 if len(categories) > 7 else (8 if len(categories) > 5 else 9)
             ax.set_yticks(range(len(categories)))
-            ax.set_yticklabels(categories, fontsize=9, color=text_color)
-            ax.set_xlim(0, _x_max * 1.15)
+            ax.set_yticklabels(categories, fontsize=_ylabel_fs, color=text_color)
+            ax.set_xlim(0, _x_max * 1.20)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
             ax.spines["left"].set_visible(False)
@@ -2842,7 +2857,8 @@ def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, mute
             if _legend_name:
                 from matplotlib.patches import Patch as _Patch
                 ax.legend(handles=[_Patch(facecolor=_bar_color, label=_legend_name)],
-                          loc="lower right", frameon=False, fontsize=8, labelcolor=text_color)
+                          loc="lower right", bbox_to_anchor=(1.0, -0.12),
+                          frameon=False, fontsize=8, labelcolor=text_color)
             if x_label:
                 ax.set_xlabel(x_label, fontsize=8, color=muted)
             if chart_title:
