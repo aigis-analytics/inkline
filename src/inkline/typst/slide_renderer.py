@@ -520,6 +520,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -916,6 +918,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1373,6 +1377,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1626,6 +1632,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)

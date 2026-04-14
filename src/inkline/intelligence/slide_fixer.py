@@ -62,7 +62,7 @@ CHART_CONTAINER_CM: dict[str, float] = {
 }
 
 # Max text lengths — must stay in sync with SLIDE_TYPE_GUIDE hard caps
-MAX_TITLE_CHARS = 50    # titles >50 chars wrap to 2 lines and cause overflow
+MAX_TITLE_CHARS = 45    # titles >45 chars risk wrapping to 2 lines (Source Sans 3 22pt, 22.6cm width)
 MAX_BULLET_CHARS = 200
 MAX_CELL_CHARS = 50
 MAX_CARD_BODY_CHARS = 80  # card body text: ~2 short sentences; longer → overflow on three_card/four_card
@@ -328,7 +328,7 @@ def _identify_by_heuristic(
 
         # Title length risk
         title = data.get("title", "")
-        if len(title) > 50:
+        if len(title) > MAX_TITLE_CHARS:
             score += 0.5
 
         # Content volume risk
@@ -421,7 +421,7 @@ def _fix_content_reduction(
             del data["footnote"]
             modified = True
 
-        # Shorten title to hard cap (50 chars)
+        # Shorten title to hard cap (MAX_TITLE_CHARS)
         title = data.get("title", "")
         if len(title) > MAX_TITLE_CHARS:
             data["title"] = _truncate_at_word(title, MAX_TITLE_CHARS, ellipsis=False)

@@ -326,7 +326,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
         "--output-format", "stream-json",
         "--verbose",
         "--dangerously-skip-permissions",
-        "--max-turns", "25",
+        "--max-turns", "40",
         "--system-prompt", system,
     ]
 
