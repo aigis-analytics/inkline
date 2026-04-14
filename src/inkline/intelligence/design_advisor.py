@@ -365,7 +365,7 @@ class DesignAdvisor:
         try:
             import requests as _req
             total_chars = len(system_prompt) + len(user_prompt)
-            bridge_read_timeout = min(600, max(200, 180 + (total_chars // 1000) * 4 + 60)) + 15  # +15s safety
+            bridge_read_timeout = min(900, max(300, 180 + (total_chars // 1000) * 4 + 60)) + 30  # +30s safety
             log.info(
                 "DesignAdvisor LLM bridge %s (%d sys / %d user chars, timeout=%ds)...",
                 self.bridge_url, len(system_prompt), len(user_prompt), bridge_read_timeout,
