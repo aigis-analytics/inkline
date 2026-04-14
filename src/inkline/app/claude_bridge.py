@@ -146,8 +146,18 @@ def _parse_stream_json(raw: str) -> dict:
 # Route handlers
 # ---------------------------------------------------------------------------
 async def handle_prompt(request: web.Request) -> web.Response:
-    """Accept a user message and route it through claude -p (agentic mode)."""
+    """Accept a user message and route it through claude -p (agentic mode).
+
+    Uses an inactivity-based watchdog instead of a wall-clock timeout:
+    the session runs as long as the claude process is producing output.
+    If no bytes arrive for INACTIVITY_LIMIT seconds the process is stuck
+    and is killed.  An active 20-slide deck never times out; a genuinely
+    hung process is reaped within 3 minutes of silence.
+    """
     global _last_request_time
+
+    INACTIVITY_LIMIT = 180   # seconds of silence before declaring stuck
+    HARD_CAP = 3600          # absolute ceiling regardless of activity (1 hr)
 
     try:
         data = await request.json()
@@ -180,13 +190,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
         "--system-prompt", system,
     ]
 
-    total_chars = len(prompt) + len(system)
-    # Base 900s + 6s per 1k chars of context, capped at 1800s (30 min).
-    # 20-slide decks with parallel visual audit observed at 13-15min runtime.
-    timeout = min(1800, max(900, 900 + (total_chars // 1000) * 6))
-
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
 
+    proc = None
     try:
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
@@ -199,17 +205,54 @@ async def handle_prompt(request: web.Request) -> web.Response:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=prompt.encode("utf-8")),
-            timeout=timeout,
-        )
+
+        # Write prompt to stdin then close it so the process can start
+        proc.stdin.write(prompt.encode("utf-8"))
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+        # Stream stdout with inactivity watchdog.
+        # Each stream-json event line resets the idle timer.
+        stdout_chunks: list[bytes] = []
+        start_time = time.monotonic()
+
+        while True:
+            # Hard cap: prevent runaway sessions regardless of activity
+            elapsed = time.monotonic() - start_time
+            if elapsed >= HARD_CAP:
+                proc.kill()
+                log.error("Agentic hard cap reached (%ds)", HARD_CAP)
+                return web.json_response({"error": f"Hard cap {HARD_CAP}s reached"}, status=504)
+
+            try:
+                chunk = await asyncio.wait_for(
+                    proc.stdout.read(65536),
+                    timeout=INACTIVITY_LIMIT,
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                elapsed_s = int(time.monotonic() - start_time)
+                log.error("Agentic inactivity timeout (%ds idle, %ds elapsed)", INACTIVITY_LIMIT, elapsed_s)
+                return web.json_response(
+                    {"error": f"No output for {INACTIVITY_LIMIT}s (total {elapsed_s}s elapsed)"},
+                    status=504,
+                )
+
+            if not chunk:
+                break  # EOF — process has exited
+            stdout_chunks.append(chunk)
+
+        await proc.wait()
+        stdout_raw = b"".join(stdout_chunks)
+        stderr_raw = await proc.stderr.read()
 
         if proc.returncode == 0:
-            session = _parse_stream_json(stdout.decode("utf-8").strip())
+            session = _parse_stream_json(stdout_raw.decode("utf-8").strip())
+            elapsed_s = int(time.monotonic() - start_time)
             log.info(
-                "Response: %d chars, %d tool calls, %d turns, %.0fms",
+                "Response: %d chars, %d tool calls, %d turns, %.0fms (wall %ds)",
                 len(session["text"]), len(session["tool_calls"]),
-                session["num_turns"], session["duration_ms"],
+                session["num_turns"], session["duration_ms"], elapsed_s,
             )
             return web.json_response({
                 "response": session["text"],
@@ -222,20 +265,21 @@ async def handle_prompt(request: web.Request) -> web.Response:
                 },
             })
         else:
-            err = stderr.decode("utf-8").strip()
+            err = stderr_raw.decode("utf-8").strip()
             log.error("CLI error (rc=%d): %s", proc.returncode, err[:200])
             return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
 
-    except asyncio.TimeoutError:
-        proc.kill()
-        log.error("CLI timeout (%ds)", timeout)
-        return web.json_response({"error": f"Timed out after {timeout}s"}, status=504)
     except FileNotFoundError:
         log.error("claude CLI not found on PATH")
         return web.json_response({
             "error": "Claude CLI not installed. Run: npm install -g @anthropic-ai/claude-code && claude /login"
         }, status=503)
     except Exception as exc:
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         log.exception("Unexpected error")
         return web.json_response({"error": str(exc)}, status=500)
 
