@@ -5,6 +5,37 @@ and documents. You (Claude) drive it via Bash. This file is your complete refere
 
 ---
 
+## ⚠️ CORRECT WORKFLOW — READ FIRST
+
+**Never run standalone Python scripts to generate decks.** The correct workflow is:
+
+1. **Confirm the bridge is running** — `inkline serve` or `inkline bridge` must be active on port 8082.
+   Check: `curl -s http://localhost:8082/ | head -1`
+
+2. **Upload the source file** via the bridge:
+   ```bash
+   curl -X POST http://localhost:8082/upload -F "file=@/path/to/report.md"
+   # Returns: {"path": "/home/.../.local/share/inkline/uploads/report.md", "filename": "report.md"}
+   ```
+
+3. **Send the generation prompt** to the bridge and let it run:
+   ```bash
+   curl -X POST http://localhost:8082/prompt \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "I have uploaded a file at: <path>. Generate a deck ...", "agentic": true}'
+   ```
+
+4. **Monitor via logs** — do not intervene. The bridge runs Claude agentic mode which reads
+   the file, builds sections, calls `export_typst_slides`, runs the overflow + visual audit
+   loop, and announces `PDF ready: <path>` when done.
+
+**Why this matters:** Running `python3 script.py` directly bypasses the LLM visual audit
+entirely because the `/vision` endpoint needs the bridge to be live. The structural page-count
+check will pass even when slides are visually broken (empty cards, blank content areas).
+The visual audit via the bridge is the only gate that catches rendering failures.
+
+---
+
 ## Quick start (3 steps)
 
 ```bash
