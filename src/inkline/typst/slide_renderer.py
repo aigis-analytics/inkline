@@ -345,13 +345,13 @@ class TypstSlideRenderer:
     gutter: 16pt,
     align: horizon,
     {f'image("{logo_path}", height: 4.2cm),' if logo_path else 'none,'}
-    text(weight: "bold", size: 60pt, font: "{heading_font}", tracking: -1pt)[#upper("{_esc(company)}")]
+    text(weight: "bold", size: 60pt, font: "{heading_font}", tracking: -1pt)[#upper[{_esc(company)}]]
   )
 
   #v(0.6cm)
 
   // Tagline — large bold uppercase, full width
-  #text(weight: "bold", size: 20pt, font: "{heading_font}", fill: {_rgb(title_fg)})[#upper("{_esc(tagline)}")]
+  #text(weight: "bold", size: 20pt, font: "{heading_font}", fill: {_rgb(title_fg)})[#upper[{_esc(tagline)}]]
 
   #v(0.5cm)
   #line(length: 100%, stroke: 0.5pt + {_rgb(t['muted'])})
@@ -603,7 +603,7 @@ class TypstSlideRenderer:
       inset: 14pt,
       width: 100%,
     )[
-      #text(weight: "bold", size: 14pt, fill: {_rgb(t['text'])})[#upper("{_esc(left_title)}")]
+      #text(weight: "bold", size: 14pt, fill: {_rgb(t['text'])})[#upper[{_esc(left_title)}]]
       #v(8pt)
       #text(size: 11pt, fill: {_rgb(t['muted'])})[
         {left_bullets}
@@ -615,7 +615,7 @@ class TypstSlideRenderer:
       inset: 14pt,
       width: 100%,
     )[
-      #text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[#upper("{_esc(right_title)}")]
+      #text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[#upper[{_esc(right_title)}]]
       #v(8pt)
       #text(size: 11pt, fill: {_rgb(t['title_fg'])})[
         {right_bullets}
@@ -742,7 +742,7 @@ class TypstSlideRenderer:
   #v(1fr)
   #align(center)[
     {f'#image("{logo_path}", width: 1.5cm)#v(0.2cm)' if logo_path else ''}
-    #text(weight: "bold", size: 44pt, font: "{heading_font}", tracking: -1pt)[#upper("{_esc(company)}")]
+    #text(weight: "bold", size: 44pt, font: "{heading_font}", tracking: -1pt)[#upper[{_esc(company)}]]
     #v(0.2cm)
     #text(size: 12pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
     #v(0.6cm)
@@ -923,7 +923,7 @@ class TypstSlideRenderer:
             inset: 4pt,
           )[#align(center + horizon, text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[{_esc(num)}])]
           #v(6pt)
-          #text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper("{step_title}")]
+          #text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper[{step_title}]]
           #v(3pt)
           #text(size: 9pt, fill: {_rgb(t['muted'])})[{desc}]
         ]
@@ -1041,7 +1041,7 @@ class TypstSlideRenderer:
           {f'#text(size: 24pt)[{icon}]#v(4pt)' if icon else ''}
           #text(weight: "bold", size: {val_size}pt, fill: {_rgb(t['accent'])})[{value}]
           #v(4pt)
-          #text(weight: "bold", size: 9pt, fill: {_rgb(t['muted'])})[#upper("{label}")]
+          #text(weight: "bold", size: 9pt, fill: {_rgb(t['muted'])})[#upper[{label}]]
           {f'#v(2pt)#text(size: 8pt, fill: {_rgb(t["muted"])})[{desc}]' if desc else ''}
         ]
       ]""")
@@ -1148,7 +1148,7 @@ class TypstSlideRenderer:
     width: {width_pct}%,
   )[
     #align(center)[
-      #text(weight: "bold", size: 11pt, fill: white)[#upper("{label}")]
+      #text(weight: "bold", size: 11pt, fill: white)[#upper[{label}]]
       {f'#v(2pt)#text(size: 9pt, fill: white.transparentize(30%))[{desc}]' if desc else ''}
     ]
   ])""")
@@ -1233,10 +1233,10 @@ class TypstSlideRenderer:
     columns: (1fr, 1fr),
     gutter: 14pt,
     block(fill: {_rgb(t['card_fill'])}, stroke: (bottom: 2pt + {_rgb(t['accent'])}), inset: 10pt, width: 100%)[
-      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['accent'])})[#upper("{left_name}")])
+      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['accent'])})[#upper[{left_name}]])
     ],
     block(fill: {_rgb(t['accent'])}, inset: 10pt, width: 100%, radius: (top: 3pt))[
-      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[#upper("{right_name}")])
+      #align(center, text(weight: "bold", size: 14pt, fill: {_rgb(t['title_fg'])})[#upper[{right_name}]])
     ],
   )
   v(6pt)
@@ -1290,7 +1290,7 @@ class TypstSlideRenderer:
           block(fill: {_rgb(t['accent'])}, radius: 50%, width: 24pt, height: 24pt, inset: 4pt)[
             #align(center + horizon, text(weight: "bold", size: 11pt, fill: white)[{i+1}])
           ],
-          text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper("{f_title}")],
+          text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper[{f_title}]],
         )
         #v(4pt)
         #text(size: 9pt, fill: {_rgb(t['muted'])})[{f_body}]
@@ -1351,7 +1351,7 @@ class TypstSlideRenderer:
       )[
         #text(weight: "bold", size: 18pt, fill: {_rgb(t['accent'])})[{_esc(s.get('value', ''))}]
         #h(8pt)
-        #text(size: 8pt, fill: {_rgb(t['muted'])})[#upper("{_esc(s.get('label', ''))}")]
+        #text(size: 8pt, fill: {_rgb(t['muted'])})[#upper[{_esc(s.get('label', ''))}]]
       ]""")
 
         # Limit bullets to 3 to ensure right column fits
@@ -1429,7 +1429,7 @@ class TypstSlideRenderer:
                 img_block = self._image_markup(img, width="100%")
             if ctitle:
                 return f"""block(width: 100%)[
-      #text(weight: "bold", size: 8pt, fill: {_rgb(t['muted'])})[#upper("{ctitle}")]
+      #text(weight: "bold", size: 8pt, fill: {_rgb(t['muted'])})[#upper[{ctitle}]]
       #v(3pt)
       #align(center, {img_block})
     ]"""
@@ -1565,7 +1565,7 @@ class TypstSlideRenderer:
       width: 100%,
       height: 100%,
     )[
-      #text(weight: "bold", size: 9pt, tracking: 1pt, fill: {_rgb(t['accent'])})[#upper("Key takeaways")]
+      #text(weight: "bold", size: 9pt, tracking: 1pt, fill: {_rgb(t['accent'])})[#upper[Key takeaways]]
       #v(6pt)
       #text(size: 8.5pt, fill: {_rgb(t['text'])})[
         {bullets_str}

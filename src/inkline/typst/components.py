@@ -29,6 +29,8 @@ def _esc_content(text: str) -> str:
         .replace("@", "\\@")
         .replace("<", "\\<")
         .replace(">", "\\>")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
     )
 
 
@@ -42,7 +44,7 @@ def section_badge(label: str, muted: str) -> str:
     stroke: 0.75pt + {_rgb(muted)},
     radius: 2pt,
     inset: (x: 8pt, y: 3pt),
-    text(size: 9pt, fill: {_rgb(muted)})[#upper("{_esc_content(label)}")]
+    text(size: 9pt, fill: {_rgb(muted)})[#upper[{_esc_content(label)}]]
   )"""
 
 
@@ -76,7 +78,7 @@ def card(
 
 def card_title(title: str, text_color: str) -> str:
     """Bold upper-case card heading."""
-    return f'#text(weight: "bold", size: 13pt, fill: {_rgb(text_color)})[#upper("{_esc_content(title)}")]'
+    return f'#text(weight: "bold", size: 13pt, fill: {_rgb(text_color)})[#upper[{_esc_content(title)}]]'
 
 
 def hero_stat(value: str, label: str, desc: str, text_color: str, muted: str, accent: str | None = None) -> str:
@@ -85,7 +87,7 @@ def hero_stat(value: str, label: str, desc: str, text_color: str, muted: str, ac
     return f"""align(center)[
       #text(weight: "bold", size: 40pt, fill: {value_color})[{_esc_content(value)}]
       #v(6pt)
-      #text(weight: "bold", size: 12pt, fill: {_rgb(muted)})[#upper("{_esc_content(label)}")]
+      #text(weight: "bold", size: 12pt, fill: {_rgb(muted)})[#upper[{_esc_content(label)}]]
       #v(4pt)
       #text(size: 10pt, fill: {_rgb(muted)})[{_esc_content(desc)}]
     ]"""
@@ -175,7 +177,7 @@ def kpi_card(value: str, label: str, fill: str, text_color: str) -> str:
     #align(center)[
       #text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{_esc_content(value)}]
       #v(4pt)
-      #text(size: 8pt, fill: {_rgb(text_color)})[#upper("{_esc_content(label)}")]
+      #text(size: 8pt, fill: {_rgb(text_color)})[#upper[{_esc_content(label)}]]
     ]
   ]"""
 
