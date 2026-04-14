@@ -1563,6 +1563,8 @@ def _esc(text) -> str:
             text = "; ".join(f"{k}: {v}" for k, v in text.items())
     elif not isinstance(text, str):
         text = str(text)
+    # Strip LLM-style \$ escaping before our Typst escaping runs.
+    text = text.replace("\\$", "$")
     return (
         text
         .replace("\\", "\\\\")

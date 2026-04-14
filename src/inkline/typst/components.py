@@ -17,6 +17,10 @@ def _esc_content(text: str) -> str:
     """Escape special Typst characters in content (inside [...] brackets)."""
     if not text:
         return ""
+    # Strip LLM-style \$ escaping before our own Typst escaping runs.
+    # The LLM sometimes writes \$ thinking it's in a Markdown or shell context;
+    # our escape chain would then double-escape it to \\$ → visible backslash.
+    text = text.replace("\\$", "$")
     return (
         text
         .replace("\\", "\\\\")
