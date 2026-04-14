@@ -368,16 +368,18 @@ function restoreSession() {
   const lastPdf = localStorage.getItem(LS.PDF);
   if (lastPdf) showPdf(lastPdf, /* skipSave */ true);
 
-  // 4. Reconnect progress if a run is still active on the server
+  // 4. Reconnect progress if a run is still active; auto-show PDF if complete
   fetch('/status')
     .then(r => r.json())
     .then(state => {
-      if (state.active || (state.phases && state.phases.length)) {
+      if (state.active || state.complete || (state.phases && state.phases.length)) {
         document.getElementById('prog-idle').style.display = 'none';
         document.getElementById('prog-overall').style.display = '';
         document.getElementById('prog-phases').style.display = '';
         updateProgress(state);
         if (state.active) startProgressTracking();
+        // If run already finished and no PDF showing yet, load deck.pdf
+        if (state.complete && !lastPdf) showPdf('deck.pdf');
       }
     })
     .catch(() => {});
@@ -649,7 +651,13 @@ function updateProgress(state) {
     container.appendChild(err);
   }
 
-  if (state.complete || state.error) stopProgressTracking();
+  if (state.complete || state.error) {
+    stopProgressTracking();
+    // Auto-show PDF when run completes and none is currently displayed
+    if (state.complete && (!pdfFrame.src || pdfFrame.style.display === 'none')) {
+      showPdf('deck.pdf');
+    }
+  }
 }
 
 // ── Keyboard shortcut ─────────────────────────────────────────────────────────
