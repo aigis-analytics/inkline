@@ -55,7 +55,8 @@ class DeckSpec:
 #   page: 25.4cm × 14.29cm, margins: left/right=1.4cm, top=1.4cm, bottom=1.2cm
 #   content_width = 22.6cm, content_height = 11.69cm
 #   multi_chart header overhead ≈ 1.62cm → body ≈ 10.07cm
-#   conservative body used: 9.8cm (accounts for footnote + rounding)
+#   _body_block height = 9.0cm, footer_bar inside = 0.69cm → chart content ≤ 8.31cm
+#   _MC_BH = 8.2cm (8.31 - 0.11 safety) so images + footer fit without clipping
 #   chart cell title overhead (8pt text + v(3pt)) ≈ 0.4cm
 #
 # These dimensions are imported by _auto_render_charts in __init__.py to size
@@ -65,7 +66,8 @@ class DeckSpec:
 # For top_bottom: dict key includes chart index (0=top, 1+=bottom).
 # bottom_n is the number of bottom charts (1, 2, or 3); used for column width.
 _MC_W = 22.6   # content width
-_MC_BH = 9.4   # available body height (leaves ~0.4cm safety margin vs theoretical ~9.8cm)
+_MC_BH = 8.2   # chart content height inside _body_block:
+               # BODY_H_CM(9.0) - FOOTER_H_CM(0.69) = 8.31cm; use 8.2cm for safety margin.
 _MC_G10 = 10 * 2.54 / 72   # 10pt gutter in cm
 _MC_G12 = 12 * 2.54 / 72   # 12pt gutter
 _MC_G8 = 8 * 2.54 / 72     # 8pt stack spacing
@@ -669,7 +671,9 @@ class TypstSlideRenderer:
         image_path = d.get("image_path", "")
         footnote = d.get("footnote", "")
 
-        body = f"""align(center, {self._image_markup(image_path, width="90%", height="8.5cm")})"""
+        # 8.2cm: BODY_H_CM(9.0) - FOOTER_H_CM(0.69) = 8.31cm available for content;
+        # use 8.2cm to leave ~0.1cm breathing room before the footer bar.
+        body = f"""align(center, {self._image_markup(image_path, width="90%", height="8.2cm")})"""
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
