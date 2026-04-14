@@ -1014,6 +1014,20 @@ class DesignAdvisor:
                 source_lines.append(preview)
             source_lines.append("")
 
+        # Inject available chart PNGs into the review prompt
+        _archon_chart_note = ""
+        _charts_dir = Path.home() / ".local/share/inkline/output/charts"
+        if _charts_dir.exists():
+            _chart_files = sorted(_charts_dir.glob("*.png"))
+            if _chart_files:
+                _names = ", ".join(cf.name for cf in _chart_files)
+                _archon_chart_note = (
+                    f"\n## Pre-rendered chart PNGs available\n"
+                    f"These files can be used directly as image_path in chart_caption/chart slides:\n"
+                    + "\n".join(f"  {cf.name}" for cf in _chart_files)
+                    + "\nWhen upgrading a slide to chart_caption, specify the matching filename in notes.\n"
+                )
+
         user_prompt = "\n".join([
             "You are reviewing a deck plan BEFORE any slides are rendered.",
             "Your job: evaluate the plan's story arc, slide type choices, and exhibit",
@@ -1021,6 +1035,7 @@ class DesignAdvisor:
             "",
             plan_md,
             "\n".join(source_lines),
+            _archon_chart_note,
             "=" * 60,
             "REVIEW CRITERIA",
             "=" * 60,
@@ -1028,23 +1043,27 @@ class DesignAdvisor:
             "1. STORY ARC — Does the deck flow logically from hook → evidence → ask?",
             "   Does it answer: 'why this deal / opportunity / decision, why now, why us?'",
             "",
-            "2. SLIDE TYPE + CHART TYPE FIT — Are the right exhibit types chosen?",
+            "2. SLIDE TYPE + CHART TYPE FIT — MANDATORY VISUAL QUOTA",
+            "   COUNT the content slides (exclude title/closing/section_divider).",
+            "   AT LEAST 40% must be chart_caption, chart, dashboard, or multi_chart.",
+            "   If the plan falls short, you MUST revise it — upgrade stat/content slides",
+            "   that contain financial, production, or time-series data.",
             "   The slide_type determines the layout; chart_type (in notes) determines the chart.",
-            "   Upgrade opportunities:",
+            "   Mandatory upgrades:",
+            "   - Production/reserves over time → chart_caption + use matching PNG from above",
+            "   - FCF/revenue projections → chart_caption + use matching PNG from above",
             "   - Financial walk / bridge data → chart_caption + waterfall (not table)",
             "   - Market share / portfolio breakdown → chart_caption + donut or stacked_bar",
             "   - Risk matrix / 2D assessment → chart_caption + heatmap",
             "   - Funnel / pipeline conversion → chart_caption + funnel_ribbon",
             "   - Progress vs target → chart_caption + gauge or waffle",
-            "   - Visible vs hidden risks → chart_caption + iceberg",
-            "   - Org / value chain flows → chart_caption + entity_flow",
             "   - Growth over time → chart_caption + line_chart or area_chart",
             "   - Multi-metric portfolio → dashboard (chart + 3 stats + bullets)",
             "   - Side-by-side metrics → comparison (not two content slides)",
             "   - Milestone history → timeline (not content bullets)",
             "   - Process / how-it-works → process_flow (not content bullets)",
-            "   If you upgrade to chart_caption/chart/dashboard, update notes to specify",
-            "   the chart_type (e.g. 'chart_caption + waterfall chart').",
+            "   When upgrading to chart_caption/chart/dashboard, update notes to specify",
+            "   chart_type AND the matching PNG filename if one exists above.",
             "",
             "3. COVERAGE — Are any critical source sections missing or under-served?",
             "   Does the plan weight emphasis toward the most commercially important points?",
@@ -1220,6 +1239,23 @@ class DesignAdvisor:
         elif stype == "closing" and contact:
             parts += ["", "## Contact info", json.dumps(contact, indent=2)]
 
+        # For chart-type slides, inject available pre-rendered PNGs
+        _chart_types = {"chart_caption", "chart", "dashboard", "multi_chart"}
+        if stype in _chart_types:
+            _charts_dir = Path.home() / ".local/share/inkline/output/charts"
+            if _charts_dir.exists():
+                _chart_files = sorted(_charts_dir.glob("*.png"))
+                if _chart_files:
+                    parts += [
+                        "",
+                        "## Pre-rendered chart PNGs available",
+                        "These files already exist — reference one by filename in image_path.",
+                        "When you use an existing file, DO NOT include a chart_request.",
+                        "Only add chart_request if NO existing file covers this data.",
+                    ]
+                    for _cf in _chart_files:
+                        parts.append(f"  {_cf.name}")
+
         parts += [
             "",
             "## Output format",
@@ -1231,6 +1267,8 @@ class DesignAdvisor:
             "- Base ALL data strictly on the source content above",
             "- DO NOT invent statistics, names, or metrics",
             "- If source is sparse, design a sparse-but-impactful slide",
+            "- For chart_caption/chart/multi_chart: set image_path to an existing PNG filename",
+            "  if one is listed above. Do NOT add chart_request when reusing an existing file.",
             "",
             "Return JSON inside ```json ... ``` markers.",
         ]
