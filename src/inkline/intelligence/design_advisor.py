@@ -209,6 +209,86 @@ WRITING RULES
 - Card body text: 1-2 short sentences max. No paragraphs.
 - Bullet items: 5-10 words each. Telegraphic, not prose.
 - Footnotes: optional, one short line, source attribution or caveat.
+- Bold emphasis in bullets: wrap the single most important claim in **double asterisks**
+  e.g. "Achieved **98% gross margin** at scale in FY25"
+  The renderer converts this to bold accent-colour inline text (Pareto-style).
+
+====================================================================
+DESIGN TASTE RULES (non-negotiable)
+====================================================================
+1. ACCENT = SIGNAL, NOT DECORATION.
+   Use accent colour for ONE element per slide: the hero bar, the key number,
+   the most important comparison outcome. Everything else uses the muted palette.
+   NEVER use accent colour on more than one bar, series, or segment per chart.
+
+2. AXIS REDUCTION.
+   For bar charts where comparison is visually obvious: always set style: "clean".
+   The renderer removes y-axis, gridlines, and places value labels directly on bars.
+   This follows FT/Bloomberg/Goldman standard — not Excel defaults.
+
+3. DONUT AS DISTRIBUTION STORY.
+   Three related distributions = three donuts side-by-side (multi_chart equal_3).
+   Each donut has label_style: "direct" — radial labels only, no legend panel.
+   NEVER use a single donut when three related breakdowns are available.
+
+4. NAMED SCATTER POINTS → ANNOTATED.
+   When a scatter has named data points (competitors, deals, assets), label each
+   point directly with a callout box. No legend. label_style: "annotated".
+
+5. TYPOGRAPHY-LED SECTION OPENERS.
+   When a slide introduces a new section with modest data (≤2 paras of context),
+   the header IS the exhibit. Use section_divider or a bold 3-card layout.
+   Do not force a chart onto a conceptual/contextual slide.
+
+6. MULTI_CHART FOR PARALLEL STORIES.
+   Two independent data stories → multi_chart equal_2.
+   Three categorical distributions → multi_chart equal_3 with donuts.
+   Four-panel analysis page → multi_chart quad.
+   NEVER stack two separate chart_caption slides when a multi_chart fits.
+
+====================================================================
+CHART SELECTION — DECISION FRAMEWORK (follow this, not a menu)
+====================================================================
+
+To select a chart type, answer THREE questions in order:
+
+STEP 1 — WHAT SHAPE IS THE DATA?
+  single_number            → KPI strip, gauge
+  two_values_comparison    → dumbbell
+  n_categories_one_value   → grouped_bar (clean)
+  n_categories_time_series → line_chart or grouped_bar (clean)
+  n_categories_composition → stacked_bar or horizontal_stacked_bar
+  part_of_whole            → donut (direct labels if ≤6 segments)
+  two_continuous_variables → scatter (annotated labels if points are named)
+  matrix_rows_cols         → scoring_matrix (capability) or heatmap (intensity)
+  steps_over_time          → multi_timeline (phases+tasks) or gantt (parallel tracks)
+  state_transition         → transition_grid
+  network_relationships    → entity_flow
+  text_heavy_structured    → icon_stat, feature_grid, or scoring_matrix
+
+STEP 2 — WHAT IS THE ONE THING THIS SLIDE MUST PROVE?
+  status_at_a_glance      → kpi_strip or gauge
+  ranking_or_comparison   → grouped_bar (use accent_index to highlight winner)
+  change_over_time        → line_chart (trends) or dumbbell (before/after pairs)
+  part_of_whole_breakdown → donut (≤6 cats) or stacked_bar (>6 or over time)
+  process_or_sequence     → multi_timeline or ladder
+  parallel_workstreams    → gantt
+  capability_comparison   → scoring_matrix
+  concentration_or_outlier → scatter (label_style: "annotated")
+  state_migration         → transition_grid
+  waterfall_bridge        → waterfall
+  above_below_zero        → divergent_bar
+  feature_enumeration     → icon_stat or feature_grid
+  hierarchical_structure  → entity_flow
+
+STEP 3 — APPLY MANDATORY PARAMETERS:
+  grouped_bar / stacked_bar / waterfall → always add style: "clean"
+  grouped_bar → always add accent_index (0-based index of most important bar)
+  donut ≤6 segments → always add label_style: "direct"
+  scatter with named points → always add label_style: "annotated"
+  dumbbell → add accent_direction: "higher_is_better" or "lower_is_better"
+
+DEFAULT: When no rule matches, use grouped_bar with style: "clean".
 
 ====================================================================
 CHART REQUESTS (auto-rendered by Inkline)
@@ -222,7 +302,8 @@ HOW TO REQUEST A CHART:
 2. Add a "chart_request" dict with:
    - "chart_type": one of: line_chart, area_chart, scatter, waterfall, donut,
      pie, stacked_bar, grouped_bar, heatmap, radar, gauge,
-     horizontal_stacked_bar, entity_flow, ladder, divergent_bar
+     horizontal_stacked_bar, entity_flow, ladder, divergent_bar,
+     dumbbell, transition_grid, scoring_matrix, gantt, multi_timeline
    - "chart_data": the data dict for that chart type (see below)
 
 Example — donut chart on a dashboard slide:
@@ -301,6 +382,45 @@ CHART DATA FORMATS (by chart_type) — use EXACTLY these field names:
 - divergent_bar: {items: [{label, value}], positive_label?, negative_label?, y_label?}
     Use for above/below-zero bar charts (inflow/outflow, bridge variances).
     Positive values → primary colour; negative values → secondary colour.
+- dumbbell: {points: [{label, value_start, value_end, start_label?, end_label?}],
+             y_label?, accent_direction: "higher_is_better"|"lower_is_better"}
+    Use for: before/after comparisons, spread migration, analyst estimate vs actual.
+    End dot gets accent colour if it moved in the direction specified by accent_direction.
+    Example: {points: [{label:"Bond A", value_start:520, value_end:415, start_label:"At issue", end_label:"Current"}],
+              accent_direction: "lower_is_better"}
+- transition_grid: {rows: [{label, highlight_col}], col_labels: [...], title?}
+    Use for: business model transitions, revenue mix shifts, any 0→100% journey.
+    Each row is one time period. highlight_col is the current-position column index.
+    Example: {rows: [{label:"2025", highlight_col:1}, {label:"2026", highlight_col:3},
+                     {label:"2027", highlight_col:6}, {label:"2028", highlight_col:9}],
+              col_labels: ["0%","10%","20%","30%","40%","50%","60%","70%","80%","90%","100%"]}
+- scoring_matrix: {rows: [{label, scores: [0-3]}], col_labels: [...], title?}
+    Use for: capability comparisons, product/service matrices, scoring frameworks.
+    Score 0=empty, 1=light, 2=medium, 3=full (renders as ○◔◕● with cell fills).
+    Example: {rows: [{label:"Banks", scores:[3,2,2,1,3,0]},
+                     {label:"Bonds", scores:[1,3,3,3,2,2]}],
+              col_labels: ["Size","Speed","Cost","Flexibility","Rating","Tenor"]}
+- gantt: {tracks: [{label, start, end, colour?}], date_range?: [start, end], title?}
+    Use for: construction programmes, project roadmaps, parallel workstreams.
+    start/end can be date strings ("2026-01", "Q1 2026") or numeric indices.
+    Example: {tracks: [{label:"Foundations", start:"Jan 2026", end:"Apr 2026"},
+                       {label:"Superstructure", start:"Apr 2026", end:"Sep 2026"},
+                       {label:"Fitout", start:"Aug 2026", end:"Dec 2026"}]}
+- multi_timeline: {phases: [{label, sub_label?, duration?, tasks: [str]}], title?}
+    Use for: M&A processes, fundraising timelines, any phased process with task details.
+    Renders as 3 bands: duration strip (top) / phase name (middle) / task bullets (bottom).
+    Example: {phases: [{label:"Preparations", sub_label:"Phase I", duration:"1-8 weeks",
+                        tasks:["Management accounts","IM preparation"]},
+                       {label:"Marketing", sub_label:"Phase II", duration:"4-6 weeks",
+                        tasks:["Investor outreach","NDAs","Management meetings"]}]}
+
+ENHANCED PARAMETERS for existing chart types:
+- grouped_bar / stacked_bar / waterfall: add style: "clean" for axis-free Pareto style
+- grouped_bar: add accent_index: N (0-based) to highlight the most important bar in accent colour
+- stacked_bar: add accent_series: N to highlight one series in accent colour
+- donut / pie: add label_style: "direct" for radial labels outside each segment (no legend)
+- scatter: add label_style: "annotated" for callout boxes with arrows on each named point
+  Points support extra fields: value_label (bold value), secondary_label (muted sub-text)
 
 RULES:
 - ONLY use chart_request with data that is EXPLICITLY in the input sections.
@@ -1520,6 +1640,32 @@ class DesignAdvisor:
 
         return parsed
 
+    def _inject_decision_matrix(self) -> str:
+        """Return a compact text block of active DM rules for injection into the system prompt."""
+        try:
+            from inkline.intelligence.aggregator import load_decision_matrix
+            dm = load_decision_matrix()
+            active_rules = [r for r in dm.get("rules", []) if r.get("status") == "active"]
+            if not active_rules:
+                return "(No active decision matrix rules loaded.)"
+            lines = [
+                "The table below shows proven (data_structure, message_type) → chart_type mappings.",
+                "Use these as your primary guide. When your data+message pair matches a row,",
+                "apply the chart_type AND the enforce parameters listed.",
+                "",
+                "data_structure | message_type | chart_type | enforce",
+                "-" * 70,
+            ]
+            for r in active_rules:
+                enforce_str = ", ".join(f"{k}={v}" for k, v in r.get("enforce", {}).items()) or "—"
+                lines.append(
+                    f"{r['data_structure']} | {r['message_type']} | {r['chart_type']} | {enforce_str}"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            log.debug("Decision matrix injection failed: %s", e)
+            return "(Decision matrix unavailable.)"
+
     def _build_system_prompt(
         self,
         reference_archetypes: Optional[list[str]] = None,
@@ -1588,6 +1734,12 @@ class DesignAdvisor:
             "for each section. You produce a JSON array of slide specs.",
             "",
             SLIDE_TYPE_GUIDE,
+            "",
+            "=" * 60,
+            "ACTIVE DECISION MATRIX RULES",
+            "=" * 60,
+            "",
+            self._inject_decision_matrix(),
             "",
             "=" * 60,
             "DESIGN KNOWLEDGE",

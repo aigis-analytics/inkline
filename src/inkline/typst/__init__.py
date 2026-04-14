@@ -424,6 +424,13 @@ def export_typst_slides(
     if font_paths:
         all_font_paths.extend(str(p) for p in font_paths)
 
+    # === PHASE 0b: Taste enforcement (deterministic, before any rendering) ===
+    try:
+        from inkline.typst.taste_enforcer import TasteEnforcer
+        slides = TasteEnforcer().apply(slides)
+    except Exception as _te_err:
+        log.debug("TasteEnforcer skipped: %s", _te_err)
+
     # === PHASE 1: Chart rendering (ONE TIME) ===
     _auto_render_charts(slides, brand, root or str(output_path.parent))
 

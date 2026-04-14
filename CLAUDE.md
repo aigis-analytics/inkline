@@ -5,6 +5,24 @@ and documents. You (Claude) drive it via Bash. This file is your complete refere
 
 ---
 
+## ⚠️ SPEC BEFORE CODE
+
+All non-trivial changes to Inkline must start with a spec in `plan_docs/`.
+
+| Spec | Status | Covers |
+|---|---|---|
+| `plan_docs/design-system-spec.md` | Approved for implementation | Decision framework, taste enforcer, self-learning, deck ingestion |
+| `plan_docs/visual-auditor-self-learning-spec.md` | Superseded by design-system-spec | Per-brand pattern memory (partially implemented) |
+| `plan_docs/two-agent-design-loop-spec.md` | Implemented | Phase 1 planner + Phase 2 DesignAdvisor |
+| `plan_docs/structural-fixes-v0.4-spec.md` | Implemented | v0.4 structural and overflow fixes |
+| `plan_docs/inkline-standalone-app-spec.md` | Implemented | Bridge + MCP server + CLI |
+| `plan_docs/ARCHON_AUDIT.md` | Implemented | Archon phase supervisor |
+| `plan_docs/CLOSED_LOOP_AUDIT_SPEC.md` | Implemented (partial) | Two-loop QA pipeline |
+
+When adding a new significant feature, add a spec to `plan_docs/` before writing code.
+
+---
+
 ## ⚠️ CORRECT WORKFLOW — READ FIRST
 
 **Never run standalone Python scripts to generate decks.** The correct workflow is:

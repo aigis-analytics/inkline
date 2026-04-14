@@ -276,6 +276,180 @@ def _text_to_sections(content: str, intent: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Self-learning: feedback + reference deck ingestion
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def inkline_submit_feedback(
+    deck_id: str,
+    slide_index: int,
+    action: str,
+    modified_chart_type: str = "",
+    modified_params: str = "{}",
+    comment: str = "",
+    data_structure: str = "",
+    message_type: str = "",
+    dm_rule_id: str = "",
+) -> dict[str, Any]:
+    """Record user feedback on a rendered slide to drive self-learning.
+
+    Call this after the user accepts, rejects, or manually modifies a slide.
+    Feedback updates the decision matrix confidence scores and proposes new rules
+    when users consistently choose a different chart type than the system selected.
+
+    Args:
+        deck_id: Identifier for the deck (e.g. "corsair_exhibit_v6").
+        slide_index: 0-based index of the slide being rated.
+        action: One of "accepted", "rejected", "modified".
+        modified_chart_type: If action="modified", the chart type the user switched to.
+        modified_params: JSON string of parameter overrides the user applied.
+        comment: Optional free-text comment from the user.
+        data_structure: The data_structure of the chart (from the decision matrix vocabulary).
+        message_type: The message_type of the chart (from the decision matrix vocabulary).
+        dm_rule_id: The decision matrix rule that drove this chart choice (e.g. "DM-005").
+    """
+    try:
+        from inkline.intelligence.aggregator import append_feedback_event, Aggregator
+        import datetime, uuid
+
+        try:
+            overrides = json.loads(modified_params) if modified_params else {}
+        except json.JSONDecodeError:
+            overrides = {}
+
+        event = {
+            "event_id": str(uuid.uuid4())[:8],
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "deck_id": deck_id,
+            "slide_index": slide_index,
+            "action": action,
+            "modified_to": modified_chart_type or None,
+            "enforce_overrides": overrides,
+            "comment": comment,
+            "data_structure": data_structure,
+            "message_type": message_type,
+            "dm_rule_id": dm_rule_id,
+            "source": "explicit",
+        }
+
+        append_feedback_event(event)
+
+        # Incremental aggregation — update matrix immediately
+        agg = Aggregator()
+        agg.process_event(event)
+        from inkline.intelligence.aggregator import save_decision_matrix
+        save_decision_matrix(agg._dm)
+
+        return {"success": True, "event_id": event["event_id"], "action": action}
+
+    except Exception as exc:
+        log.exception("inkline_submit_feedback failed")
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_ingest_reference_deck(
+    pdf_path: str,
+    deck_name: str = "",
+    deck_context: str = "",
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Ingest a reference PDF deck to extract design patterns.
+
+    Analyses slide layouts, chart types, colour usage and typography patterns
+    from the PDF. Extracted patterns are added as candidate rules to the decision
+    matrix and a human-readable patterns.md is saved for review.
+
+    Args:
+        pdf_path: Absolute path to the PDF file to analyse.
+        deck_name: Short identifier for this deck (defaults to filename stem).
+        deck_context: Optional context hint: "investment_banking", "consulting", "corporate".
+        overwrite: If True, re-analyse even if a previous analysis exists.
+    """
+    try:
+        from inkline.intelligence.deck_analyser import DeckAnalyser
+        from inkline.intelligence.aggregator import (
+            load_decision_matrix, save_decision_matrix, _CONFIG_DIR,
+        )
+        from pathlib import Path
+
+        pdf = Path(pdf_path)
+        if not pdf.exists():
+            return {"success": False, "error": f"File not found: {pdf_path}"}
+
+        if not deck_name:
+            deck_name = pdf.stem
+
+        output_dir = _CONFIG_DIR / "reference_decks" / deck_name
+        if output_dir.exists() and not overwrite:
+            return {
+                "success": True,
+                "message": f"Analysis already exists at {output_dir}. Pass overwrite=True to re-analyse.",
+                "output_dir": str(output_dir),
+            }
+
+        analyser = DeckAnalyser()
+        analysis = analyser.analyse(pdf_path, deck_name=deck_name)
+        analysis.save(output_dir)
+
+        # Append candidate rules to the decision matrix
+        dm = load_decision_matrix()
+        existing_pairs = {
+            (r["data_structure"], r["message_type"], r["chart_type"])
+            for r in dm.get("rules", [])
+        }
+
+        added = 0
+        for cand in analysis.dm_candidates:
+            triple = (cand["data_structure"], cand["message_type"], cand["chart_type"])
+            if triple not in existing_pairs:
+                cand["id"] = f"DM-I{len(dm.get('rules', [])) + 1:03d}"
+                cand["source"] = [deck_name]
+                if "rules" not in dm:
+                    dm["rules"] = []
+                dm["rules"].append(cand)
+                existing_pairs.add(triple)
+                added += 1
+
+        save_decision_matrix(dm)
+
+        return {
+            "success": True,
+            "deck_name": deck_name,
+            "slides_analysed": analysis.slide_count,
+            "chart_types_found": analysis.chart_vocabulary,
+            "dominant_layouts": analysis.dominant_layouts,
+            "candidate_rules_added": added,
+            "output_dir": str(output_dir),
+            "patterns_md": str(output_dir / "patterns.md"),
+        }
+
+    except Exception as exc:
+        log.exception("inkline_ingest_reference_deck failed")
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_learn() -> dict[str, Any]:
+    """Run the feedback aggregator to update the decision matrix.
+
+    Processes all recorded feedback events, updates rule confidence scores,
+    promotes high-confidence candidate rules to active, and demotes
+    low-confidence active rules.
+
+    Returns a summary report of changes made.
+    """
+    try:
+        from inkline.intelligence.aggregator import Aggregator
+        agg = Aggregator()
+        report = agg.run_full_pass()
+        return {"success": True, "report": report}
+    except Exception as exc:
+        log.exception("inkline_learn failed")
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 def main() -> None:

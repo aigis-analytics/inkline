@@ -283,6 +283,95 @@ def _parse_stream_json(raw: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Implicit feedback detection
+# ---------------------------------------------------------------------------
+
+_IMPLICIT_PATTERNS = [
+    # Chart type changes: "change the bar chart to a dumbbell"
+    (re.compile(r"change (?:the |that )?(?:[\w_]+\s)?(?:chart\s)?to (?:a |an )?([\w_]+)", re.I), "chart_type_change"),
+    # Orientation: "make it horizontal" / "make the chart vertical"
+    (re.compile(r"make (?:it |the chart )?(horizontal|vertical)", re.I), "orientation_change"),
+    # Legend/axis/label removal: "remove the legend"
+    (re.compile(r"(remove|hide|add|show) (?:the )?(legend|axis|labels?|title|gridlines?)", re.I), "param_change"),
+    # Accent: "highlight the 2025 bar" / "accent the enterprise column"
+    (re.compile(r"(?:highlight|accent|emphasise?|emphasize) (?:the )?([\w\s]+?)(?:\s+bar|column|segment|series)?$", re.I), "accent_change"),
+    # Density feedback: "too many labels" / "too much data"
+    (re.compile(r"too (?:many|much) (labels?|bars?|categories|data points?|text)", re.I), "density_feedback"),
+    # Direct chart type request: "use a dumbbell chart instead"
+    (re.compile(r"use (?:a |an )?([\w_]+) chart", re.I), "chart_type_change"),
+]
+
+_CHART_TYPE_ALIASES = {
+    "dumbbell": "dumbbell",
+    "gantt": "gantt",
+    "heatmap": "heatmap",
+    "donut": "donut",
+    "pie": "pie",
+    "scatter": "scatter",
+    "waterfall": "waterfall",
+    "line": "line_chart",
+    "bar": "grouped_bar",
+    "stacked": "stacked_bar",
+    "horizontal": "horizontal_stacked_bar",
+    "scoring": "scoring_matrix",
+    "matrix": "scoring_matrix",
+    "timeline": "multi_timeline",
+    "multi_timeline": "multi_timeline",
+    "transition": "transition_grid",
+}
+
+
+def _record_implicit_feedback(prompt: str, deck_id: str, slide_index: int) -> None:
+    """Scan a user message for chart correction patterns and file feedback events."""
+    if not prompt:
+        return
+    try:
+        import datetime, uuid
+        from inkline.intelligence.aggregator import append_feedback_event
+
+        for pattern, feedback_type in _IMPLICIT_PATTERNS:
+            m = pattern.search(prompt)
+            if not m:
+                continue
+
+            event: dict = {
+                "event_id": str(uuid.uuid4())[:8],
+                "ts": datetime.datetime.utcnow().isoformat() + "Z",
+                "deck_id": deck_id or "unknown",
+                "slide_index": slide_index,
+                "action": "modified",
+                "source": "implicit_conversation",
+                "feedback_type": feedback_type,
+            }
+
+            if feedback_type == "chart_type_change":
+                raw_type = m.group(1).lower().strip()
+                resolved = _CHART_TYPE_ALIASES.get(raw_type, raw_type)
+                event["modified_to"] = resolved
+                event["comment"] = f"User requested: {m.group(0)}"
+            elif feedback_type == "orientation_change":
+                event["enforce_overrides"] = {"orientation": m.group(1).lower()}
+                event["comment"] = f"Orientation override: {m.group(0)}"
+            elif feedback_type == "param_change":
+                action_word = m.group(1).lower()
+                param = m.group(2).lower()
+                event["enforce_overrides"] = {f"{action_word}_{param}": True}
+                event["comment"] = f"Param change: {m.group(0)}"
+            elif feedback_type == "accent_change":
+                event["enforce_overrides"] = {"accent_target": m.group(1).strip()}
+                event["comment"] = f"Accent request: {m.group(0)}"
+            else:
+                event["comment"] = f"Density feedback: {m.group(0)}"
+
+            append_feedback_event(event)
+            log.info("Implicit feedback recorded: %s (%s)", feedback_type, event.get("comment", ""))
+            break  # One event per message — take the first match
+
+    except Exception as e:
+        log.debug("Implicit feedback detection skipped: %s", e)
+
+
+# ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
 async def handle_prompt(request: web.Request) -> web.Response:
@@ -308,6 +397,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
     extra_system = data.get("system", "")
     if not prompt:
         return web.json_response({"error": "No prompt provided"}, status=400)
+
+    # Implicit feedback detection — scan for chart correction patterns before routing
+    _record_implicit_feedback(prompt, data.get("deck_id", ""), data.get("slide_index", -1))
 
     # Rate limiting
     now = time.time()

@@ -62,6 +62,72 @@ def cmd_mcp(_args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_learn(_args: argparse.Namespace) -> None:
+    """Run the feedback aggregator to update the decision matrix."""
+    try:
+        from inkline.intelligence.aggregator import Aggregator
+        agg = Aggregator()
+        report = agg.run_full_pass()
+        print(report)
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_ingest(args: argparse.Namespace) -> None:
+    """Ingest a reference PDF deck to extract design patterns."""
+    try:
+        from inkline.intelligence.deck_analyser import DeckAnalyser
+        from inkline.intelligence.aggregator import (
+            load_decision_matrix, save_decision_matrix, _CONFIG_DIR,
+        )
+        pdf = Path(args.pdf_path)
+        if not pdf.exists():
+            print(f"ERROR: File not found: {args.pdf_path}", file=sys.stderr)
+            sys.exit(1)
+
+        deck_name = args.deck_name or pdf.stem
+        print(f"Analysing {pdf.name} as '{deck_name}'...")
+
+        analyser = DeckAnalyser()
+        analysis = analyser.analyse(str(pdf), deck_name=deck_name)
+
+        output_dir = _CONFIG_DIR / "reference_decks" / deck_name
+        analysis.save(output_dir)
+
+        # Append candidate rules to decision matrix
+        dm = load_decision_matrix()
+        existing_pairs = {
+            (r["data_structure"], r["message_type"], r["chart_type"])
+            for r in dm.get("rules", [])
+        }
+        added = 0
+        for cand in analysis.dm_candidates:
+            triple = (cand["data_structure"], cand["message_type"], cand["chart_type"])
+            if triple not in existing_pairs:
+                cand["id"] = f"DM-I{len(dm.get('rules', [])) + 1:03d}"
+                cand["source"] = [deck_name]
+                if "rules" not in dm:
+                    dm["rules"] = []
+                dm["rules"].append(cand)
+                existing_pairs.add(triple)
+                added += 1
+        save_decision_matrix(dm)
+
+        print(f"Done.")
+        print(f"  Slides analysed : {analysis.slide_count}")
+        print(f"  Charts found    : {analysis.chart_vocabulary}")
+        print(f"  Candidate rules : {added} added to decision matrix")
+        print(f"  Patterns saved  : {output_dir / 'patterns.md'}")
+
+    except ImportError as exc:
+        print(f"ERROR: {exc}\nInstall pymupdf: pip install pymupdf", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="inkline",
@@ -95,6 +161,23 @@ def main(argv: list[str] | None = None) -> None:
         help="Start the MCP server for Claude Desktop / Claude.ai integration",
     )
     mcp_p.set_defaults(func=cmd_mcp)
+
+    # inkline learn
+    learn_p = sub.add_parser(
+        "learn",
+        help="Process feedback log and update the decision matrix",
+    )
+    learn_p.set_defaults(func=cmd_learn)
+
+    # inkline ingest
+    ingest_p = sub.add_parser(
+        "ingest",
+        help="Ingest a reference PDF deck to extract design patterns",
+    )
+    ingest_p.add_argument("pdf_path", metavar="PDF", help="Path to the PDF file")
+    ingest_p.add_argument("--name", dest="deck_name", default="",
+                          help="Deck identifier (default: filename stem)")
+    ingest_p.set_defaults(func=cmd_ingest)
 
     args = parser.parse_args(argv)
 
