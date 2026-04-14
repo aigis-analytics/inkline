@@ -181,9 +181,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
     ]
 
     total_chars = len(prompt) + len(system)
-    # Base 600s + 4s per 1k chars of context, capped at 1200s (20 min).
-    # Large decks (20 slides + visual audit) routinely exceed 8 minutes.
-    timeout = min(1200, max(600, 600 + (total_chars // 1000) * 4))
+    # Base 900s + 6s per 1k chars of context, capped at 1800s (30 min).
+    # 20-slide decks with parallel visual audit observed at 13-15min runtime.
+    timeout = min(1800, max(900, 900 + (total_chars // 1000) * 6))
 
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
 
