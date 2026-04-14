@@ -2,6 +2,7 @@
 
 Adapted from the Aria project (u3126117/aria). Exposes:
   POST /prompt       — send a message to Claude (agentic mode, full tool access)
+  POST /vision       — visual audit: base64 PNG + prompt → Claude reads image and responds
   POST /upload       — save an uploaded file, returns its absolute path
   GET  /output/{f}   — serve generated PDFs and charts
   GET  /             — serve the Inkline WebUI (index.html)
@@ -14,11 +15,13 @@ Start with: ``inkline serve`` or ``python -m inkline.app.claude_bridge``
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -178,7 +181,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
     ]
 
     total_chars = len(prompt) + len(system)
-    timeout = min(600, max(180, 180 + (total_chars // 1000) * 4 + 60))
+    # Base 600s + 4s per 1k chars of context, capped at 1200s (20 min).
+    # Large decks (20 slides + visual audit) routinely exceed 8 minutes.
+    timeout = min(1200, max(600, 600 + (total_chars // 1000) * 4))
 
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
 
@@ -233,6 +238,106 @@ async def handle_prompt(request: web.Request) -> web.Response:
     except Exception as exc:
         log.exception("Unexpected error")
         return web.json_response({"error": str(exc)}, status=500)
+
+
+async def handle_vision(request: web.Request) -> web.Response:
+    """Accept a base64 PNG slide image + audit prompt, route through Claude for visual review.
+
+    Request JSON:
+        image_base64    : base64-encoded PNG bytes
+        image_media_type: "image/png" (ignored; only PNG supported)
+        prompt          : user audit question
+        system          : optional system prompt override
+
+    Response JSON:
+        {"response": "<Claude's audit text>"}
+
+    Implementation: saves the image to a temp file, then calls ``claude -p``
+    with a prompt asking Claude to Read the file.  Claude Code's Read tool
+    supports images natively, so no API key is required — Claude Max covers it.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    img_b64 = data.get("image_base64", "")
+    prompt = data.get("prompt", "").strip()
+    extra_system = data.get("system", "")
+
+    if not img_b64 or not prompt:
+        return web.json_response({"error": "image_base64 and prompt are required"}, status=400)
+
+    # Decode image and write to a temp file that claude can Read
+    try:
+        img_bytes = base64.b64decode(img_b64)
+    except Exception as exc:
+        return web.json_response({"error": f"Invalid base64: {exc}"}, status=400)
+
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(suffix=".png", prefix="inkline_vision_")
+        os.close(fd)
+        Path(tmp_path).write_bytes(img_bytes)
+
+        # Build the full prompt: ask Claude to read the image file then audit it
+        full_prompt = (
+            f"Please use the Read tool to read this image file:\n{tmp_path}\n\n"
+            f"Then answer the following:\n{prompt}"
+        )
+
+        system = SYSTEM_PROMPT
+        if extra_system:
+            system = extra_system  # vision calls use the caller's system prompt, not deck-building one
+
+        cmd = [
+            "claude", "-p",
+            "--output-format", "stream-json",
+            "--verbose",
+            "--dangerously-skip-permissions",
+            "--max-turns", "5",
+            "--system-prompt", system,
+        ]
+
+        timeout = 90  # vision calls are single-slide: 90s is ample
+
+        log.info("Vision audit: %d bytes image, %d chars prompt", len(img_bytes), len(prompt))
+
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
+        env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=full_prompt.encode("utf-8")),
+            timeout=timeout,
+        )
+
+        if proc.returncode == 0:
+            session = _parse_stream_json(stdout.decode("utf-8").strip())
+            log.info("Vision audit complete: %d chars response", len(session["text"]))
+            return web.json_response({"response": session["text"]})
+        else:
+            err = stderr.decode("utf-8").strip()
+            log.error("Vision CLI error (rc=%d): %s", proc.returncode, err[:200])
+            return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
+
+    except asyncio.TimeoutError:
+        proc.kill()
+        log.error("Vision timeout (90s)")
+        return web.json_response({"error": "Vision audit timed out after 90s"}, status=504)
+    except Exception as exc:
+        log.exception("Vision audit error")
+        return web.json_response({"error": str(exc)}, status=500)
+    finally:
+        if tmp_path and Path(tmp_path).exists():
+            Path(tmp_path).unlink(missing_ok=True)
 
 
 async def handle_upload(request: web.Request) -> web.Response:
@@ -313,6 +418,7 @@ async def handle_health(request: web.Request) -> web.Response:
 def create_app() -> web.Application:
     app = web.Application(client_max_size=50 * 1024 * 1024)  # 50 MB upload limit
     app.router.add_post("/prompt", handle_prompt)
+    app.router.add_post("/vision", handle_vision)
     app.router.add_post("/upload", handle_upload)
     app.router.add_get("/output/{filename}", handle_output_file)
     app.router.add_get("/health", handle_health)
