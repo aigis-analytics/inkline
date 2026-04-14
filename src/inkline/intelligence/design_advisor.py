@@ -221,7 +221,8 @@ HOW TO REQUEST A CHART:
 1. Set "image_path" to a simple filename (e.g. "market_growth.png")
 2. Add a "chart_request" dict with:
    - "chart_type": one of: line_chart, area_chart, scatter, waterfall, donut,
-     pie, stacked_bar, grouped_bar, heatmap, radar, gauge
+     pie, stacked_bar, grouped_bar, heatmap, radar, gauge,
+     horizontal_stacked_bar, entity_flow, ladder, divergent_bar
    - "chart_data": the data dict for that chart type (see below)
 
 Example — donut chart on a dashboard slide:
@@ -268,7 +269,7 @@ Example — bar chart on a chart_caption slide:
     }
   }
 
-CHART DATA FORMATS (by chart_type):
+CHART DATA FORMATS (by chart_type) — use EXACTLY these field names:
 - line_chart / area_chart: {x: [...], series: [{name, values}], x_label?, y_label?}
 - waterfall: {items: [{label, value, total?}]}
 - donut / pie: {segments: [{label, value}], center_label?}
@@ -276,7 +277,30 @@ CHART DATA FORMATS (by chart_type):
 - radar: {axes: [...], series: [{name, values}]}
 - gauge: {value: 0-100, label?}
 - scatter: {points: [{x, y, label?, size?}], x_label?, y_label?}
-- heatmap: {x_labels: [...], y_labels: [...], values: [[...]]}
+- heatmap: {x_labels: [...], y_labels: [...], values: [[...]]}  ← values is a 2D list
+- horizontal_stacked_bar: {periods: [{label, segments: [{label, value}]}], x_label?, title?}
+    Use for: 100% composition across categories. Each "period" is one row.
+    Example: {periods: [{label: "Legal", segments: [{label: "Complete", value: 40},
+                                                    {label: "Partial", value: 45},
+                                                    {label: "Absent", value: 15}]}]}
+- entity_flow: {nodes: [{id, label, tier (1=focal/2=intermediary/3=peripheral),
+                         x (0.0–1.0), y (0.0–1.0), sublabel?}],
+                edges: [{from, to, label?, style ("solid"|"dashed")}], title?}
+    CRITICAL: Every node MUST have explicit x and y float coordinates (0.0–1.0).
+    Layout convention: y=0.85 is top, y=0.1 is bottom. x=0.5 is centre.
+    Example: {nodes: [{id:"buyer", label:"Buyer", tier:3, x:0.5, y:0.85},
+                      {id:"target", label:"Target LLC", tier:1, x:0.5, y:0.55},
+                      {id:"sub", label:"Operating Sub", tier:1, x:0.5, y:0.25}],
+              edges: [{from:"buyer", to:"target", label:"100% acquires"},
+                      {from:"target", to:"sub", label:"wholly owns"}]}
+- ladder: {steps: [{label, body}]}  ← list of 3–6 ascending staircase steps
+    Each step is a card: label = short title, body = 1-line description.
+    Example: {steps: [{label:"Q1 2026", body:"G9 spud → TD → first oil"},
+                      {label:"Q2 2026", body:"G8 spud, G9 plateau"},
+                      {label:"Q3 2026", body:"F4 SM71 spud"}]}
+- divergent_bar: {items: [{label, value}], positive_label?, negative_label?, y_label?}
+    Use for above/below-zero bar charts (inflow/outflow, bridge variances).
+    Positive values → primary colour; negative values → secondary colour.
 
 RULES:
 - ONLY use chart_request with data that is EXPLICITLY in the input sections.
@@ -378,19 +402,25 @@ class DesignAdvisor:
                 except Exception:
                     pass
                 import time as _time; _time.sleep(5)
-            resp = _req.post(
-                f"{self.bridge_url}/prompt",
-                json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
-                timeout=(5, None),  # 5s connect; no read timeout — bridge decides when done
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("response"):
-                log.info(
-                    "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
-                    len(data["response"]), data.get("source", "?"),
+            for _bridge_attempt in range(3):  # retry up to 3x on empty body
+                resp = _req.post(
+                    f"{self.bridge_url}/prompt",
+                    json={"prompt": user_prompt, "system": system_prompt, "max_tokens": 16000},
+                    timeout=(5, None),  # 5s connect; no read timeout — bridge decides when done
                 )
-                return data["response"]
+                resp.raise_for_status()
+                if not resp.content:
+                    log.warning("Bridge returned empty body (attempt %d/3), retrying…", _bridge_attempt + 1)
+                    import time as _time2; _time2.sleep(2)
+                    continue
+                data = resp.json()
+                if data.get("response"):
+                    log.info(
+                        "DesignAdvisor LLM bridge OK — %d chars (source=%s)",
+                        len(data["response"]), data.get("source", "?"),
+                    )
+                    return data["response"]
+                break  # got a body but no "response" key — fall through to SDK
         except Exception as e:
             log.info("DesignAdvisor LLM bridge unavailable (%s) — falling back to Anthropic API", e)
 
@@ -1317,7 +1347,7 @@ class DesignAdvisor:
         elif stype == "closing" and contact:
             parts += ["", "## Contact info", json.dumps(contact, indent=2)]
 
-        # For chart-type slides, inject available pre-rendered PNGs
+        # For chart-type slides, inject available pre-rendered PNGs as naming hints only
         _chart_types = {"chart_caption", "chart", "dashboard", "multi_chart"}
         if stype in _chart_types:
             _charts_dir = Path.home() / ".local/share/inkline/output/charts"
@@ -1326,10 +1356,10 @@ class DesignAdvisor:
                 if _chart_files:
                     parts += [
                         "",
-                        "## Pre-rendered chart PNGs available",
-                        "These files already exist — reference one by filename in image_path.",
-                        "When you use an existing file, DO NOT include a chart_request.",
-                        "Only add chart_request if NO existing file covers this data.",
+                        "## Previously rendered PNG filenames (naming reference only)",
+                        "Use these as inspiration for image_path naming conventions.",
+                        "You MUST still generate a chart_request for every visual slide —",
+                        "these filenames are NOT permission to skip chart generation.",
                     ]
                     for _cf in _chart_files:
                         parts.append(f"  {_cf.name}")
@@ -1345,8 +1375,10 @@ class DesignAdvisor:
             "- Base ALL data strictly on the source content above",
             "- DO NOT invent statistics, names, or metrics",
             "- If source is sparse, design a sparse-but-impactful slide",
-            "- For chart_caption/chart/multi_chart: set image_path to an existing PNG filename",
-            "  if one is listed above. Do NOT add chart_request when reusing an existing file.",
+            "- For ALL visual slide types (chart_caption/chart/dashboard/multi_chart):",
+            "  you MUST include a chart_request with full data + design spec.",
+            "  Set image_path to a descriptive filename (snake_case .png).",
+            "  NEVER omit chart_request for a visual slide — it is mandatory.",
             "",
             "Return JSON inside ```json ... ``` markers.",
         ]
