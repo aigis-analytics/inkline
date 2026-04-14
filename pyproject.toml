@@ -27,11 +27,14 @@ slides = [
 typst = ["typst>=0.13.0"]
 charts = ["matplotlib>=3.7.0"]
 intelligence = ["anthropic>=0.25.0"]
-all = ["inkline[pdf,slides,typst,charts,intelligence]"]
+app = ["aiohttp>=3.9"]
+mcp = ["fastmcp>=2.0"]
+all = ["inkline[pdf,slides,typst,charts,intelligence,app]"]
 
 [project.scripts]
 inkline-html = "inkline.html:_cli"
 inkline-pdf = "inkline.pdf:_cli"
+inkline = "inkline.app.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inkline"]

@@ -1,0 +1,484 @@
+# Inkline — Claude Code Usage Guide
+
+Inkline is a Python library for generating branded, publication-quality slide decks
+and documents. You (Claude) drive it via Bash. This file is your complete reference.
+
+---
+
+## Quick start (3 steps)
+
+```bash
+# 1. Parse input → markdown text
+pandoc report.docx -o /tmp/inkline_input.md        # .docx
+python3 -c "import pymupdf; doc=pymupdf.open('f.pdf'); print('\n'.join(p.get_text() for p in doc))" > /tmp/inkline_input.md
+
+# 2. Generate deck
+python3 -c "
+from inkline.typst import export_typst_slides
+from inkline.intelligence import DesignAdvisor
+import json, pathlib
+sections = [...]   # built from the parsed text
+advisor = DesignAdvisor(brand='minimal', template='consulting', mode='llm')
+slides = advisor.design_deck(title='My Deck', sections=sections)
+pathlib.Path('~/.local/share/inkline/output').expanduser().mkdir(parents=True, exist_ok=True)
+from inkline.typst import export_typst_slides
+export_typst_slides(slides=slides, output_path=str(pathlib.Path('~/.local/share/inkline/output/deck.pdf').expanduser()), brand='minimal', template='consulting')
+print('PDF ready: ~/.local/share/inkline/output/deck.pdf')
+"
+
+# 3. Open for the user
+open ~/.local/share/inkline/output/deck.pdf   # macOS
+xdg-open ~/.local/share/inkline/output/deck.pdf  # Linux
+```
+
+---
+
+## Output conventions (ALWAYS follow these)
+
+- **Session PDF:** `~/.local/share/inkline/output/deck.pdf` — always write here, always overwrite
+- **Charts:** `~/.local/share/inkline/output/charts/` — pre-rendered chart PNGs
+- **Uploads:** `~/.local/share/inkline/uploads/` — files received from WebUI
+- After every render, print exactly: `PDF ready: ~/.local/share/inkline/output/deck.pdf`
+- This triggers the WebUI iframe to refresh automatically
+
+---
+
+## Input file handling
+
+### .md or .txt — read directly
+```bash
+cat report.md   # or use Read tool
+```
+
+### .docx — convert via pandoc
+```bash
+pandoc input.docx -o /tmp/inkline_input.md --wrap=none
+cat /tmp/inkline_input.md
+```
+If pandoc unavailable, use python-docx:
+```python
+from docx import Document
+doc = Document('input.docx')
+text = '\n'.join(p.text for p in doc.paragraphs if p.text.strip())
+```
+
+### .pdf — extract via pymupdf
+```python
+import pymupdf
+doc = pymupdf.open('input.pdf')
+text = '\n\n'.join(page.get_text() for page in doc)
+```
+
+### .pptx — extract outline
+```python
+from pptx import Presentation
+prs = Presentation('input.pptx')
+lines = []
+for slide in prs.slides:
+    for shape in slide.shapes:
+        if shape.has_text_frame:
+            lines.append(shape.text_frame.text)
+text = '\n'.join(lines)
+```
+
+---
+
+## Building sections[]
+
+`sections` is the input to `DesignAdvisor.design_deck()`. Each section is a dict.
+Build these from the parsed document text. Extract concrete metrics into `"metrics"` 
+rather than leaving numbers in prose — this produces better slide layouts.
+
+### Section type reference
+
+```python
+# Narrative / prose content
+{"type": "executive_summary", "title": "...", "narrative": "...", "metrics": {"ARR": "$4.2M"}}
+
+# KPI dashboard — key numbers
+{"type": "kpi_dashboard", "title": "...", "metrics": {"Growth": "34%", "ARR": "$4.2M", "Customers": "87"}}
+
+# Financial table
+{"type": "financial_overview", "title": "...",
+ "table_data": {"headers": ["Metric", "2025", "2026"], "rows": [["Revenue", "$3M", "$4.2M"]]}}
+
+# Time-series data
+{"type": "production_analysis", "title": "...",
+ "series": [{"name": "Revenue", "values": [1.2, 1.8, 2.4], "dates": ["Q1", "Q2", "Q3"]}]}
+
+# Risk / RAG assessment
+{"type": "risk_assessment", "title": "...",
+ "items": [{"risk": "Regulatory", "severity": "high", "mitigation": "..."}]}
+
+# Competitive positioning (2x2, radar, comparison)
+{"type": "competitive_positioning", "title": "...",
+ "items": [{"name": "Inkline", "x": 90, "y": 85, "label": "Best overall"}]}
+
+# Timeline / roadmap
+{"type": "timeline", "title": "...",
+ "milestones": [{"date": "Q1 2026", "label": "Launch", "desc": "..."}]}
+
+# Process / how it works
+{"type": "process_flow", "title": "...",
+ "steps": [{"number": "1", "title": "Describe", "desc": "Pass structured data"}]}
+
+# Card-style content (3 or 4 items)
+{"type": "comparison", "title": "...",
+ "cards": [{"title": "Problem 1", "body": "One or two short sentences."}]}
+
+# Generic narrative (fallback)
+{"type": "narrative", "title": "...", "narrative": "..."}
+```
+
+---
+
+## Generating slides
+
+### Option A — DesignAdvisor (recommended for natural language input)
+
+DesignAdvisor reads the sections and picks the best slide type for each one.
+Use this when you're working from a document or natural language description.
+
+```python
+from inkline.intelligence import DesignAdvisor
+from inkline.typst import export_typst_slides
+from pathlib import Path
+
+OUTPUT = Path("~/.local/share/inkline/output/deck.pdf").expanduser()
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+advisor = DesignAdvisor(
+    brand="minimal",       # or any registered brand
+    template="consulting", # see template list below
+    mode="llm",            # "llm" (best), "rules" (no API key needed), "advised"
+)
+
+slides = advisor.design_deck(
+    title="Q4 Strategy Review",
+    sections=sections,     # list of dicts built from document
+    audience="investors",  # optional: shapes the tone and slide density
+    goal="secure term sheet",  # optional: shapes the hero slide choices
+    date="April 2026",
+    subtitle="Board presentation",
+    contact={              # optional: populates closing slide
+        "name": "Jane Smith", "role": "CEO", "email": "jane@acme.com",
+        "company": "Acme Corp", "tagline": "Let's build this together.",
+    },
+)
+
+export_typst_slides(
+    slides=slides,
+    output_path=str(OUTPUT),
+    brand="minimal",
+    template="consulting",
+    title="Q4 Strategy Review",
+    date="April 2026",
+)
+print(f"PDF ready: {OUTPUT}")
+```
+
+### Option B — Direct export (when you already know the exact slide specs)
+
+Use this when amending an existing deck or when the user gives you exact requirements.
+Keep `slides` as a Python variable in your context across turns.
+
+```python
+from inkline.typst import export_typst_slides
+from pathlib import Path
+
+slides = [
+    {"slide_type": "title", "data": {
+        "company": "Acme Corp", "tagline": "Series B", "date": "April 2026"}},
+    {"slide_type": "three_card", "data": {
+        "section": "Problem", "title": "Three pain points",
+        "cards": [
+            {"title": "Fragmented data", "body": "..."},
+            {"title": "Manual reporting", "body": "..."},
+            {"title": "Stale insights", "body": "..."},
+        ]}},
+    {"slide_type": "closing", "data": {
+        "name": "Jane Smith", "role": "CEO", "email": "jane@acme.com",
+        "company": "Acme Corp", "tagline": "Let's build this together."}},
+]
+
+OUTPUT = Path("~/.local/share/inkline/output/deck.pdf").expanduser()
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="consulting")
+print(f"PDF ready: {OUTPUT}")
+```
+
+---
+
+## Amending decks
+
+When the user asks to change something, keep the current `slides` list in context
+and modify it directly. Then re-export. Never start from scratch unless the user asks.
+
+```python
+# Example: user says "make slide 3 more visual"
+# slides[2] is currently {"slide_type": "content", "data": {...}}
+# Change to three_card:
+slides[2] = {
+    "slide_type": "three_card",
+    "data": {
+        "section": slides[2]["data"].get("section", ""),
+        "title": slides[2]["data"]["title"],
+        "cards": [
+            {"title": item.split(":")[0] if ":" in item else item, "body": item.split(":", 1)[1].strip() if ":" in item else ""}
+            for item in slides[2]["data"].get("items", [])[:3]
+        ],
+    }
+}
+# Then re-export
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="consulting")
+print(f"PDF ready: {OUTPUT}")
+```
+
+After any amendment, always print the slide list so the user can orient:
+```python
+for i, s in enumerate(slides, 1):
+    print(f"  {i:2d}. [{s['slide_type']:14s}] {s['data'].get('title', s['data'].get('company', ''))[:50]}")
+```
+
+---
+
+## Slide type catalogue (all 21)
+
+Capacity limits are hard — the renderer silently drops anything beyond them.
+
+### Visual heroes (prefer these)
+
+| Type | Data shape | Limits |
+|------|-----------|--------|
+| `icon_stat` | `{section, title, stats [{value, icon, label, desc?}], footnote?}` | 3–4 stats |
+| `kpi_strip` | `{section, title, kpis [{value, label, highlight?}], footnote?}` | 3–5 KPIs |
+| `stat` | `{section, title, stats [{value, label, desc}]}` | 2–4 stats |
+| `feature_grid` | `{section, title, features [{title, body, icon?}], footnote?}` | EXACTLY 6 |
+| `dashboard` | `{section, title, image_path, stats [{value, label}], bullets, footnote?}` | 3 stats, 3 bullets |
+| `chart_caption` | `{section, title, image_path, caption, bullets, footnote?}` | 4 bullets max |
+| `progress_bars` | `{section, title, bars [{label, pct, value?}], footnote?}` | 6 bars max |
+
+### Narrative layouts
+
+| Type | Data shape | Limits |
+|------|-----------|--------|
+| `three_card` | `{section, title, cards [{title, body}], highlight_index?, footnote?}` | EXACTLY 3 |
+| `four_card` | `{section, title, cards [{title, body}], footnote?}` | EXACTLY 4 |
+| `timeline` | `{section, title, milestones [{date, label, desc?}], footnote?}` | 6 max |
+| `process_flow` | `{section, title, steps [{number, title, desc}], footnote?}` | 4 max |
+| `pyramid` | `{section, title, tiers [{label, desc?}], footnote?}` | 3–5 tiers |
+| `split` | `{section, title, left_title, left_items, right_title, right_items}` | 6 items/side |
+| `comparison` | `{section, title, left {name, items [{label, value}]}, right {name, items [{label, value}]}, footnote?}` | 6 rows |
+| `bar_chart` | `{section, title, bars [{label, value, pct}], footnote?}` | native Typst bars |
+
+### Data exhibits
+
+| Type | Data shape | Limits |
+|------|-----------|--------|
+| `table` | `{section, title, headers, rows, footnote?}` | 6 rows × 6 cols MAX |
+| `multi_chart` | `{section, title, layout, charts [{image_path, title?}], footnote?}` | see layouts below |
+| `chart` | `{section, title, image_path, footnote?}` | bare full-width chart |
+
+`multi_chart` layouts: `equal_2` (2 charts), `equal_3`, `equal_4`, `hero_left` (2),
+`hero_left_3` (3), `hero_right_3` (3), `quad` (4), `top_bottom` (4).
+
+### Structural
+
+| Type | Data shape |
+|------|-----------|
+| `title` | `{company, tagline, date, subtitle?, left_footer?}` |
+| `closing` | `{name, role, email, company, tagline}` |
+| `content` | `{section, title, items, footnote?}` — USE SPARINGLY, max 6 bullets |
+| `section_divider` | `{section, title}` |
+
+### Title length hard limit
+**Slide titles MUST be ≤ 50 characters.** Titles longer than 50 chars wrap and push
+content off the slide. Count before writing. Write action titles (state the conclusion):
+- BAD: "Business Model Overview" → GOOD: "98% gross margin at scale"
+- BAD: "The Problem" → GOOD: "Analysts spend 80% of their week formatting"
+
+---
+
+## Chart request format
+
+Embed a `chart_request` in any `chart`, `chart_caption`, `dashboard`, or `multi_chart`
+slide. Inkline auto-renders the chart PNG before Typst compilation.
+
+```python
+{
+    "slide_type": "chart_caption",
+    "data": {
+        "section": "Financials",
+        "title": "Revenue growing 34% YoY",
+        "image_path": "revenue.png",         # just the filename — written to charts/ dir
+        "chart_request": {
+            "chart_type": "area_chart",       # see chart types below
+            "chart_data": {
+                "x": ["Q1", "Q2", "Q3", "Q4"],
+                "series": [{"name": "Revenue ($M)", "values": [1.2, 1.8, 2.4, 3.1]}],
+                "y_label": "$M",
+            },
+        },
+        "caption": "ARR compounding at 34% per quarter",
+        "bullets": ["Q4 $3.1M, up from $1.2M in Q1", "Net revenue retention >120%"],
+    }
+}
+```
+
+**Chart types:** `line_chart`, `area_chart`, `scatter`, `waterfall`, `donut`, `pie`,
+`stacked_bar`, `grouped_bar`, `heatmap`, `radar`, `gauge`,
+`marimekko`, `entity_flow`, `divergent_bar`, `horizontal_stacked_bar`
+
+**Infographic archetypes (use via `chart_row` type):**
+`iceberg`, `sidebar_profile`, `funnel_kpi_strip`, `persona_dashboard`,
+`radial_pinwheel`, `hexagonal_honeycomb`, `waffle`, `ladder`, `dual_donut`, + more
+
+---
+
+## Available templates (37)
+
+**Built-in (10):** `consulting`, `executive`, `minimalism`, `newspaper`, `investor`,
+`pitch`, `dark`, `editorial`, `boardroom`, `brand`
+
+**Design-system styles (27):** `dmd_stripe`, `dmd_vercel`, `dmd_notion`, `dmd_apple`,
+`dmd_spotify`, `dmd_tesla`, `dmd_airbnb`, `dmd_coinbase`, `dmd_shopify`, `dmd_figma`,
+`dmd_framer`, `dmd_cursor`, `dmd_warp`, `dmd_supabase`, `dmd_uber`, `dmd_ferrari`,
+`dmd_bmw`, `dmd_mongodb`, `dmd_intercom`, `dmd_webflow`, `dmd_miro`, `dmd_posthog`,
+`dmd_raycast`, `dmd_revolut`, `dmd_superhuman`, `dmd_zapier`, `dmd_claude`
+
+Use `consulting` or `executive` for business decks. `pitch` for startup pitches.
+`dmd_stripe` / `dmd_vercel` / `dmd_notion` for modern tech product decks.
+
+---
+
+## Available brands
+
+**Public (ships with Inkline):** `minimal`
+
+**Private (loaded from `~/.config/inkline/brands/` if cloned):**
+Run `python3 -c "from inkline.brands import list_brands; print(list_brands())"` to see
+what's available on the current machine.
+
+---
+
+## Themes (90 total)
+
+```python
+from inkline.typst.themes import list_themes, search_themes
+list_themes(category="consulting")  # McKinsey, BCG, Bain, Deloitte, PwC, EY, KPMG
+list_themes(category="dark")        # Nord, Dracula, Catppuccin, Carbon
+search_themes("gold")               # Aurum, Gold Leaf, Mercury, ...
+```
+
+Theme is applied automatically by the template — usually you just pick a template.
+
+---
+
+## Overflow audit
+
+Run before exporting to catch problems early:
+
+```python
+from inkline.intelligence import audit_deck, format_report
+warnings = audit_deck(slides)
+if warnings:
+    print(format_report(warnings))
+```
+
+`export_typst_slides()` runs audit automatically. Pass `audit=False` to skip.
+
+---
+
+## Common patterns
+
+### Quick deck from a .docx file
+```python
+import subprocess, json
+from pathlib import Path
+from inkline.intelligence import DesignAdvisor
+from inkline.typst import export_typst_slides
+
+# 1. Convert
+result = subprocess.run(["pandoc", "input.docx", "-o", "/tmp/input.md", "--wrap=none"], check=True)
+md = Path("/tmp/input.md").read_text()
+
+# 2. Build sections from the document structure
+# Parse headings and content into sections list
+sections = []
+current = {}
+for line in md.split("\n"):
+    if line.startswith("## "):
+        if current: sections.append(current)
+        current = {"type": "narrative", "title": line.lstrip("# ").strip(), "narrative": ""}
+    elif line.startswith("# "):
+        pass  # document title — skip, use for deck title
+    elif current:
+        current["narrative"] = (current.get("narrative", "") + "\n" + line).strip()
+if current: sections.append(current)
+
+# 3. Generate
+OUTPUT = Path("~/.local/share/inkline/output/deck.pdf").expanduser()
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+advisor = DesignAdvisor(brand="minimal", template="consulting", mode="llm")
+slides = advisor.design_deck(title="Report", sections=sections)
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal")
+print(f"PDF ready: {OUTPUT}")
+```
+
+### Add a chart slide to an existing deck
+```python
+# Insert after index 3 (0-based)
+new_slide = {
+    "slide_type": "chart_caption",
+    "data": {
+        "section": "Financials",
+        "title": "Revenue trend 2025–2026",
+        "image_path": "revenue.png",
+        "chart_request": {
+            "chart_type": "line_chart",
+            "chart_data": {
+                "x": ["Jan", "Feb", "Mar", "Apr"],
+                "series": [{"name": "Revenue", "values": [1.0, 1.3, 1.8, 2.2]}],
+            },
+        },
+        "caption": "Consistent month-on-month growth",
+        "bullets": ["MoM growth averaging 25%", "Q1 total $4.1M"],
+    },
+}
+slides.insert(4, new_slide)
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal")
+print(f"PDF ready: {OUTPUT}")
+```
+
+### Change template
+```python
+# Just re-export with a different template
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="dmd_stripe")
+print(f"PDF ready: {OUTPUT}")
+```
+
+### Generate a document (not slides)
+```python
+from inkline.typst import export_typst_document
+OUTPUT_DOC = Path("~/.local/share/inkline/output/report.pdf").expanduser()
+export_typst_document(
+    markdown=md_text,
+    output_path=str(OUTPUT_DOC),
+    brand="minimal",
+    title="Q4 Report",
+    subtitle="Board update",
+    date="April 2026",
+    paper="a4",
+)
+print(f"PDF ready: {OUTPUT_DOC}")
+```
+
+---
+
+## Troubleshooting
+
+- **`typst` compile error:** Run `pip install --upgrade typst`
+- **Brand not found:** Run `python3 -c "from inkline.brands import list_brands; print(list_brands())"` to see available brands
+- **`pandoc` not found:** `brew install pandoc` (macOS) or `apt install pandoc` (Linux)
+- **Overflow warnings:** Check title lengths (≤50 chars) and item counts per slide type
+- **LLM mode fails:** Set `ANTHROPIC_API_KEY` or use `mode="rules"` for deterministic output
