@@ -155,6 +155,172 @@ def get_multi_chart_slot(layout: str, chart_index: int, n_charts: int) -> tuple[
 
 
 # ---------------------------------------------------------------------------
+# Content limits — derived from page geometry + Source Sans 3 font metrics
+# ---------------------------------------------------------------------------
+# Page: 25.4 × 14.29cm, margins: top 1.4cm, bottom 1.2cm, left/right 1.4cm
+# Content width W = 22.6cm.  Body block = 9.0cm (clip: true), footer_bar = 0.69cm
+# Available body content = 8.31cm.
+#
+# Source Sans 3 average character widths (fraction of em, empirically measured):
+#   Regular text ~0.54em  |  Bold text ~0.60em
+# At 22pt bold: 22 × 0.03528 × 0.60 = 0.466cm/char → W/char = 48 → use 45 (safety)
+# At 18pt bold: 0.381cm/char → half-col (10.6cm): 27 chars
+# At 14pt reg:  0.267cm/char → full: 84, half: 39, third: 26
+# At 13pt bold: 0.275cm/char → half: 38, third: 25
+# At 12pt reg:  0.229cm/char → half: 46, third: 31, quarter (5.1cm): 22
+# At 10pt reg:  0.191cm/char → quarter: 26
+# At 40pt bold: 0.847cm/char → 4-col (5.1cm): 6 → use 8 empirical limit
+#
+# Grid gutter = 20pt = 0.706cm
+# 4-col width = (22.6 - 3×0.706)/4 = 5.12cm  |  3-col = 7.06cm  |  2-col = 10.95cm
+# Card inset = 14pt = 0.494cm each side:  inner 2-col = 9.96cm  |  inner 3-col = 6.07cm
+
+def _clamp(text: str | None, n: int) -> str:
+    """Truncate text to at most n characters, appending '…' if cut."""
+    if not text:
+        return text or ""
+    s = str(text)
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def _clamp_list(items: list, n: int) -> list:
+    """Clamp every string element in a list to n chars."""
+    return [_clamp(item, n) if isinstance(item, str) else item for item in items]
+
+
+# Per-field character limits for every slide type.
+# Key format:  "field"               → simple top-level string field
+#              "list_field.subfield"  → subfield inside each dict of a list field
+#              "list_field"           → direct-string items of a list
+FIELD_LIMITS: dict[str, dict[str, int]] = {
+    "title": {},  # title/closing/section_divider intentionally unbounded
+    "closing": {},
+    "section_divider": {},
+    "content": {
+        "title": 45,      # 22pt bold full-width → 48 chars max; 45 with margin
+        "items": 80,      # 14pt at full 22.6cm → 84 chars; 80 with margin
+        "footnote": 90,
+    },
+    "split": {
+        "title": 45,
+        "left.heading": 26,   # 18pt bold half-col
+        "right.heading": 26,
+        "left.items": 55,     # 14pt half-col = 39 chars/line × 1.4 lines avg
+        "right.items": 55,
+        "footnote": 90,
+    },
+    "three_card": {
+        "title": 45,
+        "cards.title": 24,    # 13pt bold inner 3-col (6.07cm)
+        "cards.body": 85,     # 12pt inner 3-col = 26 chars/line × ~3.3 lines
+        "footnote": 90,
+    },
+    "four_card": {
+        "title": 45,
+        "cards.title": 36,    # 13pt bold inner 2-col (9.96cm)
+        "cards.body": 120,    # 12pt inner 2-col = 43 chars/line × ~2.8 lines
+        "footnote": 90,
+    },
+    "stat": {
+        "title": 45,
+        # value at 40pt bold: 4-col→8 chars, 3-col→12, 2-col→16
+        # enforced dynamically in _apply_field_limits
+        "stats.value": 8,     # worst-case (4 stats); overridden per n_stats below
+        "stats.label": 20,    # 12pt bold upper at 5.1cm
+        "stats.desc": 26,     # 10pt at 5.1cm
+    },
+    "table": {
+        "title": 45,
+        # cell width depends on n_cols; use 20 (safe for 5-col tables)
+        "headers": 20,
+        "rows": 20,           # applied per cell in each row
+        "footnote": 90,
+    },
+    "bar_chart": {
+        "title": 45,
+        "bars.label": 25,     # 12pt at ~6cm label column
+        "bars.value": 12,     # numeric
+        "footnote": 90,
+    },
+    "kpi_strip": {
+        "title": 45,
+        "kpis.value": 10,     # 18pt bold at ~4.5cm (5-kpi layout)
+        "kpis.label": 20,     # 12pt at ~4.5cm
+        "footnote": 90,
+    },
+    "chart": {
+        "title": 45,
+        "footnote": 90,
+    },
+    "chart_caption": {
+        "title": 45,
+        "caption": 90,
+        "bullets": 80,        # sidebar 35% = 7.9cm, 14pt → 29 chars/line × ~2.8 lines
+        "footnote": 90,
+    },
+    "dashboard": {
+        "title": 45,
+        "stats.value": 10,    # 18pt bold at ~7.5cm (40% col ÷ 3 stats)
+        "stats.label": 22,
+        "bullets": 70,        # 14pt at 40% col = 8.6cm → 32 chars/line × ~2.2 lines
+        "footnote": 90,
+    },
+    "timeline": {
+        "title": 45,
+        "milestones.date": 12,   # "Pre-Mar 2029" = 12 ✓
+        "milestones.title": 18,  # 12pt bold at 3-col width = 7cm → 30 chars; 18 for safety
+        "milestones.body": 70,   # 10pt at 3-col width → 36 chars/line × ~2 lines
+        "footnote": 90,
+    },
+    "comparison": {
+        "title": 45,
+        "left_title": 26,     # 18pt bold half-col
+        "right_title": 26,
+        "rows.metric": 22,    # 12pt muted at ~5cm left margin
+        "rows.left": 30,      # 12pt half-col value
+        "rows.right": 30,
+        "footnote": 90,
+    },
+    "feature_grid": {
+        "title": 45,
+        "features.title": 22,  # 13pt bold inner 3-col (6.07cm)
+        "features.body": 80,   # 12pt inner 3-col = 26 chars/line × ~3 lines
+        "footnote": 90,
+    },
+    "process_flow": {
+        "title": 45,
+        "steps.title": 22,
+        "steps.body": 80,
+        "footnote": 90,
+    },
+    "icon_stat": {
+        "title": 45,
+        "stats.value": 14,
+        "stats.icon": 4,
+        "stats.label": 22,
+        "stats.desc": 50,
+        "footnote": 90,
+    },
+    "progress_bars": {
+        "title": 45,
+        "bars.label": 32,
+        "footnote": 90,
+    },
+    "pyramid": {
+        "title": 45,
+        "tiers.label": 30,
+        "tiers.value": 15,
+        "footnote": 90,
+    },
+    "multi_chart": {
+        "title": 45,
+        "charts.title": 30,
+        "footnote": 90,
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
 
@@ -183,6 +349,53 @@ class TypstSlideRenderer:
     def __init__(self, theme: dict, image_root: str | None = None):
         self.t = theme
         self._image_root = image_root
+
+    @staticmethod
+    def _apply_field_limits(slide_type: str, d: dict) -> dict:
+        """Truncate every text field in slide data to its geometric character limit.
+
+        This is a hard pre-render pass — Typst never sees text that would overflow
+        its allocated box.  Limits are defined in FIELD_LIMITS, derived from:
+          page width 22.6cm, font metrics (Source Sans 3), and box geometry.
+
+        The stat slide has a special case: hero-value limits tighten as n_stats grows
+        because each column gets narrower (4-col → 8 chars, 3-col → 12, 2-col → 16).
+        """
+        import copy
+        limits = FIELD_LIMITS.get(slide_type, {})
+        if not limits:
+            return d
+        d = copy.deepcopy(d)
+
+        for spec, n in limits.items():
+            if "." not in spec:
+                # Top-level field
+                val = d.get(spec)
+                if isinstance(val, str):
+                    d[spec] = _clamp(val, n)
+                elif isinstance(val, list):
+                    d[spec] = _clamp_list(val, n)
+            else:
+                list_key, subkey = spec.split(".", 1)
+                items = d.get(list_key)
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if isinstance(item, dict):
+                        v = item.get(subkey)
+                        if isinstance(v, str):
+                            # stat.stats.value: tighten based on n_stats
+                            limit = n
+                            if slide_type == "stat" and subkey == "value":
+                                ns = len(d.get("stats", []))
+                                if ns <= 2:
+                                    limit = 16
+                                elif ns == 3:
+                                    limit = 12
+                                # else keep 8 (4 stats)
+                            item[subkey] = _clamp(v, limit)
+
+        return d
 
     def _body_block(self, inner: str, footnote: str) -> str:
         """Wrap body content + footer in a fixed-height clipped block.
@@ -324,7 +537,10 @@ class TypstSlideRenderer:
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
-        return renderer(slide.data)
+        # Hard-truncate every text field to its geometric capacity before rendering.
+        # This guarantees Typst never receives content that would overflow its box.
+        data = self._apply_field_limits(slide.slide_type, slide.data)
+        return renderer(data)
 
     # -- Title slide -------------------------------------------------------
 

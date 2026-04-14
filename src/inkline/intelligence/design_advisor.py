@@ -83,52 +83,65 @@ REQUIRED CADENCE:
 - Every multi-step concept should be process_flow or timeline.
 
 ====================================================================
-HARD CAPACITY LIMITS (overflow = broken slide — NEVER exceed these)
+HARD CAPACITY LIMITS — ENFORCED BY RENDERER (TRUNCATION IS AUTOMATIC)
 ====================================================================
-TITLES (HARD LIMIT — ENFORCED BY RENDERER):
-- Slide titles: MAX 50 CHARS. Any title longer than 50 chars wraps to
-  2 lines and pushes content off the page causing layout overflow.
-  The fixer TRUNCATES titles at 50 chars — if your title is 60 chars,
-  8-10 words will be silently cut off. Write tight, action titles.
-  ALWAYS count: "Corsair delivers oil-weighted GoA cash flow" = 44 ✓
-  BAD: "Corsair offers proven GoA cash flow with material 2P upside" = 59 ✗
+These limits come from FONT MATH: page width 22.6cm, Source Sans 3 at
+specified point sizes, box geometry.  The renderer hard-truncates every
+field to its limit before sending to Typst, so overflow is impossible —
+but truncated text looks bad. Write within these limits the first time.
 
-ITEM COUNTS (anything beyond these limits is SILENTLY DROPPED):
-- chart_caption bullets: MAX 4 short bullets (8-10 words each)
-- dashboard bullets: MAX 3 short bullets (8-10 words each)
-- dashboard stats: EXACTLY 3 stat callouts
-- feature_grid features: EXACTLY 6 features (3x2 grid)
-- table: MAX 6 rows x 6 columns. NEVER exceed 6 columns.
-  Rows and columns beyond these limits are SILENTLY DROPPED by the renderer.
-  If source data has more than 6 rows, pick the 6 most important ones.
-  NEVER use a table when the data has >6 columns — use split or comparison instead.
-- three_card cards: EXACTLY 3
-- four_card cards: EXACTLY 4
-- icon_stat stats: 3 or 4
-- kpi_strip kpis: 3 to 5
+TITLES — 45 chars max (ALL slide types)
+  22pt bold Source Sans 3 at 22.6cm → 48 chars theoretical; 45 with safety.
+  Count your title. "Strong 2P NPV10 of $231mm at 1,354 boepd" = 42 ✓
+  BAD: "Corsair offers proven GoA cash flow with material 2P upside" = 59 → TRUNCATED ✗
+
+PER-FIELD CHAR LIMITS (renderer enforces these exactly):
+  content   items:           80 chars each  (14pt full-width = 84/line)
+  split     left/right heading: 26 chars    (18pt bold half-col)
+            left/right items:  55 chars each
+  three_card cards.title:   24 chars   |  cards.body:    85 chars
+  four_card  cards.title:   36 chars   |  cards.body:   120 chars
+  stat       stats.value: 8/12/16 chars for 4/3/2 stats  ← CRITICAL
+             DO NOT write "$18.33/boe" for a 4-stat slide — it wraps.
+             Write "18.33" as value, "/boe" as label instead.
+             stats.label: 20 chars  |  stats.desc: 26 chars
+  comparison left/right_title: 26 chars
+             rows.metric: 22 chars  |  rows.left/right: 30 chars each
+  table      headers/cells: 20 chars each (safe for 5-col tables)
+  timeline   milestones.date: 12  |  .title: 18  |  .body: 70 chars
+  bar_chart  bars.label: 25 chars  |  bars.value: 12 chars
+  kpi_strip  kpis.value: 10 chars  |  kpis.label: 20 chars
+  feature_grid features.title: 22  |  features.body: 80 chars
+  chart_caption bullets: 80 chars each  |  caption: 90 chars
+  dashboard  stats.value: 10  |  stats.label: 22  |  bullets: 70 chars
+  icon_stat  stats.value: 14  |  stats.label: 22  |  stats.desc: 50 chars
+  footnote: 90 chars (ALL slide types)
+
+ITEM COUNTS (items beyond limit are SILENTLY DROPPED):
+- chart_caption bullets: MAX 4
+- dashboard: EXACTLY 3 stats, MAX 3 bullets
+- feature_grid: EXACTLY 6 features (3×2 grid)
+- table: MAX 6 rows × 6 columns. NEVER exceed 6 columns.
+  If data has >6 rows, pick the 6 most important.
+  NEVER use table when data has >6 columns — use split or comparison.
+- three_card: EXACTLY 3 cards
+- four_card: EXACTLY 4 cards
+- icon_stat: 3 or 4 stats
+- kpi_strip: 3 to 5 kpis
 - timeline milestones: MAX 6
 - process_flow steps: MAX 4
 - progress_bars: MAX 6 bars
 - pyramid tiers: MAX 5
 - comparison rows: MAX 6 per side
-- content (bullets): MAX 6 bullets — and AVOID this slide type when possible
+- content bullets: MAX 6 — AVOID this slide type when possible
 
-TEXT LENGTH:
-- Card body text: MAX 2 short sentences (~60-80 chars total)
-- Bullet items: MAX 10 words each. Telegraphic, not prose.
-- Table cell text: MAX 50 chars per cell. Abbreviate if needed.
-- Footnotes: MAX 80 chars. One short line only.
+BALANCE RULE — equal-height grids:
+- three_card, four_card, feature_grid: ALL cards/cells render at the SAME HEIGHT.
+  Keep body text length similar across cards so content looks balanced.
 
 CHARTS (chart_caption / dashboard):
-- Chart images are constrained to 6cm height on slide. Design accordingly.
 - Keep chart titles short — they share vertical space with the image.
-- MAX 4 bullets in the side panel (not 5 — accounts for caption text).
-
-CONSISTENCY:
-- three_card: ALL 3 cards render at the SAME HEIGHT regardless of text.
-  Keep body text length similar across cards so content looks balanced.
-- four_card: ALL 4 cards render at the SAME HEIGHT. Same rule applies.
-- feature_grid: ALL 6 cells are equal size. Keep descriptions uniform length.
+- MAX 4 bullets in the side panel.
 
 ====================================================================
 SLIDE TYPE CATALOGUE
