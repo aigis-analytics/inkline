@@ -156,7 +156,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
     """
     global _last_request_time
 
-    INACTIVITY_LIMIT = 180   # seconds of silence before declaring stuck
+    INACTIVITY_LIMIT = 300   # seconds of silence before declaring stuck
     HARD_CAP = 3600          # absolute ceiling regardless of activity (1 hr)
 
     try:
