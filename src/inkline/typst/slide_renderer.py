@@ -398,9 +398,18 @@ class TypstSlideRenderer:
         items = _ensure_string_items(d.get("items", []))[:self.MAX_BULLETS]
         footnote = d.get("footnote", "")
 
+        # Auto-shrink: more bullets → smaller font so everything fits in 9cm body
+        n_items = len(items)
+        if n_items <= 5:
+            item_font = 12
+        elif n_items <= 7:
+            item_font = 11
+        else:
+            item_font = 10
+
         bullets = "\n    ".join(f"- {_esc(item)}" for item in items)
 
-        body = f"""text(size: 12pt, fill: {_rgb(t['text'])})[
+        body = f"""text(size: {item_font}pt, fill: {_rgb(t['text'])})[
     {bullets}
   ]"""
 
@@ -1222,6 +1231,15 @@ class TypstSlideRenderer:
         right_items = right_items[:self.MAX_COMPARISON_ROWS]
         rows = []
         max_rows = max(len(left_items), len(right_items))
+
+        # Auto-shrink: more rows → smaller font + tighter inset + less spacing
+        if max_rows <= 4:
+            row_font, row_inset, row_gap = 10, 8, "4pt"
+        elif max_rows <= 6:
+            row_font, row_inset, row_gap = 9, 6, "3pt"
+        else:
+            row_font, row_inset, row_gap = 8, 5, "2pt"
+
         for i in range(max_rows):
             l_item = left_items[i] if i < len(left_items) else {}
             r_item = right_items[i] if i < len(right_items) else {}
@@ -1234,17 +1252,17 @@ class TypstSlideRenderer:
             rows.append(f"""    grid(
       columns: (1fr, 1fr),
       gutter: 14pt,
-      block(fill: {fill}, inset: 8pt, width: 100%, radius: 2pt)[
-        #text(size: 10pt, fill: {_rgb(t['muted'])})[{l_label}]
-        {f'#h(1fr)#text(size: 10pt, weight: "bold", fill: {_rgb(t["text"])})[{l_value}]' if l_value else ''}
+      block(fill: {fill}, inset: {row_inset}pt, width: 100%, radius: 2pt)[
+        #text(size: {row_font}pt, fill: {_rgb(t['muted'])})[{l_label}]
+        {f'#h(1fr)#text(size: {row_font}pt, weight: "bold", fill: {_rgb(t["text"])})[{l_value}]' if l_value else ''}
       ],
-      block(fill: {fill}, inset: 8pt, width: 100%, radius: 2pt)[
-        #text(size: 10pt, fill: {_rgb(t['muted'])})[{r_label}]
-        {f'#h(1fr)#text(size: 10pt, weight: "bold", fill: {_rgb(t["text"])})[{r_value}]' if r_value else ''}
+      block(fill: {fill}, inset: {row_inset}pt, width: 100%, radius: 2pt)[
+        #text(size: {row_font}pt, fill: {_rgb(t['muted'])})[{r_label}]
+        {f'#h(1fr)#text(size: {row_font}pt, weight: "bold", fill: {_rgb(t["text"])})[{r_value}]' if r_value else ''}
       ],
     )""")
 
-        rows_str = "\n    v(2pt)\n".join(rows)
+        rows_str = f"\n    v({row_gap})\n".join(rows)
 
         body = f"""// Column headers
   grid(
