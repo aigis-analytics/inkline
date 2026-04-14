@@ -875,6 +875,17 @@ class DesignAdvisor:
             "- PREFER charts over tables when data has a story shape",
             "- DO NOT invent facts — key_points must come from the source only",
             "",
+            "EXHIBIT-FIRST MANDATE (STRICT):",
+            "- Any section containing numbers, financial data, tables, %, or metric",
+            "  values MUST be assigned chart_caption, chart, dashboard, or multi_chart.",
+            "  content / split / stat / table are FALLBACK ONLY — use only for purely",
+            "  narrative paragraphs with zero quantitative data.",
+            "- If pre-rendered chart PNGs are listed in the user prompt, USE THEM.",
+            "  Reference the filename in notes (e.g. 'chart_caption: prod_field_2025.png').",
+            "  Do NOT request a new chart when an existing PNG covers the same data.",
+            "- Target: ≥60% of content slides must be visual types",
+            "  (chart_caption, chart, dashboard, multi_chart, stat, kpi_strip, icon_stat).",
+            "",
             "OUTPUT FORMAT — JSON array, each entry:",
             '  {"slide_type": "...", "title": "...", "source_index": N,',
             '   "key_points": ["..."], "notes": "..."}',
@@ -909,6 +920,20 @@ class DesignAdvisor:
             parts.append(f"Goal: {goal}")
         if additional_guidance:
             parts.append(f"\nAdditional guidance: {additional_guidance.strip()}")
+
+        # Inject chart inventory if pre-rendered charts are available
+        _charts_dir = Path.home() / ".local/share/inkline/output/charts"
+        if _charts_dir.exists():
+            _chart_files = sorted(_charts_dir.glob("*.png"))
+            if _chart_files:
+                parts.append("\n## Pre-Rendered Charts Available")
+                parts.append(
+                    "These chart PNGs already exist — reference them by filename in your notes "
+                    "instead of requesting new charts for the same data:"
+                )
+                for _cf in _chart_files:
+                    parts.append(f"  {_cf.name}")
+                parts.append("")
 
         parts.append("\n## Content Sections\n")
         for i, sec in enumerate(sections):
