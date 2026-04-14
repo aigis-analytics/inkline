@@ -59,18 +59,15 @@ slides = [
             "title": "Project Corsair: Deal at a Glance",
             "cards": [
                 {
-                    "icon": "🏗️",
-                    "headline": "100% Byron Energy LLC",
+                    "title": "100% Byron Energy LLC",
                     "body": "Delaware entity acquisition (MIPA). Holds 4 GoM shallow-water lease blocks via wholly-owned BOEM-qualified subsidiary. Zero drawn debt at close.",
                 },
                 {
-                    "icon": "🛢️",
-                    "headline": "1,354 boepd Net Production",
+                    "title": "1,354 boepd Net Production",
                     "body": "65% oil-weighted. SM73 salt dome, ~70 mi offshore Louisiana. Three manned platforms. 80% historical drilling success rate (14 wells).",
                 },
                 {
-                    "icon": "📐",
-                    "headline": "12.7 MMboe 2P Reserves",
+                    "title": "12.7 MMboe 2P Reserves",
                     "body": "25-year 2P reserve life. Collarini CPR effective Jul 2025. 2P CPR NPV10: $231.1mm. Near-term 2-well programme: G9 + G8 (1Q/2Q 2026).",
                 },
             ],
