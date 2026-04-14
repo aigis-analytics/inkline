@@ -445,16 +445,17 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
                 ha="center", va="center", fontsize=9, fontweight="bold", color="white")
 
     ax.set_xticks(x)
-    # Keep labels horizontal — much cleaner. Use small font if any label
-    # is long. Reserve generous bottom margin via subplots_adjust.
-    max_label_len = max((len(str(l)) for l in labels), default=0)
-    if max_label_len > 12:
-        ax.set_xticklabels(labels, fontsize=7)
-    elif max_label_len > 8:
-        ax.set_xticklabels(labels, fontsize=8)
+    _ml = max((len(str(l)) for l in labels), default=0)
+    _nl = len(labels)
+    if _ml > 10 or _nl > 6:
+        ax.set_xticklabels(labels, fontsize=7, rotation=30, ha="right")
+        fig.subplots_adjust(bottom=0.28)
+    elif _ml > 7 or _nl > 4:
+        ax.set_xticklabels(labels, fontsize=8, rotation=20, ha="right")
+        fig.subplots_adjust(bottom=0.24)
     else:
         ax.set_xticklabels(labels, fontsize=9)
-    fig.subplots_adjust(bottom=0.20)
+        fig.subplots_adjust(bottom=0.20)
     ax.axhline(y=0, color=muted, linewidth=0.5)
     ax.grid(axis="y", alpha=0.2, color=muted)
     fig.tight_layout()
@@ -2934,8 +2935,10 @@ def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, mute
         ax.set_title(chart_title, fontsize=10, fontweight="bold", color=text_color, pad=6)
 
     # Legend — centered below chart
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.18),
-              ncol=n_segs, frameon=False, fontsize=9, labelcolor=text_color)
+    # Use subplots_adjust instead of tight_layout to prevent legend overlap with x-axis label
+    _legend_ncol = min(n_segs, 4)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.28),
+              ncol=_legend_ncol, frameon=False, fontsize=8, labelcolor=text_color)
 
-    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.22, left=0.20, right=0.97, top=0.93)
     return fig
