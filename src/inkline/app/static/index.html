@@ -319,11 +319,71 @@
 </div>
 
 <script>
-const BRIDGE = '';   // same origin — bridge serves this page
-let pendingFilePath = null;
-let lastPdfUrl = null;
+const BRIDGE = '';
+const LS = {
+  MSGS:    'inkline_messages',
+  PDF:     'inkline_last_pdf',
+  FILE_PATH: 'inkline_file_path',
+  FILE_NAME: 'inkline_file_name',
+};
 
-// ── File upload ──────────────────────────────────────────────────────────────
+let pendingFilePath = null;
+let lastPdfFilename = null;
+
+// ── Persistence helpers ───────────────────────────────────────────────────────
+function saveMsgs() {
+  const nodes = document.querySelectorAll('#messages .msg');
+  const items = [];
+  nodes.forEach(n => {
+    // Skip transient "Thinking…" bubbles
+    if (n.classList.contains('thinking')) return;
+    items.push({ role: [...n.classList].find(c => c !== 'msg'), text: n.textContent });
+  });
+  try { localStorage.setItem(LS.MSGS, JSON.stringify(items)); } catch(_) {}
+}
+
+function restoreSession() {
+  // 1. Restore messages
+  try {
+    const raw = localStorage.getItem(LS.MSGS);
+    if (raw) {
+      const items = JSON.parse(raw);
+      // Clear default "Upload a file…" hint if we have history
+      if (items.length) document.getElementById('messages').innerHTML = '';
+      items.forEach(({ role, text }) => _addMessageDOM(role, text));
+    }
+  } catch(_) {}
+
+  // 2. Restore uploaded file badge
+  const fp = localStorage.getItem(LS.FILE_PATH);
+  const fn = localStorage.getItem(LS.FILE_NAME);
+  if (fp && fn) {
+    pendingFilePath = fp;
+    document.getElementById('file-name').textContent = fn;
+    document.getElementById('file-badge').style.display = 'flex';
+    document.getElementById('drop-zone').style.display = 'none';
+  }
+
+  // 3. Restore PDF preview
+  const lastPdf = localStorage.getItem(LS.PDF);
+  if (lastPdf) showPdf(lastPdf, /* skipSave */ true);
+
+  // 4. Reconnect progress if a run is still active on the server
+  fetch('/status')
+    .then(r => r.json())
+    .then(state => {
+      if (state.active || (state.phases && state.phases.length)) {
+        document.getElementById('prog-idle').style.display = 'none';
+        document.getElementById('prog-overall').style.display = '';
+        document.getElementById('prog-phases').style.display = '';
+        updateProgress(state);
+        if (state.active) startProgressTracking();
+      }
+    })
+    .catch(() => {});
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileBadge = document.getElementById('file-badge');
@@ -338,8 +398,12 @@ dropZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); });
 clearFile.addEventListener('click', () => {
-  pendingFilePath = null; fileBadge.style.display = 'none';
-  dropZone.style.display = ''; fileInput.value = '';
+  pendingFilePath = null;
+  fileBadge.style.display = 'none';
+  dropZone.style.display = '';
+  fileInput.value = '';
+  localStorage.removeItem(LS.FILE_PATH);
+  localStorage.removeItem(LS.FILE_NAME);
 });
 
 async function uploadFile(file) {
@@ -354,6 +418,10 @@ async function uploadFile(file) {
       fileName.textContent = file.name;
       fileBadge.style.display = 'flex';
       dropZone.style.display = 'none';
+      try {
+        localStorage.setItem(LS.FILE_PATH, d.path);
+        localStorage.setItem(LS.FILE_NAME, file.name);
+      } catch(_) {}
       addMessage('system', `File ready: ${file.name}`);
     } else {
       addMessage('system', `Upload failed: ${d.error}`);
@@ -363,17 +431,23 @@ async function uploadFile(file) {
   }
 }
 
-// ── Chat ─────────────────────────────────────────────────────────────────────
+// ── Chat ──────────────────────────────────────────────────────────────────────
 const messages = document.getElementById('messages');
 const promptEl = document.getElementById('prompt');
 const sendBtn  = document.getElementById('send');
 
-function addMessage(role, text) {
+function _addMessageDOM(role, text) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
   div.textContent = text;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
+  return div;
+}
+
+function addMessage(role, text) {
+  const div = _addMessageDOM(role, text);
+  saveMsgs();
   return div;
 }
 
@@ -394,13 +468,15 @@ async function sendMessage() {
     dropZone.style.display = '';
     fileInput.value = '';
     fileName.textContent = '';
+    localStorage.removeItem(LS.FILE_PATH);
+    localStorage.removeItem(LS.FILE_NAME);
   }
 
   addMessage('user', text);
   promptEl.value = '';
   sendBtn.disabled = true;
 
-  const thinking = addMessage('assistant thinking', 'Thinking…');
+  const thinking = _addMessageDOM('assistant thinking', 'Thinking…');
   startProgressTracking();
 
   try {
@@ -438,14 +514,13 @@ function checkForPdf(responseText) {
   if (match) {
     const absPath = match[1];
     const parts = absPath.replace(/\\/g, '/').split('/');
-    const fn = parts[parts.length - 1];
-    showPdf(fn);
+    showPdf(parts[parts.length - 1]);
   }
 }
 
-function showPdf(filename) {
+function showPdf(filename, skipSave) {
   const url = `/output/${filename}?t=${Date.now()}`;
-  lastPdfUrl = url;
+  lastPdfFilename = filename;
   pdfFrame.src = url;
   pdfFrame.style.display = 'block';
   emptyState.style.display = 'none';
@@ -453,6 +528,9 @@ function showPdf(filename) {
   downloadBtn.href = url;
   downloadBtn.download = filename;
   downloadBtn.style.display = 'inline-block';
+  if (!skipSave) {
+    try { localStorage.setItem(LS.PDF, filename); } catch(_) {}
+  }
 }
 
 // ── Pipeline progress tracker ─────────────────────────────────────────────────
@@ -461,7 +539,6 @@ let progPollTimer = null;
 
 function startProgressTracking() {
   stopProgressTracking();
-  // Show the panel, hide idle state
   document.getElementById('prog-idle').style.display = 'none';
   document.getElementById('prog-overall').style.display = '';
   document.getElementById('prog-phases').style.display = '';
@@ -472,7 +549,6 @@ function startProgressTracking() {
   };
   progEs.onerror = () => {
     if (progEs) { progEs.close(); progEs = null; }
-    // Fall back to REST polling every 3s
     progPollTimer = setInterval(() => {
       fetch('/status')
         .then(r => r.json())
@@ -496,7 +572,6 @@ function fmtElapsed(s) {
 function updateProgress(state) {
   if (!state || !Array.isArray(state.phases)) return;
 
-  // Overall bar
   const pct = state.complete ? 100 : (state.pct || 0);
   document.getElementById('prog-bar').style.width = pct + '%';
   document.getElementById('prog-pct').textContent = state.complete ? '100%' : (pct > 0 ? pct + '%' : '—');
@@ -506,7 +581,6 @@ function updateProgress(state) {
   container.innerHTML = '';
 
   state.phases.forEach(phase => {
-    // Phase row
     const row = document.createElement('div');
     row.className = 'phase-row';
 
@@ -537,7 +611,6 @@ function updateProgress(state) {
     row.appendChild(info);
     container.appendChild(row);
 
-    // Sub-progress: per-slide design (inside design_advisor_llm)
     if (phase.name === 'design_advisor_llm' && phase.status === 'running' &&
         state.slide_design_total > 0) {
       const sub = document.createElement('div');
@@ -557,7 +630,6 @@ function updateProgress(state) {
       container.appendChild(sub);
     }
 
-    // Vision dots (inside export_pdf_with_audit)
     if (phase.name === 'export_pdf_with_audit' && state.vision_total > 0) {
       const dots = document.createElement('div');
       dots.className = 'vision-dots';
@@ -570,7 +642,6 @@ function updateProgress(state) {
     }
   });
 
-  // Error notice
   if (state.error) {
     const err = document.createElement('div');
     err.style.cssText = 'padding:8px 16px;font-size:11px;color:var(--error);word-break:break-word;';
@@ -578,15 +649,16 @@ function updateProgress(state) {
     container.appendChild(err);
   }
 
-  if (state.complete || state.error) {
-    stopProgressTracking();
-  }
+  if (state.complete || state.error) stopProgressTracking();
 }
 
-// ── Keyboard shortcut: Ctrl/Cmd+Enter to send ────────────────────────────────
+// ── Keyboard shortcut ─────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendMessage();
 });
+
+// ── Boot: restore persisted session ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', restoreSession);
 </script>
 </body>
 </html>
