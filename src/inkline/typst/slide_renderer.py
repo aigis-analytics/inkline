@@ -191,10 +191,10 @@ class TypstSlideRenderer:
         """
         t = self.t
         return (
-            f"block(height: {self.BODY_H_CM}cm, clip: true, width: 100%)[\\n"
-            f"  {inner}\\n\\n"
-            f"  {footer_bar(footnote, t['border'], t['muted'])}\\n"
-            f"]"
+            f"block(height: {self.BODY_H_CM}cm, clip: true, width: 100%)[#{{\n"
+            f"  {inner}\n\n"
+            f"  {footer_bar(footnote, t['border'], t['muted'])}\n"
+            f"}}]"
         )
 
     def _image_markup(self, image_path: str, **kwargs) -> str:
