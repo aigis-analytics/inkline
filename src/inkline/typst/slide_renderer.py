@@ -418,6 +418,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -556,6 +558,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -655,6 +659,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -680,6 +686,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -698,11 +706,10 @@ class TypstSlideRenderer:
         bars = d.get("bars", [])[:self.MAX_BARS]
         footnote = d.get("footnote", "")
 
-        colors = t.get("chart_colors", ["#3fb950", "#58a6ff", "#f0883e", "#d2a8ff"])
+        accent = t.get("accent", "#6366F1")
         bar_markups = []
         for i, b in enumerate(bars):
-            color = colors[i % len(colors)]
-            bar_markups.append(bar_row(b["label"], b["value"], b["pct"], color, t["muted"]))
+            bar_markups.append(bar_row(b["label"], b["value"], b["pct"], accent, t["muted"]))
 
         bars_str = "\n  ".join(bar_markups)
 
@@ -711,6 +718,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -748,6 +757,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1000,6 +1011,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1109,6 +1122,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1157,6 +1172,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1215,6 +1232,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
@@ -1300,6 +1319,8 @@ class TypstSlideRenderer:
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
 
   {section_badge(section, t['muted'])}
   v(6pt)
