@@ -125,6 +125,46 @@ MULTI_CHART_SLOT_SIZES: dict[str, list[tuple[float, float]]] = {
         ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [2] bot
         ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [3] bot (3-col)
     ],
+    # three_top_wide: 3 equal charts top (45%) + 1 full-width chart bottom (55%).
+    # Inverse of top_bottom. Index 0-2 = top row; index 3 = bottom wide.
+    "three_top_wide": [
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [0] top-left
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [1] top-center
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.45 - _MC_TOH),  # [2] top-right
+        (_MC_W, (_MC_BH - _MC_G8) * 0.55 - _MC_TOH),                       # [3] bottom wide
+    ],
+    # left_stack: wide chart left (3fr) + 2 stacked charts right (2fr).
+    # Right stack gutter = 10pt. Index 0 = left; 1 = right-top; 2 = right-bottom.
+    "left_stack": [
+        ((_MC_W - _MC_G12) * 3 / 5, _MC_BH - _MC_TOH),                  # [0] left hero
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [1] right top
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [2] right bottom
+    ],
+    # right_stack: 2 stacked charts left (2fr) + wide chart right (3fr).
+    # Index 0 = left-top; 1 = left-bottom; 2 = right hero.
+    "right_stack": [
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [0] left top
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [1] left bottom
+        ((_MC_W - _MC_G12) * 3 / 5, _MC_BH - _MC_TOH),                   # [2] right hero
+    ],
+    # mosaic_5: row of 2 charts (top 50%) + row of 3 charts (bottom 50%).
+    # Index 0-1 = top row; index 2-4 = bottom row.
+    "mosaic_5": [
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G8) * 0.50 - _MC_TOH),         # [0] top-left
+        ((_MC_W - _MC_G10) / 2, (_MC_BH - _MC_G8) * 0.50 - _MC_TOH),         # [1] top-right
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.50 - _MC_TOH),     # [2] bot-left
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.50 - _MC_TOH),     # [3] bot-center
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G8) * 0.50 - _MC_TOH),     # [4] bot-right
+    ],
+    # six_grid: 3 columns × 2 rows = 6 equal charts. gutter 10pt.
+    "six_grid": [
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row0 col0
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row0 col1
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row0 col2
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row1 col0
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row1 col1
+        ((_MC_W - 2 * _MC_G10) / 3, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # row1 col2
+    ],
 }
 
 # Convenience accessor for _auto_render_charts
@@ -1701,15 +1741,20 @@ class TypstSlideRenderer:
           section: str
           title: str
           layout: one of:
-            "equal_2"      — two equal columns (50/50)
-            "equal_3"      — three equal columns (33/33/33)
-            "equal_4"      — four equal columns (25/25/25/25)
-            "hero_left"    — two columns 65/35
-            "hero_left_3"  — three columns 50/25/25 (hero + 2 small)
-            "hero_right_3" — three columns 25/25/50 (2 small + hero)
-            "quad"         — 2×2 grid (4 charts, equal)
-            "top_bottom"   — single full-width chart on top, two below (or vice versa)
-          charts: list of {image_path, title?}   (2–4 charts; 4 for quad/top_bottom)
+            "equal_2"        — two equal columns (50/50)
+            "equal_3"        — three equal columns (33/33/33)
+            "equal_4"        — four equal columns (25/25/25/25)
+            "hero_left"      — two columns 65/35
+            "hero_left_3"    — three columns 50/25/25 (hero + 2 small)
+            "hero_right_3"   — three columns 25/25/50 (2 small + hero)
+            "quad"           — 2×2 grid (4 charts, equal)
+            "top_bottom"     — 1 wide chart top + up to 3 charts below
+            "three_top_wide" — 3 equal charts top (45%) + 1 wide chart bottom (55%)
+            "left_stack"     — 1 wide hero left (3fr) + 2 stacked charts right (2fr)
+            "right_stack"    — 2 stacked charts left (2fr) + 1 wide hero right (3fr)
+            "mosaic_5"       — 2 charts top row (50%) + 3 charts bottom row (50%)
+            "six_grid"       — 3×2 grid of 6 equal charts
+          charts: list of {image_path, title?}   (2–6 charts depending on layout)
           footnote: str
         """
         t = self.t
@@ -1796,6 +1841,104 @@ class TypstSlideRenderer:
     spacing: 8pt,
     {top_cell},
     {bot_grid}
+  )"""
+
+        elif layout == "three_top_wide":
+            # 3 equal charts on top (45% height) + 1 full-width chart on bottom (55%)
+            charts = charts[:4]
+            while len(charts) < 4:
+                charts.append({})
+            top_h = _slot_h(0)   # same for indices 0-2
+            bot_h = _slot_h(3)
+            top_cells = ",\n      ".join(_chart_cell(c, height=top_h) for c in charts[:3])
+            bot_cell = _chart_cell(charts[3], height=bot_h) if charts[3] else "block(width:100%)[]"
+            grid_body = f"""stack(
+    spacing: 8pt,
+    grid(
+      columns: (1fr, 1fr, 1fr),
+      gutter: 10pt,
+      {top_cells},
+    ),
+    {bot_cell}
+  )"""
+
+        elif layout == "left_stack":
+            # Wide left chart (3fr) + 2 stacked right charts (2fr)
+            charts = charts[:3]
+            while len(charts) < 3:
+                charts.append({})
+            left_h = _slot_h(0)
+            right_h = _slot_h(1)  # both right cells same height
+            left_cell = _chart_cell(charts[0], height=left_h)
+            right_top = _chart_cell(charts[1], height=right_h)
+            right_bot = _chart_cell(charts[2], height=right_h)
+            grid_body = f"""grid(
+    columns: (3fr, 2fr),
+    gutter: 12pt,
+    {left_cell},
+    stack(
+      spacing: 10pt,
+      {right_top},
+      {right_bot},
+    ),
+  )"""
+
+        elif layout == "right_stack":
+            # 2 stacked left charts (2fr) + wide right chart (3fr)
+            charts = charts[:3]
+            while len(charts) < 3:
+                charts.append({})
+            left_h = _slot_h(0)   # both left cells same height
+            right_h = _slot_h(2)
+            left_top = _chart_cell(charts[0], height=left_h)
+            left_bot = _chart_cell(charts[1], height=left_h)
+            right_cell = _chart_cell(charts[2], height=right_h)
+            grid_body = f"""grid(
+    columns: (2fr, 3fr),
+    gutter: 12pt,
+    stack(
+      spacing: 10pt,
+      {left_top},
+      {left_bot},
+    ),
+    {right_cell},
+  )"""
+
+        elif layout == "mosaic_5":
+            # Row of 2 charts (top 50%) + row of 3 charts (bottom 50%)
+            charts = charts[:5]
+            while len(charts) < 5:
+                charts.append({})
+            top_h = _slot_h(0)   # indices 0-1
+            bot_h = _slot_h(2)   # indices 2-4
+            top_cells = ",\n      ".join(_chart_cell(c, height=top_h) for c in charts[:2])
+            bot_cells = ",\n      ".join(_chart_cell(c, height=bot_h) for c in charts[2:5])
+            grid_body = f"""stack(
+    spacing: 8pt,
+    grid(
+      columns: (1fr, 1fr),
+      gutter: 10pt,
+      {top_cells},
+    ),
+    grid(
+      columns: (1fr, 1fr, 1fr),
+      gutter: 10pt,
+      {bot_cells},
+    ),
+  )"""
+
+        elif layout == "six_grid":
+            # 3×2 grid: 6 equal charts
+            charts = charts[:6]
+            while len(charts) < 6:
+                charts.append({})
+            cell_h = _slot_h(0)  # all cells equal
+            cells = ",\n    ".join(_chart_cell(c, height=cell_h) for c in charts)
+            grid_body = f"""grid(
+    columns: (1fr, 1fr, 1fr),
+    rows: (auto, auto),
+    gutter: 10pt,
+    {cells},
   )"""
 
         else:

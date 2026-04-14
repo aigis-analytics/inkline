@@ -165,12 +165,17 @@ VISUAL HEROES (prefer these):
 - chart: Bare embedded chart image (full width). data: {section, title, image_path, footnote}
   Use ONLY when the chart speaks entirely for itself. Prefer chart_caption.
 - multi_chart: Multiple charts in a configurable grid. data: {section, title, layout, charts [{image_path, title?}], footnote}
-  Layouts: "equal_2" (50/50), "equal_3" (33/33/33), "equal_4" (25x4), "hero_left" (65/35),
-           "hero_left_3" (50/25/25), "hero_right_3" (25/25/50), "quad" (2×2), "top_bottom" (wide top + row below).
+  Single-row layouts: "equal_2" (2 charts 50/50), "equal_3" (3 charts 33/33/33), "equal_4" (4 charts 25×25×25×25),
+    "hero_left" (2 charts 65/35), "hero_left_3" (3 charts 50/25/25), "hero_right_3" (3 charts 25/25/50).
+  Two-row layouts: "quad" (4 charts 2×2), "top_bottom" (1 wide top + 2-3 below),
+    "three_top_wide" (3 small top + 1 wide bottom = 4 total), "mosaic_5" (2 top + 3 bottom = 5 total).
+  Asymmetric layouts: "left_stack" (1 hero left + 2 stacked right = 3 total),
+    "right_stack" (2 stacked left + 1 hero right = 3 total), "six_grid" (3×2 = 6 charts).
   Use for: Pareto-style multi-exhibit slides — market dashboards, 4-panel data pages, 3-donut rows,
-           side-by-side comparisons with asymmetric emphasis.
+           side-by-side comparisons, mosaic analysis pages, comprehensive 5-6 exhibit summaries.
   Each chart in `charts` list needs an image_path AND a chart_request to auto-render.
-  HARD CAPS: equal_2/hero_left=2 charts, equal_3/hero_left_3/hero_right_3=3 charts, equal_4/quad/top_bottom=4 charts.
+  CHART COUNTS: equal_2/hero_left=2, equal_3/hero_left_3/hero_right_3/left_stack/right_stack=3,
+    equal_4/quad/top_bottom/three_top_wide=4, mosaic_5=5, six_grid=6.
 - bar_chart: Native horizontal bars. data: {section, title, bars [{label, value, pct (0-100)}], footnote}
 - progress_bars: Labelled percentage bars. data: {section, title, bars [{label, pct, value?}], footnote}
 
@@ -839,7 +844,10 @@ class DesignAdvisor:
             "  dashboard          — chart PNG (left 60%) + 3 stats + 3 bullets (right)",
             "  chart_caption      — chart PNG (left 65%) + key takeaways panel (right)",
             "  chart              — full-width chart PNG (no panel, let image speak)",
-            "  multi_chart        — 2-4 chart PNGs in a grid layout",
+            "  multi_chart        — 2-6 chart PNGs in a grid layout. Available layouts:",
+            "    Single-row: equal_2 (2), equal_3 (3), equal_4 (4), hero_left (2), hero_left_3 (3), hero_right_3 (3)",
+            "    Two-row:    quad (4 in 2×2), top_bottom (1+2-3), three_top_wide (3+1), mosaic_5 (2+3)",
+            "    Asymmetric: left_stack (hero+2 stacked), right_stack (2 stacked+hero), six_grid (3×2=6)",
             "",
             "CHART TYPES (embed inside chart_caption / dashboard / chart / multi_chart):",
             "Specify chart_type in the notes field. A matching pre-rendered PNG can be",
@@ -857,6 +865,7 @@ class DesignAdvisor:
             "  Two cases / scenarios side-by-side                     → comparison",
             "  3-6 headline metrics                                   → stat or kpi_strip",
             "  4+ assets or features to compare                       → dashboard or multi_chart",
+            "  Data-rich section with 3-6 distinct charts             → multi_chart (mosaic_5/six_grid/quad)",
             "  Timeline of events / milestones                        → timeline",
             "  Process / steps / workflow                             → process_flow",
             "  Single dominant chart with context                     → chart_caption",
