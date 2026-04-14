@@ -624,7 +624,8 @@ def _render_heatmap(data, *, colors, accent, bg, text_color, muted, width, heigh
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
 
-    matrix = np.array(data.get("matrix", [[]]))
+    raw = data.get("matrix") or data.get("values", [[]])
+    matrix = np.array(raw) if raw else np.array([[]])
     x_labels = data.get("x_labels", [])
     y_labels = data.get("y_labels", [])
     cmap = data.get("colormap", "RdYlGn")
@@ -731,7 +732,7 @@ def _render_gauge(data, *, colors, accent, bg, text_color, muted, width, height)
     """
     import numpy as np
 
-    fig, ax = _plt.subplots(figsize=(width, height * 0.7))
+    fig, ax = _plt.subplots(figsize=(width, height * 0.9))
     fig.patch.set_facecolor(bg)
 
     value = data.get("value", 0)
@@ -761,15 +762,15 @@ def _render_gauge(data, *, colors, accent, bg, text_color, muted, width, height)
             color=accent, linewidth=3, solid_capstyle="round")
     ax.plot(0, 0, "o", color=accent, markersize=8)
 
-    # Value text
-    ax.text(0, -0.15, f"{value:.0f}%", ha="center", va="center",
-            fontsize=28, fontweight="bold", color=text_color)
+    # Value text — sits below the arc, clear of the needle pivot
+    ax.text(0, -0.10, f"{value:.0f}%", ha="center", va="center",
+            fontsize=20, fontweight="bold", color=text_color)
     if label:
-        ax.text(0, -0.35, label, ha="center", va="center",
-                fontsize=12, color=muted)
+        ax.text(0, -0.42, label, ha="center", va="center",
+                fontsize=8, color=muted)
 
     ax.set_xlim(-1.2, 1.2)
-    ax.set_ylim(-0.5, 1.1)
+    ax.set_ylim(-0.60, 1.1)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
@@ -1606,7 +1607,17 @@ def _render_infographic_ladder(data, *, colors, accent, bg, text_color, muted, w
     ax.set_facecolor(bg)
     ax.axis("off")
 
-    steps = data.get("steps", [])[:6]
+    steps = data.get("steps", [])
+    if not steps:
+        # Accept "rungs" as alias; convert {title/label, desc/body} → {label, body}
+        steps = [
+            {
+                "label": r.get("title") or r.get("label", ""),
+                "body": r.get("desc") or r.get("body", ""),
+            }
+            for r in data.get("rungs", [])
+        ]
+    steps = steps[:6]
     n = len(steps)
     if n == 0:
         fig.tight_layout()
@@ -2520,12 +2531,42 @@ def _render_entity_flow(data, *, colors, accent, bg, text_color, muted, width, h
     title = data.get("title", "")
 
     # Tier color palette: 1=focal (dark), 2=intermediary (mid), 3=peripheral (light)
+    # Also accept style="primary"→1, style="muted"→2, style="peripheral"→3
+    _style_to_tier = {"primary": 1, "focal": 1, "hub": 1, "intermediary": 2, "muted": 2, "secondary": 2, "peripheral": 3, "external": 3}
     tier_colors = {
         1: colors[0] if colors else accent,
         2: muted,
         3: "#D1D5DB",  # light gray
     }
     tier_text = {1: "white", 2: text_color, 3: text_color}
+
+    # Normalise tier: accept style/type fields as fallback
+    for n in nodes_data:
+        if "tier" not in n:
+            style_val = n.get("style", n.get("type", ""))
+            n["tier"] = _style_to_tier.get(style_val, 2)
+
+    # Auto-assign x,y positions when nodes lack explicit coordinates.
+    # Group by "level" (top-to-bottom tree) or fall back to a single row.
+    if any("x" not in n or "y" not in n for n in nodes_data):
+        from collections import defaultdict as _dd
+        by_level: dict = _dd(list)
+        for n in nodes_data:
+            lvl = n.get("level", n.get("tier", 0))
+            by_level[lvl].append(n)
+        levels = sorted(by_level.keys())
+        n_levels = len(levels)
+        for li, lvl in enumerate(levels):
+            nodes_in_level = by_level[lvl]
+            n_in_level = len(nodes_in_level)
+            y = 0.85 - (li / max(n_levels - 1, 1)) * 0.75
+            for ni, node in enumerate(nodes_in_level):
+                if n_in_level == 1:
+                    x = 0.5
+                else:
+                    x = 0.1 + (ni / (n_in_level - 1)) * 0.80
+                node.setdefault("x", x)
+                node.setdefault("y", y)
 
     # Build node lookup
     node_map = {n["id"]: n for n in nodes_data}
@@ -2769,6 +2810,52 @@ def _render_horizontal_stacked_bar(data, *, colors, accent, bg, text_color, mute
     chart_title = data.get("title", "")
     x_label = data.get("x_label", "")
     grid_interval = data.get("gridline_interval", 25.0)
+
+    # Accept generic {categories, series} format as an alternative input schema.
+    # categories: list of str (row labels)
+    # series: list of {name, values}  (one value per category)
+    if not periods and data.get("categories"):
+        categories = data["categories"]
+        series_list = data.get("series", [])
+        x_max_raw = data.get("x_max")
+        # Single-series absolute mode: render as actual-value horizontal bars (not 100% stacked).
+        # Applies whenever there is exactly one series (with or without explicit x_max).
+        if len(series_list) == 1:
+            _vals = [float(v) for v in series_list[0].get("values", [])]
+            _bar_color = data.get("bar_color") or (colors[0] if colors else accent)
+            bar_h = min(0.82, max(0.30, 4.0 / max(len(categories), 1)))
+            ax.barh(list(range(len(categories))), _vals[:len(categories)],
+                    height=bar_h, color=_bar_color, edgecolor="white", linewidth=0.3)
+            _x_max = x_max_raw if x_max_raw is not None else (max(_vals) if _vals else 1)
+            for ci, v in enumerate(_vals[:len(categories)]):
+                ax.text(v + _x_max * 0.02, ci, f"{v:g}", ha="left", va="center",
+                        fontsize=8, color=text_color)
+            ax.set_yticks(range(len(categories)))
+            ax.set_yticklabels(categories, fontsize=9, color=text_color)
+            ax.set_xlim(0, _x_max * 1.15)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+            ax.spines["bottom"].set_color(muted)
+            ax.tick_params(axis="both", length=0)
+            _legend_name = series_list[0].get("name", "")
+            if _legend_name:
+                from matplotlib.patches import Patch as _Patch
+                ax.legend(handles=[_Patch(facecolor=_bar_color, label=_legend_name)],
+                          loc="lower right", frameon=False, fontsize=8, labelcolor=text_color)
+            if x_label:
+                ax.set_xlabel(x_label, fontsize=8, color=muted)
+            if chart_title:
+                ax.set_title(chart_title, fontsize=10, fontweight="bold", color=text_color, pad=6)
+            fig.tight_layout()
+            return fig
+        # Multi-series: convert to periods/segments for normal 100%-stacked rendering
+        for i, cat in enumerate(categories):
+            segs = [
+                {"label": s.get("name", ""), "value": s.get("values", [])[i] if i < len(s.get("values", [])) else 0}
+                for s in series_list
+            ]
+            periods.append({"label": cat, "segments": segs})
 
     if not periods:
         ax.axis("off")
