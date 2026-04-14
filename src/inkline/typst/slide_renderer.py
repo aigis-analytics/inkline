@@ -163,7 +163,11 @@ class TypstSlideRenderer:
     SLIDE_WIDTH_CM = 23.0   # usable content width (25.4 - 2×1.2)
     SLIDE_HEIGHT_CM = 12.69  # usable content height (14.29 - 2×0.8)
     # After section badge + title + spacing: ~2.5cm header, ~1.5cm footer
-    BODY_HEIGHT_CM = 8.5    # usable body area for content
+    BODY_HEIGHT_CM = 9.0    # usable body area for content
+    # Fixed zone heights (must sum to ≤ SLIDE_HEIGHT_CM)
+    HEADER_H_CM = 2.0    # badge + v(6pt) + title + v(14pt)
+    FOOTER_H_CM = 0.69   # line + v(4pt) + 7pt text
+    BODY_H_CM = 9.0      # clipped content area (11.69 - 2.0 - 0.69)
     # Content limits per slide type
     MAX_BULLETS = 8
     MAX_TABLE_ROWS = 12
@@ -177,6 +181,21 @@ class TypstSlideRenderer:
     def __init__(self, theme: dict, image_root: str | None = None):
         self.t = theme
         self._image_root = image_root
+
+    def _body_block(self, inner: str, footnote: str) -> str:
+        """Wrap body content + footer in a fixed-height clipped block.
+
+        This prevents any native Typst content from overflowing to the next page.
+        The block is 9.0cm tall (hard-clipped). The footer sits at the bottom
+        via v(1fr), which works correctly within a finite-height block.
+        """
+        t = self.t
+        return (
+            f"block(height: {self.BODY_H_CM}cm, clip: true, width: 100%)[\\n"
+            f"  {inner}\\n\\n"
+            f"  {footer_bar(footnote, t['border'], t['muted'])}\\n"
+            f"]"
+        )
 
     def _image_markup(self, image_path: str, **kwargs) -> str:
         """Return Typst image markup, or a placeholder if the file is missing."""
@@ -381,6 +400,10 @@ class TypstSlideRenderer:
 
         bullets = "\n    ".join(f"- {_esc(item)}" for item in items)
 
+        body = f"""text(size: 12pt, fill: {_rgb(t['text'])})[
+    {bullets}
+  ]"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -390,11 +413,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(14pt)
 
-  text(size: 12pt, fill: {_rgb(t['text'])})[
-    {bullets}
-  ]
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Three card slide --------------------------------------------------
@@ -427,6 +446,16 @@ class TypstSlideRenderer:
 
         cards_str = ",\n    ".join(card_markups)
 
+        body = f"""v(1fr)
+
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 14pt,
+    {cards_str}
+  )
+
+  v(1fr)"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -437,17 +466,7 @@ class TypstSlideRenderer:
   v(6pt)
   {slide_title(title, t['text'])}
 
-  v(1fr)
-
-  grid(
-    columns: (1fr, 1fr, 1fr),
-    gutter: 14pt,
-    {cards_str}
-  )
-
-  v(1fr)
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Four card slide ---------------------------------------------------
@@ -471,6 +490,16 @@ class TypstSlideRenderer:
 
         cards_str = ",\n    ".join(card_markups)
 
+        body = f"""v(1fr)
+
+  grid(
+    columns: (1fr, 1fr),
+    gutter: 14pt,
+    {cards_str}
+  )
+
+  v(1fr)"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -479,17 +508,7 @@ class TypstSlideRenderer:
   v(6pt)
   {slide_title(title, t['text'])}
 
-  v(1fr)
-
-  grid(
-    columns: (1fr, 1fr),
-    gutter: 14pt,
-    {cards_str}
-  )
-
-  v(1fr)
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Stat slide --------------------------------------------------------
@@ -554,6 +573,8 @@ class TypstSlideRenderer:
             border=t["border"],
         )
 
+        body = f"""{table_markup}"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -565,9 +586,7 @@ class TypstSlideRenderer:
   text(weight: "bold", size: 18pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
   v(10pt)
 
-  {table_markup}
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Split slide -------------------------------------------------------
@@ -584,16 +603,7 @@ class TypstSlideRenderer:
         left_bullets = "\n      ".join(f"- {_esc(item)}" for item in left_items[:self.MAX_BULLETS])
         right_bullets = "\n      ".join(f"- {_esc(item)}" for item in right_items[:self.MAX_BULLETS])
 
-        return f"""#{{
-  set page(fill: {_rgb(t['bg'])})
-  set text(fill: {_rgb(t['text'])})
-
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(14pt)
-
-  grid(
+        body = f"""grid(
     columns: (1fr, 1fr),
     gutter: 20pt,
     block(
@@ -621,9 +631,18 @@ class TypstSlideRenderer:
         {right_bullets}
       ]
     ],
-  )
+  )"""
 
-  {footer_bar('', t['border'], t['muted'])}
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(14pt)
+
+  {self._body_block(body, '')}
 }}"""
 
     # -- Chart slide (image embed) -----------------------------------------
@@ -635,6 +654,8 @@ class TypstSlideRenderer:
         image_path = d.get("image_path", "")
         footnote = d.get("footnote", "")
 
+        body = f"""align(center, {self._image_markup(image_path, width="90%", height="8.5cm")})"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -644,9 +665,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(14pt)
 
-  align(center, {self._image_markup(image_path, width="90%", height="8.5cm")})
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Bar chart slide (native Typst) ------------------------------------
@@ -666,6 +685,8 @@ class TypstSlideRenderer:
 
         bars_str = "\n  ".join(bar_markups)
 
+        body = f"""{bars_str}"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -675,9 +696,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(14pt)
 
-  {bars_str}
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- KPI strip slide ---------------------------------------------------
@@ -699,6 +718,12 @@ class TypstSlideRenderer:
         kpis_str = ",\n    ".join(kpi_markups)
         n_cols = len(kpi_markups)
 
+        body = f"""grid(
+    columns: ({', '.join(['1fr'] * n_cols)}),
+    gutter: 8pt,
+    {kpis_str}
+  )"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -708,13 +733,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(20pt)
 
-  grid(
-    columns: ({', '.join(['1fr'] * n_cols)}),
-    gutter: 8pt,
-    {kpis_str}
-  )
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Closing slide -----------------------------------------------------
@@ -850,14 +869,7 @@ class TypstSlideRenderer:
         above_str = ",\n    ".join(above_nodes)
         below_str = ",\n    ".join(below_nodes)
 
-        return f"""#{{
-  set page(fill: {_rgb(t['bg'])})
-  set text(fill: {_rgb(t['text'])})
-
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(1fr)
+        body = f"""v(1fr)
 
   // Above timeline: dates + bubbles (bottom-aligned to line)
   block(height: {max_bubble + 30}pt, width: 100%)[
@@ -880,8 +892,17 @@ class TypstSlideRenderer:
     {below_str}
   )
 
-  v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+  v(1fr)"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Process flow slide ------------------------------------------------
@@ -943,14 +964,7 @@ class TypstSlideRenderer:
         cols_str = ", ".join(cols)
         blocks_str = ",\n    ".join(step_blocks)
 
-        return f"""#{{
-  set page(fill: {_rgb(t['bg'])})
-  set text(fill: {_rgb(t['text'])})
-
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(1fr)
+        body = f"""v(1fr)
 
   grid(
     columns: ({cols_str}),
@@ -958,8 +972,17 @@ class TypstSlideRenderer:
     {blocks_str}
   )
 
-  v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+  v(1fr)"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Icon stat slide ---------------------------------------------------
@@ -1050,14 +1073,7 @@ class TypstSlideRenderer:
         cols_str = ", ".join(["1fr"] * n)
         blocks_str = ",\n    ".join(stat_blocks)
 
-        return f"""#{{
-  set page(fill: {_rgb(t['bg'])})
-  set text(fill: {_rgb(t['text'])})
-
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(1fr)
+        body = f"""v(1fr)
 
   grid(
     columns: ({cols_str}),
@@ -1065,8 +1081,17 @@ class TypstSlideRenderer:
     {blocks_str}
   )
 
-  v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+  v(1fr)"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Progress bars slide -----------------------------------------------
@@ -1155,6 +1180,12 @@ class TypstSlideRenderer:
 
         tiers_str = "\n  v(4pt)\n".join(tier_blocks)
 
+        body = f"""v(1fr)
+
+{tiers_str}
+
+  v(1fr)"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -1162,12 +1193,8 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(1fr)
 
-{tiers_str}
-
-  v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Comparison slide --------------------------------------------------
@@ -1219,16 +1246,7 @@ class TypstSlideRenderer:
 
         rows_str = "\n    v(2pt)\n".join(rows)
 
-        return f"""#{{
-  set page(fill: {_rgb(t['bg'])})
-  set text(fill: {_rgb(t['text'])})
-
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(14pt)
-
-  // Column headers
+        body = f"""// Column headers
   grid(
     columns: (1fr, 1fr),
     gutter: 14pt,
@@ -1242,9 +1260,18 @@ class TypstSlideRenderer:
   v(6pt)
 
   // Comparison rows
-  {rows_str}
+  {rows_str}"""
 
-  {footer_bar(footnote, t['border'], t['muted'])}
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(14pt)
+
+  {self._body_block(body, footnote)}
 }}"""
 
     # ==================================================================
@@ -1302,6 +1329,16 @@ class TypstSlideRenderer:
 
         cells_str = ",\n    ".join(cells)
 
+        body = f"""v(1fr)
+
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 10pt,
+    {cells_str}
+  )
+
+  v(1fr)"""
+
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -1311,17 +1348,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(10pt)
 
-  v(1fr)
-
-  grid(
-    columns: (1fr, 1fr, 1fr),
-    gutter: 10pt,
-    {cells_str}
-  )
-
-  v(1fr)
-
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Dashboard slide (chart + stats + bullets) -------------------------
