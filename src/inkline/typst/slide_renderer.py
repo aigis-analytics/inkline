@@ -435,6 +435,9 @@ class TypstSlideRenderer:
         footnote = d.get("footnote", "")
         highlight_idx = d.get("highlight_index", 1)  # Which card gets accent fill
 
+        if not cards:
+            return self._content_slide(d)
+
         card_markups = []
         for i, c in enumerate(cards[:3]):
             if i == highlight_idx:
@@ -486,6 +489,9 @@ class TypstSlideRenderer:
         title = d.get("title", "")
         cards = d.get("cards", [])
         footnote = d.get("footnote", "")
+
+        if not cards:
+            return self._content_slide(d)
 
         card_markups = []
         for c in cards[:4]:
@@ -1070,7 +1076,7 @@ class TypstSlideRenderer:
         width: 100%,
       )[
         #align(center)[
-          {f'#text(size: 24pt)[{icon}]#v(4pt)' if icon else ''}
+          {f'#text(size: 24pt)[{_esc_content(icon)}]#v(4pt)' if icon else ''}
           #text(weight: "bold", size: {val_size}pt, fill: {_rgb(t['accent'])})[{value}]
           #v(4pt)
           #text(weight: "bold", size: 9pt, fill: {_rgb(t['muted'])})[#upper[{label}]]
@@ -1141,12 +1147,15 @@ class TypstSlideRenderer:
         bars_str = "\n  v(4pt)\n  ".join(bar_rows)
 
         return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(12pt)
+  v(8pt)
 
-  {bars_str}
+  {self._body_block(bars_str, footnote)}
 }}"""
 
     # -- Pyramid slide -----------------------------------------------------
@@ -1404,20 +1413,12 @@ class TypstSlideRenderer:
         bullets_str = "\n        ".join(f"- {_esc(b)}" for b in bullets)
         stats_str = ",\n      ".join(stat_blocks) if stat_blocks else 'block()[]'
 
-        return f"""#{{
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(8pt)
-
-  grid(
+        body = f"""grid(
     columns: (1.55fr, 1fr),
     gutter: 14pt,
-    // Left: chart image (compact to fit alongside dense right column)
     block(width: 100%)[
       #align(center + horizon, {self._image_markup(image_path, width="100%", height="6.2cm")})
     ],
-    // Right: stats stack + bullets (capped at 3 bullets)
     block(width: 100%)[
       #stack(
         spacing: 4pt,
@@ -1425,7 +1426,20 @@ class TypstSlideRenderer:
       )
       {f'#v(6pt)#text(size: 8pt, fill: {_rgb(t["text"])})[{chr(10)}        {bullets_str}{chr(10)}      ]' if bullets else ''}
     ],
-  )
+  )"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(8pt)
+
+  {self._body_block(body, footnote)}
 }}"""
 
     # -- Multi-chart slide — 2-4 exhibits in configurable grid ------------
@@ -1550,11 +1564,6 @@ class TypstSlideRenderer:
     {cells},
   )"""
 
-        footnote_block = (
-            f'\n  v(4pt)\n  text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{_esc(footnote)}]'
-            if footnote else ""
-        )
-
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -1566,8 +1575,7 @@ class TypstSlideRenderer:
   text(weight: "bold", size: 18pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
   v(8pt)
 
-  {grid_body}
-  {footnote_block}
+  {self._body_block(grid_body, footnote)}
 }}"""
 
     # -- Chart slide with side caption -------------------------------------
@@ -1588,21 +1596,13 @@ class TypstSlideRenderer:
 
         bullets_str = "\n        ".join(f"- {_esc(b)}" for b in bullets)
 
-        return f"""#{{
-  {section_badge(section, t['muted'])}
-  v(6pt)
-  {slide_title(title, t['text'])}
-  v(10pt)
-
-  grid(
+        body = f"""grid(
     columns: (2.2fr, 1fr),
     rows: (7.5cm,),
     gutter: 12pt,
-    // Chart — fills available height, wider allocation
     block(width: 100%, height: 100%)[
       #align(center + horizon, {self._image_markup(image_path, height="95%", width="95%", fit='"contain"')})
     ],
-    // Key takeaways panel with accent left border
     block(
       fill: {_rgb(t['card_fill'])},
       stroke: (left: 4pt + {_rgb(t['accent'])}),
@@ -1617,7 +1617,18 @@ class TypstSlideRenderer:
       ]
       {f'#v(4pt)#text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{caption}]' if caption else ''}
     ],
-  )
+  )"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(10pt)
+
+  {self._body_block(body, footnote)}
 }}"""
 
 

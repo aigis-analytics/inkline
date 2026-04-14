@@ -472,7 +472,20 @@ def export_typst_slides(
             )
             renderer = TypstSlideRenderer(theme, image_root=root)
             source_str = renderer.render_deck(deck)
-        compile_typst(source_str, output_path=output_path, root=root, font_paths=all_font_paths)
+        try:
+            compile_typst(source_str, output_path=output_path, root=root, font_paths=all_font_paths)
+        except Exception as compile_err:
+            # Save .typ source so the offending code can be inspected.
+            debug_typ = output_path.with_suffix(".debug.typ")
+            try:
+                debug_typ.write_text(source_str, encoding="utf-8")
+            except Exception:
+                pass
+            log.error(
+                "Typst compile failed: %s  (source saved to %s)",
+                compile_err, debug_typ,
+            )
+            raise
         return source_str
 
     overflow_attempt = 0
@@ -480,7 +493,19 @@ def export_typst_slides(
     prev_actual = None
 
     while overflow_attempt <= max_overflow_attempts:
-        source = _render_and_compile(slides, source, needs_rerender)
+        try:
+            source = _render_and_compile(slides, source, needs_rerender)
+        except Exception as e:
+            if overflow_attempt == 0:
+                # No PDF exists yet — surface to caller so the gen script can diagnose.
+                raise
+            # A subsequent overflow-fix compile failed; keep the previous PDF and
+            # proceed to Phase 4 so the visual audit can still run.
+            log.warning(
+                "Overflow-fix compile failed (attempt %d) — keeping previous PDF: %s",
+                overflow_attempt, e,
+            )
+            break
         actual = _count_pages(output_path)
         expected = len(slides)
 
@@ -583,6 +608,7 @@ def export_typst_slides(
         log.info("Archon review: auditing %d slides (parallel vision calls)...", len(slides))
         llm_warnings = audit_deck_with_llm(
             output_path, slides, brand=brand, source_narrative=source_narrative,
+            overflow_slide_indices=persistent_overflow_indices,
         )
         post_warnings.extend(llm_warnings)
         all_warnings.extend(post_warnings)

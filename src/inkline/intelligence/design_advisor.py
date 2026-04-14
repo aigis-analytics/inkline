@@ -29,6 +29,7 @@ Claude to produce optimal slide specs for the given content.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 from pathlib import Path
@@ -1197,6 +1198,50 @@ class DesignAdvisor:
         ]
         return "\n".join(parts)
 
+    # Regex patterns that look like internal financial-model variable names.
+    # These sometimes leak from source documents into LLM-generated slide text.
+    _VAR_NAME_RE = re.compile(
+        r"\bv[A-Z][A-Z0-9_]{2,}_[A-Z]+\b"   # e.g. vMGMT_CASE, vCPR_CASE
+        r"|_v[A-Z][A-Z0-9_]*\b"              # e.g. _vF, _vP2
+        r"|\b[A-Z][A-Za-z0-9_]+_FM_v\d\b"   # e.g. ProjectCorsair_FM_v3
+        r"|\w+\.xlsm\b|\w+\.xlsx\b",         # spreadsheet filenames
+        re.ASCII,
+    )
+    _VAR_NAME_REPLACEMENTS: dict[str, str] = {
+        "vMGMT_CASE": "Management Case",
+        "vCPR_CASE": "CPR Case",
+        "v2P_CASE": "2P Case",
+        "v1P_CASE": "1P Case",
+    }
+
+    def _sanitise_slide_spec(self, spec: dict) -> dict:
+        """Strip internal variable/file names from all string fields in a slide spec.
+
+        The LLM occasionally copies token names like vMGMT_CASE directly from
+        the source financial model into slide titles, labels, and values.
+        This post-processor replaces known patterns with plain English.
+        """
+        def _clean(val):
+            if not isinstance(val, str):
+                return val
+            for token, replacement in self._VAR_NAME_REPLACEMENTS.items():
+                val = val.replace(token, replacement)
+            # Strip any remaining matches of the general pattern
+            val = self._VAR_NAME_RE.sub(
+                lambda m: self._VAR_NAME_REPLACEMENTS.get(m.group(0), m.group(0)),
+                val,
+            )
+            return val
+
+        def _walk(obj):
+            if isinstance(obj, dict):
+                return {k: _walk(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_walk(v) for v in obj]
+            return _clean(obj)
+
+        return _walk(spec)
+
     def _design_slide_from_plan(
         self,
         plan_entry: dict[str, Any],
@@ -1284,6 +1329,9 @@ class DesignAdvisor:
         if source_section and parsed.get("slide_type") not in _EXEMPT_SOURCE:
             parsed["data"].setdefault("source_section", source_section[:2000])
 
+        # Strip internal variable/file names that sometimes leak from source docs.
+        parsed = self._sanitise_slide_spec(parsed)
+
         return parsed
 
     def _build_system_prompt(
@@ -1343,6 +1391,11 @@ class DesignAdvisor:
             "a claim with the input data, OMIT it.",
             "",
             "Action titles are great. Hallucinated metrics are not.",
+            "",
+            "NAMING RULE: Never copy internal variable, file, or model names from",
+            "the source material into slide text (e.g. vMGMT_CASE, vCPR_CASE, _vF,",
+            "ProjectCorsair_FM_v3.xlsm). Use plain descriptive language instead",
+            "(e.g. 'Management Case', 'CPR Case', 'Financial Model').",
             "",
             "",
             "Your job: given structured content sections, decide the BEST slide type and data layout",
