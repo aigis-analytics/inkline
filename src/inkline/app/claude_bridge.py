@@ -100,30 +100,45 @@ MIN_REQUEST_INTERVAL = 1.0
 # ---------------------------------------------------------------------------
 # Pipeline run state — served via /status and /progress
 # ---------------------------------------------------------------------------
-_PHASE_DEFS = [
+_PHASE_DEFS_SLIDES = [
     {"name": "parse_markdown",        "label": "Parse Document",  "weight": 0.03},
     {"name": "design_advisor_llm",    "label": "Design & Plan",   "weight": 0.72},
     {"name": "save_slide_spec",       "label": "Save Spec",       "weight": 0.02},
     {"name": "export_pdf_with_audit", "label": "Render & Audit",  "weight": 0.23},
 ]
+_PHASE_DEFS_DOCUMENT = [
+    {"name": "parse_input",      "label": "Parse Input",     "weight": 0.05},
+    {"name": "build_doc_plan",   "label": "Plan Document",   "weight": 0.35},
+    {"name": "render_document",  "label": "Render Document", "weight": 0.30},
+    {"name": "audit_document",   "label": "Audit Pages",     "weight": 0.30},
+]
+# Active phase defs — reassigned per request by _init_run_state()
+_PHASE_DEFS = _PHASE_DEFS_SLIDES
+
 _PHASE_START_RE  = re.compile(r"\[ARCHON\] Phase: (\S+)")
 _PHASE_END_RE    = re.compile(r"\[ARCHON\] (\S+) → (OK|FAILED) in ([\d.]+)s")
 _SLIDE_DESIGN_RE = re.compile(r"DesignAdvisor Phase 2: \[\s*(\d+)/(\d+)\]")
+# Bypass detection regexes
+_ARCHON_PHASE_SEEN_RE = re.compile(r"\[ARCHON\] Phase: \S+")
+_PDF_READY_RE         = re.compile(r"PDF[_ ]ready:", re.IGNORECASE)
 
 _run_state: dict = {
     "active": False, "phases": [], "slide_design_done": 0, "slide_design_total": 0,
     "vision_done": 0, "vision_total": 0, "complete": False, "error": None,
-    "elapsed_s": 0, "pct": 0,
+    "elapsed_s": 0, "pct": 0, "mode": "slides", "archon_bypassed": False,
 }
 _sse_queues: set = set()
 _run_started_at: float = 0.0
 
 
-def _init_run_state() -> None:
-    global _run_started_at
+def _init_run_state(mode: str = "slides") -> None:
+    global _run_started_at, _PHASE_DEFS
     _run_started_at = time.monotonic()
+    _PHASE_DEFS = _PHASE_DEFS_DOCUMENT if mode == "document" else _PHASE_DEFS_SLIDES
     _run_state.update({
         "active": True,
+        "mode": mode,
+        "archon_bypassed": False,
         "phases": [
             {"name": p["name"], "label": p["label"], "status": "pending", "elapsed_s": None}
             for p in _PHASE_DEFS
@@ -158,12 +173,14 @@ def _compute_pct() -> int:
         if p_status["status"] == "complete":
             pct += w
         elif p_status["status"] == "running":
-            if pdef["name"] == "design_advisor_llm":
+            # Phases that sub-track per-slide / per-section design progress
+            if pdef["name"] in ("design_advisor_llm", "build_doc_plan"):
                 done = _run_state.get("slide_design_done", 0)
                 total = _run_state.get("slide_design_total", 0)
                 frac = (0.10 + 0.85 * done / total) if total > 0 else 0.10
                 pct += w * frac
-            elif pdef["name"] == "export_pdf_with_audit":
+            # Phases that sub-track per-page / per-slide vision audit calls
+            elif pdef["name"] in ("export_pdf_with_audit", "audit_document"):
                 done = _run_state.get("vision_done", 0)
                 total = _run_state.get("vision_total", 0)
                 frac = (0.15 + 0.85 * done / total) if total > 0 else 0.10
@@ -232,6 +249,27 @@ def _mark_complete() -> None:
 def _mark_error(msg: str) -> None:
     _run_state.update({"active": False, "error": str(msg)[:200]})
     _push_state()
+
+
+def _check_archon_bypass(stdout_text: str, result_text: str) -> None:
+    """Detect and flag Archon bypass: 'PDF ready:' announced without Archon phase markers.
+
+    Archon emits ``[ARCHON] Phase: <name>`` to stdout (inside tool result blocks).
+    If a PDF is announced but no such markers appeared, Claude called the export
+    function directly outside of any pipeline phase — a violation of the mandatory
+    pipeline rule.
+    """
+    combined = stdout_text + "\n" + result_text
+    pdf_announced = bool(_PDF_READY_RE.search(combined))
+    archon_seen   = bool(_ARCHON_PHASE_SEEN_RE.search(stdout_text))
+    if pdf_announced and not archon_seen:
+        _run_state["archon_bypassed"] = True
+        log.warning(
+            "ARCHON BYPASS DETECTED: 'PDF ready:' was announced but no [ARCHON] Phase: "
+            "markers were seen in the output stream. Claude called export_typst_slides() "
+            "or export_typst_document() directly, bypassing the Archon pipeline supervisor. "
+            "All output MUST go through the 4-phase Archon pipeline — see CLAUDE.md."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +439,14 @@ async def handle_prompt(request: web.Request) -> web.Response:
     # Implicit feedback detection — scan for chart correction patterns before routing
     _record_implicit_feedback(prompt, data.get("deck_id", ""), data.get("slide_index", -1))
 
+    # Output mode — "slides" (default) or "document"
+    mode = data.get("mode", "slides")
+    if mode not in ("slides", "document"):
+        # pptx and other future output types are not yet pipeline-supported;
+        # fall back to slides to avoid silent no-op behaviour.
+        log.warning("Unknown mode '%s' requested — falling back to 'slides'", mode)
+        mode = "slides"
+
     # Rate limiting
     now = time.time()
     wait = MIN_REQUEST_INTERVAL - (now - _last_request_time)
@@ -408,10 +454,31 @@ async def handle_prompt(request: web.Request) -> web.Response:
         await asyncio.sleep(wait)
     _last_request_time = time.time()
 
-    # Build full system prompt
+    # Build full system prompt — base + optional caller override + mandatory mode hint
     system = SYSTEM_PROMPT
     if extra_system:
         system = system + "\n\n" + extra_system
+    # Mode hint appended last so it always takes effect regardless of extra_system
+    if mode == "document":
+        system = system + (
+            "\n\n## ACTIVE MODE: document\n"
+            "You MUST run the DOCUMENT pipeline with Archon wrapping.\n"
+            "Required phases (in order): parse_input → build_doc_plan → render_document → audit_document.\n"
+            "Call export_typst_document() ONLY inside the render_document Archon phase.\n"
+            "After rendering, run per-page visual audit via POST http://localhost:8082/vision "
+            "(one call per page, pymupdf renders each page to PNG) inside the audit_document phase.\n"
+            "NEVER call export_typst_document() directly without an Archon phase wrapper.\n"
+            "Announce output as: PDF ready: <path>"
+        )
+    else:
+        system = system + (
+            "\n\n## ACTIVE MODE: slides\n"
+            "You MUST run the SLIDES pipeline with Archon wrapping.\n"
+            "Required phases (in order): parse_markdown → design_advisor_llm → save_slide_spec → export_pdf_with_audit.\n"
+            "Call export_typst_slides() ONLY inside the export_pdf_with_audit Archon phase.\n"
+            "NEVER call export_typst_slides() directly without an Archon phase wrapper.\n"
+            "Announce output as: PDF ready: <path>"
+        )
 
     cmd = [
         "claude", "-p",
@@ -423,7 +490,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
     ]
 
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
-    _init_run_state()
+    _init_run_state(mode=mode)
 
     proc = None
     try:
@@ -492,17 +559,20 @@ async def handle_prompt(request: web.Request) -> web.Response:
         stderr_raw = await proc.stderr.read()
 
         if proc.returncode == 0:
-            session = _parse_stream_json(stdout_raw.decode("utf-8").strip())
+            stdout_text = stdout_raw.decode("utf-8").strip()
+            session = _parse_stream_json(stdout_text)
             elapsed_s = int(time.monotonic() - start_time)
             log.info(
                 "Response: %d chars, %d tool calls, %d turns, %.0fms (wall %ds)",
                 len(session["text"]), len(session["tool_calls"]),
                 session["num_turns"], session["duration_ms"], elapsed_s,
             )
+            _check_archon_bypass(stdout_text, session["text"])
             _mark_complete()
             return web.json_response({
                 "response": session["text"],
                 "source": "claude_max",
+                "archon_bypassed": _run_state.get("archon_bypassed", False),
                 "session": {
                     "tool_calls": session["tool_calls"],
                     "num_turns": session["num_turns"],

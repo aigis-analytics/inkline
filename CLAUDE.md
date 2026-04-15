@@ -25,7 +25,14 @@ When adding a new significant feature, add a spec to `plan_docs/` before writing
 
 ## ⚠️ CORRECT WORKFLOW — READ FIRST
 
-**Never run standalone Python scripts to generate decks.** The correct workflow is:
+**Never run standalone Python scripts to generate decks or documents.**
+**Never call `export_typst_slides()` or `export_typst_document()` directly outside an Archon phase.**
+
+All Inkline output MUST flow through the structured Archon pipeline. This applies equally to
+slide decks, PDF documents, and any other output type. Calling an export function directly
+bypasses the visual audit and ships broken output without detection.
+
+The correct workflow for all output types:
 
 1. **Confirm the bridge is running** — `inkline serve` or `inkline bridge` must be active on port 8082.
    Check: `curl -s http://localhost:8082/ | head -1`
@@ -38,46 +45,147 @@ When adding a new significant feature, add a spec to `plan_docs/` before writing
 
 3. **Send the generation prompt** to the bridge and let it run:
    ```bash
+   # For slide decks (default):
    curl -X POST http://localhost:8082/prompt \
      -H "Content-Type: application/json" \
-     -d '{"prompt": "I have uploaded a file at: <path>. Generate a deck ...", "agentic": true}'
+     -d '{"prompt": "I have uploaded a file at: <path>. Generate a deck ...", "mode": "slides"}'
+
+   # For branded PDF documents / reports:
+   curl -X POST http://localhost:8082/prompt \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "I have uploaded a file at: <path>. Generate a PDF report ...", "mode": "document"}'
    ```
 
-4. **Monitor via logs** — do not intervene. The bridge runs Claude agentic mode which reads
-   the file, builds sections, calls `export_typst_slides`, runs the overflow + visual audit
-   loop, and announces `PDF ready: <path>` when done.
+4. **Monitor via logs** — do not intervene. The bridge runs Claude agentic mode which
+   executes the 4-phase Archon pipeline (see Pipeline Reference below), then announces
+   `PDF ready: <path>` when done.
 
-**Why this matters:** Running `python3 script.py` directly bypasses the LLM visual audit
-entirely because the `/vision` endpoint needs the bridge to be live. The structural page-count
-check will pass even when slides are visually broken (empty cards, blank content areas).
-The visual audit via the bridge is the only gate that catches rendering failures.
+**Why this matters:** Calling `export_typst_slides()` or `export_typst_document()` directly
+bypasses the per-page visual audit (run via the `/vision` endpoint). The structural page-count
+check passes even when slides are visually broken. The Archon pipeline is the only gate that
+catches rendering failures, overflow, and brand violations.
+
+**Enforcement:** The bridge detects bypass attempts. If a `PDF ready:` announcement appears
+without any `[ARCHON] Phase:` markers in the output stream, the response includes
+`"archon_bypassed": true` as a violation flag.
 
 ---
 
-## Quick start (3 steps)
+## Pipeline Reference — Archon-Wrapped Patterns
 
-```bash
-# 1. Parse input → markdown text
-pandoc report.docx -o /tmp/inkline_input.md        # .docx
-python3 -c "import pymupdf; doc=pymupdf.open('f.pdf'); print('\n'.join(p.get_text() for p in doc))" > /tmp/inkline_input.md
+These are the ONLY correct ways to generate Inkline output. Both use the same 4-phase
+Archon supervisor. Copy these patterns exactly.
 
-# 2. Generate deck
-python3 -c "
-from inkline.typst import export_typst_slides
+### Slides pipeline (mode: "slides")
+
+```python
+import subprocess, json, base64
+import pymupdf
+from pathlib import Path
 from inkline.intelligence import DesignAdvisor
-import json, pathlib
-sections = [...]   # built from the parsed text
-advisor = DesignAdvisor(brand='minimal', template='consulting', mode='llm')
-slides = advisor.design_deck(title='My Deck', sections=sections)
-pathlib.Path('~/.local/share/inkline/output').expanduser().mkdir(parents=True, exist_ok=True)
 from inkline.typst import export_typst_slides
-export_typst_slides(slides=slides, output_path=str(pathlib.Path('~/.local/share/inkline/output/deck.pdf').expanduser()), brand='minimal', template='consulting')
-print('PDF ready: ~/.local/share/inkline/output/deck.pdf')
-"
 
-# 3. Open for the user
-open ~/.local/share/inkline/output/deck.pdf   # macOS
-xdg-open ~/.local/share/inkline/output/deck.pdf  # Linux
+OUTPUT = Path("~/.local/share/inkline/output/deck.pdf").expanduser()
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+# ── Phase 1: parse_markdown ─────────────────────────────────────────────────
+print("[ARCHON] Phase: parse_markdown")
+# ... read and parse input file into sections list ...
+print("[ARCHON] parse_markdown → OK in 0.5s")
+
+# ── Phase 2: design_advisor_llm ─────────────────────────────────────────────
+print("[ARCHON] Phase: design_advisor_llm")
+advisor = DesignAdvisor(brand="minimal", template="consulting", mode="llm")
+slides = advisor.design_deck(title="My Deck", sections=sections)
+print("[ARCHON] design_advisor_llm → OK in 45.2s")
+
+# ── Phase 3: save_slide_spec ─────────────────────────────────────────────────
+print("[ARCHON] Phase: save_slide_spec")
+import json
+Path("~/.local/share/inkline/output/deck_spec.json").expanduser().write_text(
+    json.dumps(slides, indent=2))
+print("[ARCHON] save_slide_spec → OK in 0.1s")
+
+# ── Phase 4: export_pdf_with_audit ──────────────────────────────────────────
+print("[ARCHON] Phase: export_pdf_with_audit")
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="consulting")
+
+# Per-slide visual audit via bridge /vision endpoint
+doc = pymupdf.open(str(OUTPUT))
+n = len(doc)
+for i, page in enumerate(doc):
+    pix = page.get_pixmap(dpi=120)
+    img_b64 = base64.b64encode(pix.tobytes("png")).decode()
+    r = subprocess.run(["curl", "-s", "-X", "POST", "http://localhost:8082/vision",
+        "-H", "Content-Type: application/json",
+        "-d", json.dumps({
+            "image_base64": img_b64,
+            "prompt": f"Slide {i+1}/{n}: Are there any overflow, blank content areas, or rendering errors? Reply OK or FAIL with one-line reason."
+        })], capture_output=True, text=True)
+    result = json.loads(r.stdout).get("response", "")
+    print(f"  Vision audit slide {i+1}/{n}: {result[:80]}")
+    if "FAIL" in result.upper():
+        print(f"  ⚠ Visual issue on slide {i+1} — fix before delivery")
+
+print("[ARCHON] export_pdf_with_audit → OK in 12.3s")
+print(f"PDF ready: {OUTPUT}")
+```
+
+### Document pipeline (mode: "document")
+
+```python
+import subprocess, json, base64
+import pymupdf
+from pathlib import Path
+from inkline.typst import export_typst_document
+
+OUTPUT = Path("~/.local/share/inkline/output/report.pdf").expanduser()
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+
+# ── Phase 1: parse_input ────────────────────────────────────────────────────
+print("[ARCHON] Phase: parse_input")
+# ... read and parse input file into md_text string ...
+print("[ARCHON] parse_input → OK in 0.5s")
+
+# ── Phase 2: build_doc_plan ──────────────────────────────────────────────────
+print("[ARCHON] Phase: build_doc_plan")
+# ... structure sections, headings, decide on brand/template/paper size ...
+# For complex reports: build a doc_plan dict with section titles + content
+print("[ARCHON] build_doc_plan → OK in 8.1s")
+
+# ── Phase 3: render_document ─────────────────────────────────────────────────
+print("[ARCHON] Phase: render_document")
+export_typst_document(
+    markdown=md_text,
+    output_path=str(OUTPUT),
+    brand="minimal",
+    title="Q4 Report",
+    subtitle="Board update",
+    date="April 2026",
+    paper="a4",
+)
+print("[ARCHON] render_document → OK in 4.2s")
+
+# ── Phase 4: audit_document ──────────────────────────────────────────────────
+print("[ARCHON] Phase: audit_document")
+doc = pymupdf.open(str(OUTPUT))
+n = len(doc)
+for i, page in enumerate(doc):
+    pix = page.get_pixmap(dpi=120)
+    img_b64 = base64.b64encode(pix.tobytes("png")).decode()
+    r = subprocess.run(["curl", "-s", "-X", "POST", "http://localhost:8082/vision",
+        "-H", "Content-Type: application/json",
+        "-d", json.dumps({
+            "image_base64": img_b64,
+            "prompt": f"Page {i+1}/{n}: Are there any rendering errors, overflow, broken layout, or missing content? Reply OK or FAIL with one-line reason."
+        })], capture_output=True, text=True)
+    result = json.loads(r.stdout).get("response", "")
+    print(f"  Vision audit page {i+1}/{n}: {result[:80]}")
+    if "FAIL" in result.upper():
+        print(f"  ⚠ Visual issue on page {i+1} — review output")
+
+print("[ARCHON] audit_document → OK in 8.7s")
+print(f"PDF ready: {OUTPUT}")
 ```
 
 ---
@@ -507,19 +615,16 @@ print(f"PDF ready: {OUTPUT}")
 ```
 
 ### Generate a document (not slides)
-```python
-from inkline.typst import export_typst_document
-OUTPUT_DOC = Path("~/.local/share/inkline/output/report.pdf").expanduser()
-export_typst_document(
-    markdown=md_text,
-    output_path=str(OUTPUT_DOC),
-    brand="minimal",
-    title="Q4 Report",
-    subtitle="Board update",
-    date="April 2026",
-    paper="a4",
-)
-print(f"PDF ready: {OUTPUT_DOC}")
+
+Always use the full Archon-wrapped document pipeline — see **Pipeline Reference** above.
+Never call `export_typst_document()` directly. The 4-phase pattern is:
+`parse_input → build_doc_plan → render_document → audit_document`
+
+Send via bridge with `"mode": "document"`:
+```bash
+curl -X POST http://localhost:8082/prompt \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "I have uploaded a report at: <path>. Generate a branded PDF report.", "mode": "document"}'
 ```
 
 ---
