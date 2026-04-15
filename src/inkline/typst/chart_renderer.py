@@ -90,6 +90,43 @@ def _shades_of(hex_color: str, n: int) -> list[str]:
     return out
 
 
+def _font(width: float, base: float = 9.0) -> float:
+    """Scale font size proportionally to figure width (7.5" = full slide)."""
+    return max(6.0, min(13.0, base * (width / 7.5)))
+
+
+def _tick_font(width: float, n_cats: int = 0) -> float:
+    """Tick label font size, reduced for dense categories."""
+    base = _font(width, base=8.5)
+    if n_cats > 12:
+        base *= 0.70
+    elif n_cats > 8:
+        base *= 0.82
+    elif n_cats > 5:
+        base *= 0.90
+    return max(5.5, base)
+
+
+def _legend_kw(width: float, n_series: int = 0, labelcolor: str = "#1A1A1A") -> dict:
+    """Return kwargs for an outside-bottom legend (never covers data).
+
+    No tight_layout() needed — bbox_inches='tight' at save handles the space.
+    """
+    fs = max(6.5, _font(width, base=8.5))
+    ncols = min(max(n_series, 1), 4)
+    return dict(
+        frameon=False,
+        fontsize=fs,
+        labelcolor=labelcolor,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),
+        ncol=ncols,
+        handlelength=1.4,
+        handletextpad=0.5,
+        columnspacing=1.0,
+    )
+
+
 def render_chart(
     chart_type: str,
     data: dict[str, Any],
@@ -250,10 +287,10 @@ def render_chart_for_brand(
 # Shared styling
 # ---------------------------------------------------------------------------
 
-def _style_axes(ax, bg, text_color, muted):
+def _style_axes(ax, bg, text_color, muted, *, fontsize: float = 9.0):
     """Apply consistent styling to axes."""
     ax.set_facecolor(bg)
-    ax.tick_params(colors=muted, labelsize=9)
+    ax.tick_params(colors=muted, labelsize=fontsize)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["bottom"].set_color(muted)
@@ -278,7 +315,7 @@ def _render_line_chart(data, *, colors, accent, bg, text_color, muted, width, he
     """
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     x = data.get("x", [])
     series = data.get("series", [])
@@ -293,10 +330,9 @@ def _render_line_chart(data, *, colors, accent, bg, text_color, muted, width, he
     if data.get("y_label"):
         ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
     if len(series) > 1:
-        ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
+        ax.legend(**_legend_kw(width, n_series=len(series), labelcolor=text_color))
 
     ax.grid(axis="y", alpha=0.3, color=muted)
-    fig.tight_layout()
     return fig
 
 
@@ -308,7 +344,7 @@ def _render_area_chart(data, *, colors, accent, bg, text_color, muted, width, he
     """Filled area chart."""
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     x = data.get("x", [])
     series = data.get("series", [])
@@ -321,9 +357,8 @@ def _render_area_chart(data, *, colors, accent, bg, text_color, muted, width, he
     ax.set_xticks(range(len(x)))
     ax.set_xticklabels(x, rotation=45 if len(x) > 8 else 0, ha="right" if len(x) > 8 else "center")
     if len(series) > 1:
-        ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
+        ax.legend(**_legend_kw(width, n_series=len(series), labelcolor=text_color))
     ax.grid(axis="y", alpha=0.3, color=muted)
-    fig.tight_layout()
     return fig
 
 
@@ -340,7 +375,7 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
     """
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     points = data.get("points", [])
     groups = {}
@@ -409,9 +444,8 @@ def _render_scatter(data, *, colors, accent, bg, text_color, muted, width, heigh
     if data.get("y_label"):
         ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
     if len(groups) > 1:
-        ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
+        ax.legend(**_legend_kw(width, n_series=len(groups), labelcolor=text_color))
     ax.grid(alpha=0.2, color=muted)
-    fig.tight_layout()
     return fig
 
 
@@ -429,7 +463,7 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
 
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     items = data.get("items", [])
     labels = [it["label"] for it in items]
@@ -478,16 +512,12 @@ def _render_waterfall(data, *, colors, accent, bg, text_color, muted, width, hei
     _nl = len(labels)
     if _ml > 10 or _nl > 6:
         ax.set_xticklabels(labels, fontsize=7, rotation=30, ha="right")
-        fig.subplots_adjust(bottom=0.28)
     elif _ml > 7 or _nl > 4:
         ax.set_xticklabels(labels, fontsize=8, rotation=20, ha="right")
-        fig.subplots_adjust(bottom=0.24)
     else:
         ax.set_xticklabels(labels, fontsize=9)
-        fig.subplots_adjust(bottom=0.20)
     ax.axhline(y=0, color=muted, linewidth=0.5)
     ax.grid(axis="y", alpha=0.2, color=muted)
-    fig.tight_layout()
     return fig
 
 
@@ -604,7 +634,7 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
 
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     categories = data.get("categories", [])
     series = data.get("series", [])
@@ -636,7 +666,6 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
     _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
     if _ml > 10 or _n > 6:
         ax.set_xticklabels(categories, fontsize=7, rotation=30, ha="right")
-        fig.subplots_adjust(bottom=0.22)
     else:
         ax.set_xticklabels(categories, fontsize=9)
 
@@ -652,12 +681,11 @@ def _render_stacked_bar(data, *, colors, accent, bg, text_color, muted, width, h
             ax.text(0.02, 0.06, chart_title, transform=ax.transAxes,
                     fontsize=9, fontweight="bold", color=text_color, va="bottom")
     else:
-        ax.legend(frameon=False, fontsize=9, labelcolor=text_color, loc="upper left")
+        ax.legend(**_legend_kw(width, n_series=len(series), labelcolor=text_color))
         if data.get("y_label"):
             ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
         ax.grid(axis="y", alpha=0.2, color=muted)
 
-    fig.tight_layout()
     return fig
 
 
@@ -685,7 +713,7 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
 
     fig, ax = _plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(bg)
-    _style_axes(ax, bg, text_color, muted)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
 
     categories = data.get("categories", [])
     series = data.get("series", [])
@@ -725,7 +753,6 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
     _n, _ml = len(categories), max((len(str(c)) for c in categories), default=0)
     if _ml > 10 or _n > 6:
         ax.set_xticklabels(categories, fontsize=7, rotation=30, ha="right")
-        fig.subplots_adjust(bottom=0.22)
     else:
         ax.set_xticklabels(categories, fontsize=9)
 
@@ -756,12 +783,11 @@ def _render_grouped_bar(data, *, colors, accent, bg, text_color, muted, width, h
                     va="bottom", ha="left")
     else:
         if n_series > 1:
-            ax.legend(frameon=False, fontsize=9, labelcolor=text_color)
+            ax.legend(**_legend_kw(width, n_series=n_series, labelcolor=text_color))
         if data.get("y_label"):
             ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
         ax.grid(axis="y", alpha=0.2, color=muted)
 
-    fig.tight_layout()
     return fig
 
 
@@ -805,7 +831,6 @@ def _render_heatmap(data, *, colors, accent, bg, text_color, muted, width, heigh
 
     ax.spines[:].set_visible(False)
     fig.colorbar(im, ax=ax, shrink=0.8)
-    fig.tight_layout()
     return fig
 
 
@@ -932,7 +957,6 @@ def _render_gauge(data, *, colors, accent, bg, text_color, muted, width, height)
     ax.set_ylim(-0.60, 1.1)
     ax.set_aspect("equal")
     ax.axis("off")
-    fig.tight_layout()
     return fig
 
 
