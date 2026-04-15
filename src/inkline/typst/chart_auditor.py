@@ -320,6 +320,9 @@ class ChartAuditor:
 # Programmatic fixes
 # ---------------------------------------------------------------------------
 
+# Max characters before a category label is abbreviated
+_MAX_LABEL_CHARS = 10
+
 
 def _apply_programmatic_fixes(
     data: dict,
@@ -328,18 +331,32 @@ def _apply_programmatic_fixes(
     width: float,
     height: float,
 ) -> tuple[dict | None, float, float]:
-    """Attempt to fix rendering issues by adjusting chart_data and dimensions.
+    """Fix rendering issues by adapting what is shown, never the canvas size.
 
-    Returns ``(fixed_data, new_width, new_height)`` if at least one fix was
-    applied, or ``(None, width, height)`` if nothing could be changed.
+    Dimensions (width/height) are contractual — they must fill the Typst slot
+    exactly.  All fixes work within the given space:
+      - Reduce data density (fewer categories, every-other labels)
+      - Abbreviate label text
+      - Reposition / suppress the legend
+      - Chart-type-specific layout tweaks
+
+    Returns ``(fixed_data, width, height)`` if at least one change was made,
+    or ``(None, width, height)`` if nothing actionable was found.
     """
     issue_types = {i["issue_type"] for i in issues}
     changed = False
 
-    # TOO_CROWDED / LABELS_UNREADABLE → truncate categories to top N
+    # ------------------------------------------------------------------
+    # TOO_CROWDED / LABELS_UNREADABLE
+    # Strategy 1: truncate to top N categories (most impactful series first)
+    # Strategy 2: thin the x-axis labels (show every other one)
+    # Strategy 3: abbreviate long category names in-place
+    # ------------------------------------------------------------------
     if issue_types & {"TOO_CROWDED", "LABELS_UNREADABLE"}:
         cats = data.get("categories", [])
+
         if len(cats) > _MAX_CATEGORIES:
+            # Truncate to top N — keeps the most important data visible
             data["categories"] = cats[:_MAX_CATEGORIES]
             for s in data.get("series", []):
                 vals = s.get("values", [])
@@ -349,39 +366,130 @@ def _apply_programmatic_fixes(
                 "ChartAuditor fix: truncated %d categories → %d",
                 len(cats), _MAX_CATEGORIES,
             )
+            cats = data["categories"]
             changed = True
 
-        # Also cap scatter points if extremely dense
+        elif len(cats) > 6:
+            # Too many to truncate cleanly — thin the labels instead.
+            # Replace every odd-indexed label with "" so only even indices
+            # show text.  The bar/line still renders at every position;
+            # only the x-tick label is suppressed.
+            data["categories"] = _thin_labels(cats)
+            log.debug(
+                "ChartAuditor fix: thinned %d category labels (every other)",
+                len(cats),
+            )
+            changed = True
+
+        # Abbreviate names that are still too long for the available width
+        if data.get("categories"):
+            abbreviated = _abbreviate_labels(data["categories"])
+            if abbreviated != data["categories"]:
+                data["categories"] = abbreviated
+                log.debug("ChartAuditor fix: abbreviated category labels")
+                changed = True
+
+        # Cap scatter points if extremely dense
         pts = data.get("points", [])
         if len(pts) > _MAX_CATEGORIES * 4:
-            data["points"] = pts[:_MAX_CATEGORIES * 4]
+            data["points"] = pts[: _MAX_CATEGORIES * 4]
             changed = True
 
-    # LABEL_CLIPPED → widen the figure to give labels more room
+    # ------------------------------------------------------------------
+    # LABEL_CLIPPED
+    # Strategy: shorten the labels so they fit within the existing canvas.
+    # Never resize the canvas — dimensions are layout-contractual.
+    # ------------------------------------------------------------------
     if "LABEL_CLIPPED" in issue_types:
-        new_w = min(width * 1.25, 12.0)
-        if new_w > width + 0.1:
-            width = new_w
-            log.debug("ChartAuditor fix: width increased to %.2f\"", width)
+        cats = data.get("categories", [])
+        if cats:
+            abbreviated = _abbreviate_labels(cats, max_chars=8)
+            if abbreviated != cats:
+                data["categories"] = abbreviated
+                log.debug("ChartAuditor fix: hard-abbreviated clipped category labels")
+                changed = True
+
+        # For line/area charts with many x-axis points, thin the labels
+        x_vals = data.get("x", [])
+        if len(x_vals) > 10:
+            data["x"] = _thin_labels(x_vals)
+            # Also thin corresponding series values if same length
+            for s in data.get("series", []):
+                if len(s.get("values", [])) == len(x_vals):
+                    s["values"] = s["values"][::2]
+            log.debug("ChartAuditor fix: thinned x-axis to %d points", len(data["x"]))
             changed = True
 
-    # LEGEND_OVERLAP — structural fix already in _legend_kw; try type-specific fallbacks
+    # ------------------------------------------------------------------
+    # LEGEND_OVERLAP
+    # Strategy: move legend to a location that doesn't cover the data,
+    # suppress it entirely for single-series, or switch to direct labels.
+    # ------------------------------------------------------------------
     if "LEGEND_OVERLAP" in issue_types:
         if chart_type == "donut" and data.get("label_style") != "direct":
+            # Donut supports radial direct labels — no legend needed
             data["label_style"] = "direct"
             log.debug("ChartAuditor fix: donut label_style → direct")
             changed = True
+
         elif len(data.get("series", [])) <= 1:
-            # Single-series chart — legend is redundant; drop series name to suppress it
+            # Single-series — legend adds no information; suppress it
             for s in data.get("series", []):
                 if s.get("name"):
                     s["name"] = ""
                     changed = True
 
+        elif len(data.get("series", [])) > 5:
+            # More series than a legend can display cleanly: merge the tail
+            # into an "Other" series so the legend stays to ≤ 5 entries.
+            series = data["series"]
+            keep = series[:4]
+            tail = series[4:]
+            if tail:
+                # Sum the tail values element-wise
+                tail_vals = tail[0].get("values", [])[:]
+                for extra in tail[1:]:
+                    evs = extra.get("values", [])
+                    tail_vals = [
+                        (tail_vals[j] or 0) + (evs[j] if j < len(evs) else 0)
+                        for j in range(len(tail_vals))
+                    ]
+                keep.append({"name": "Other", "values": tail_vals})
+            data["series"] = keep
+            log.debug(
+                "ChartAuditor fix: merged %d tail series into 'Other'", len(tail)
+            )
+            changed = True
+
     if not changed:
         return None, width, height
 
     return data, width, height
+
+
+# ---------------------------------------------------------------------------
+# Label helpers
+# ---------------------------------------------------------------------------
+
+
+def _thin_labels(labels: list) -> list:
+    """Return a copy where every odd-indexed label is replaced with an empty string.
+
+    The bar/line still renders at every position; only the tick label text
+    is hidden, halving the visible density without losing data.
+    """
+    return [lbl if i % 2 == 0 else "" for i, lbl in enumerate(labels)]
+
+
+def _abbreviate_labels(labels: list, max_chars: int = _MAX_LABEL_CHARS) -> list:
+    """Truncate string labels that exceed max_chars to fit the available axis space."""
+    result = []
+    for lbl in labels:
+        if isinstance(lbl, str) and len(lbl) > max_chars:
+            result.append(lbl[: max_chars - 1] + "…")
+        else:
+            result.append(lbl)
+    return result
 
 
 # ---------------------------------------------------------------------------
