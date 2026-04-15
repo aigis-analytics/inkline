@@ -116,8 +116,9 @@ def _auto_render_charts(
     if not charts_to_render:
         return
 
+    # Verify matplotlib is available before entering the render loop
     try:
-        from inkline.typst.chart_renderer import render_chart_for_brand
+        import matplotlib  # noqa: F401
     except ImportError:
         log.warning("matplotlib not available — cannot auto-render %d chart(s)", len(charts_to_render))
         return
@@ -155,20 +156,60 @@ def _auto_render_charts(
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            render_chart_for_brand(
-                chart_type, chart_data, str(full_path),
+            from inkline.typst.chart_auditor import render_and_audit
+            result = render_and_audit(
+                chart_type, chart_data, full_path,
                 brand_name=brand, width=w, height=h,
             )
-            log.info("Auto-rendered chart: %s (%s, %.2f\"×%.2f\")", full_path.name, chart_type, w, h)
-        except Exception as e:
-            log.warning("Failed to auto-render chart %s: %s", full_path.name, e)
-            # Remove the image_path so the slide doesn't reference a missing file
-            if chart_entry is not None:
-                chart_entry.pop("image_path", None)
-                chart_entry.pop("chart_request", None)
+            if result.redesign_needed:
+                log.warning(
+                    "Chart '%s' (%s) needs redesign after %d attempt(s): %s",
+                    full_path.name, chart_type, result.attempts,
+                    "; ".join(result.issues),
+                )
+                # Chart file still exists — keep it in the slide.
+                # Archon will see the warning and can trigger a redesign pass.
+            elif result.fix_applied:
+                log.info(
+                    "Chart '%s' (%s): programmatic fix applied, passed audit "
+                    "in %d attempt(s)",
+                    full_path.name, chart_type, result.attempts,
+                )
             else:
-                slide["data"].pop("image_path", None)
-                slide["data"].pop("chart_request", None)
+                log.info(
+                    "Chart '%s' (%s, %.2f\"×%.2f\"): audit passed",
+                    full_path.name, chart_type, w, h,
+                )
+        except ImportError:
+            # chart_auditor not importable (e.g. requests missing) — plain render
+            try:
+                from inkline.typst.chart_renderer import render_chart_for_brand
+                render_chart_for_brand(
+                    chart_type, chart_data, str(full_path),
+                    brand_name=brand, width=w, height=h,
+                )
+                log.info(
+                    "Auto-rendered chart: %s (%s, %.2f\"×%.2f\")",
+                    full_path.name, chart_type, w, h,
+                )
+            except Exception as e:
+                log.warning("Failed to render chart %s: %s", full_path.name, e)
+                if chart_entry is not None:
+                    chart_entry.pop("image_path", None)
+                    chart_entry.pop("chart_request", None)
+                else:
+                    slide["data"].pop("image_path", None)
+                    slide["data"].pop("chart_request", None)
+        except Exception as e:
+            log.warning("Failed to render/audit chart %s: %s", full_path.name, e)
+            # If no chart file was produced, remove the reference so the slide degrades
+            if not full_path.exists():
+                if chart_entry is not None:
+                    chart_entry.pop("image_path", None)
+                    chart_entry.pop("chart_request", None)
+                else:
+                    slide["data"].pop("image_path", None)
+                    slide["data"].pop("chart_request", None)
 
 
 def _degrade_placeholder_slides(slides: list, root: str) -> list:
