@@ -26,10 +26,11 @@ slides = [
 ]
 typst = ["typst>=0.13.0"]
 charts = ["matplotlib>=3.7.0"]
+interactive-charts = ["plotly>=5.0.0"]
 intelligence = ["anthropic>=0.25.0"]
 app = ["aiohttp>=3.9"]
 mcp = ["fastmcp>=2.0"]
-all = ["inkline[pdf,slides,typst,charts,intelligence,app]"]
+all = ["inkline[pdf,slides,typst,charts,interactive-charts,intelligence,app]"]
 
 [project.scripts]
 inkline-html = "inkline.html:_cli"
