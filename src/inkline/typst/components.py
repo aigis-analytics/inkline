@@ -239,7 +239,9 @@ def data_table(
             data_cells.append(f'[#text(size: {body_size}pt)[{_esc_content(cell)}]]')
     data_str = ", ".join(data_cells)
 
-    return f"""table(
+    return f"""block(width: 100%)[
+  #set par(justify: false)
+  #table(
     columns: ({widths}),
     inset: {inset}pt,
     stroke: 0.5pt + {_rgb(border)},
@@ -247,4 +249,5 @@ def data_table(
     align: (x, _) => if x == 0 {{ left }} else {{ right }},
     {header_cells},
     {data_str},
-  )"""
+  )
+]"""

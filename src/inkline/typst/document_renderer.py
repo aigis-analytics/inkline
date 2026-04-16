@@ -430,12 +430,17 @@ class TypstDocumentRenderer:
 
         widths = ", ".join(["1fr"] * n_cols)
 
-        return f"""#table(
-  columns: ({widths}),
-  fill: (_, y) => if y == 0 {{ {_rgb(accent)} }} else if calc.odd(y) {{ white }} else {{ {_rgb(bg)} }},
-  {header_cells},
-  {data_str},
-)"""
+        return f"""#block(width: 100%)[
+  #set par(justify: false)
+  #table(
+    columns: ({widths}),
+    inset: 6pt,
+    stroke: 0.5pt + {_rgb(border)},
+    fill: (_, y) => if y == 0 {{ {_rgb(accent)} }} else if calc.odd(y) {{ white }} else {{ {_rgb(bg)} }},
+    {header_cells},
+    {data_str},
+  )
+]"""
 
 
 def _esc(text: str) -> str:
