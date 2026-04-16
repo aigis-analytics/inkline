@@ -220,6 +220,37 @@ def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:
         "chart_colors": brand.chart_colors,
     }
 
+    # Colour ramps
+    for shade in (25, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950):
+        theme[f"primary_{shade}"] = brand.primary_ramp[shade]
+        theme[f"secondary_{shade}"] = brand.secondary_ramp[shade]
+        theme[f"gray_{shade}"] = brand.gray_ramp[shade]
+
+    # Typography scale
+    ts = brand.type_scale
+    theme["display_xl"] = ts.display_xl
+    theme["display_lg"] = ts.display_lg
+    theme["display_md"] = ts.display_md
+    theme["display_sm"] = ts.display_sm
+    theme["heading_lg"] = ts.heading_lg
+    theme["heading_md"] = ts.heading_md
+    theme["heading_sm"] = ts.heading_sm
+    theme["body_lg"] = ts.body_lg
+    theme["body_md"] = ts.body_md
+    theme["body_sm"] = ts.body_sm
+    theme["caption"] = ts.caption
+    theme["overline"] = ts.overline
+
+    # Spacing tokens
+    sp = brand.spacing
+    theme["space_xxs"] = sp.xxs
+    theme["space_xs"] = sp.xs
+    theme["space_sm"] = sp.sm
+    theme["space_md"] = sp.md
+    theme["space_lg"] = sp.lg
+    theme["space_xl"] = sp.xl
+    theme["space_xxl"] = sp.xxl
+
     # Apply template overrides
     tpl = SLIDE_TEMPLATES.get(template, {})
     for key, value in tpl.items():

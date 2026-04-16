@@ -51,6 +51,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from inkline.brands.color_ramp import generate_ramp
+
 log = logging.getLogger(__name__)
 
 # Bundled asset directory (shipped with the package — fonts, example assets)
@@ -104,6 +106,35 @@ def _find_asset(relpath: str) -> Path:
 
 
 @dataclass
+class TypeScale:
+    """Named typography scale for consistent hierarchy."""
+    display_xl: float = 44
+    display_lg: float = 36
+    display_md: float = 28
+    display_sm: float = 24
+    heading_lg: float = 20
+    heading_md: float = 18
+    heading_sm: float = 16
+    body_lg: float = 14
+    body_md: float = 12
+    body_sm: float = 11
+    caption: float = 10
+    overline: float = 9
+
+
+@dataclass
+class SpacingScale:
+    """Named spacing tokens based on 4pt grid."""
+    xxs: float = 2
+    xs: float = 4
+    sm: float = 8
+    md: float = 16
+    lg: float = 24
+    xl: float = 32
+    xxl: float = 48
+
+
+@dataclass
 class BaseBrand:
     """Brand identity definition.
 
@@ -151,6 +182,56 @@ class BaseBrand:
     chart_colors: list[str] = field(default_factory=lambda: [
         "#3fb950", "#58a6ff", "#f0883e", "#d2a8ff", "#e6c069", "#79c0ff",
     ])
+
+    # ── Design tokens (optional overrides) ────────────────────────────
+    custom_type_scale: TypeScale | None = field(default=None)
+    custom_spacing: SpacingScale | None = field(default=None)
+
+    # ── Computed design token properties ──────────────────────────────
+
+    @property
+    def primary_ramp(self) -> dict[int, str]:
+        """12-shade ramp from primary colour."""
+        return generate_ramp(self.primary)
+
+    @property
+    def secondary_ramp(self) -> dict[int, str]:
+        """12-shade ramp from secondary colour."""
+        return generate_ramp(self.secondary)
+
+    @property
+    def gray_ramp(self) -> dict[int, str]:
+        """12-shade neutral ramp derived from muted colour."""
+        return generate_ramp(self.muted)
+
+    @property
+    def type_scale(self) -> TypeScale:
+        """Derive a full typography scale from heading_size and body_size."""
+        if self.custom_type_scale is not None:
+            return self.custom_type_scale
+        h = self.heading_size
+        b = self.body_size
+        return TypeScale(
+            display_xl=round(h * 1.57),
+            display_lg=round(h * 1.29),
+            display_md=h,
+            display_sm=round(h * 0.86),
+            heading_lg=round(h * 0.71),
+            heading_md=round(h * 0.64),
+            heading_sm=round(h * 0.57),
+            body_lg=b,
+            body_md=round(b * 0.86),
+            body_sm=round(b * 0.79),
+            caption=round(b * 0.71),
+            overline=round(b * 0.64),
+        )
+
+    @property
+    def spacing(self) -> SpacingScale:
+        """Spacing token scale."""
+        if self.custom_spacing is not None:
+            return self.custom_spacing
+        return SpacingScale()
 
     @property
     def logo_dark(self) -> Path:
