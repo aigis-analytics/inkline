@@ -16,6 +16,7 @@ All non-trivial changes to Inkline must start with a spec in `plan_docs/`.
 
 | Spec | Status | Covers |
 |---|---|---|
+| `plan_docs/design-tokens-spec.md` | Proposed | Colour ramps (12-shade), named typography scale, spacing token system |
 | `plan_docs/impeccable-design-intelligence-spec.md` | Approved for implementation | Anti-pattern library, quality scoring, auto-polish, design brief generation |
 | `plan_docs/design-system-spec.md` | Approved for implementation | Decision framework, taste enforcer, self-learning, deck ingestion |
 | `plan_docs/visual-auditor-self-learning-spec.md` | Superseded by design-system-spec | Per-brand pattern memory (partially implemented) |
