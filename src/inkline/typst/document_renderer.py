@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from inkline.typst.components import _rgb
+from inkline.typst.components import _rgb, _force_breakable
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ class TypstDocumentRenderer:
         data_cells = []
         for row in rows[1:]:
             for cell in row:
-                data_cells.append(f"[{self._inline_format(cell)}]")
+                data_cells.append(f"[{self._inline_format(_force_breakable(cell))}]")
         data_str = ", ".join(data_cells)
 
         widths = ", ".join(["1fr"] * n_cols)

@@ -13,6 +13,23 @@ def _rgb(hex_color: str) -> str:
     return f'rgb("{hex_color}")'
 
 
+def _force_breakable(text: str, chunk: int = 15) -> str:
+    """Insert zero-width spaces so Typst can wrap long unbroken tokens mid-character.
+
+    Works per-word: only tokens longer than *chunk* characters get ZWSP inserted,
+    so normal hyphenated or spaced text is untouched.
+    """
+    if not text:
+        return text
+    zwsp = "\u200B"
+    parts = []
+    for word in text.split(" "):
+        if len(word) > chunk:
+            word = zwsp.join(word[i : i + chunk] for i in range(0, len(word), chunk))
+        parts.append(word)
+    return " ".join(parts)
+
+
 def _esc_content(text: str) -> str:
     """Escape special Typst characters in content (inside [...] brackets)."""
     if not text:
@@ -236,7 +253,7 @@ def data_table(
     data_cells = []
     for row in rows:
         for cell in row:
-            data_cells.append(f'[#text(size: {body_size}pt)[{_esc_content(cell)}]]')
+            data_cells.append(f'[#text(size: {body_size}pt)[{_esc_content(_force_breakable(cell))}]]')
     data_str = ", ".join(data_cells)
 
     return f"""block(width: 100%)[
