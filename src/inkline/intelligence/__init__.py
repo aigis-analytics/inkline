@@ -49,6 +49,10 @@ from inkline.intelligence.template_catalog import (
     suggest_archetype,
 )
 from inkline.intelligence.archon import Archon, Issue, PhaseResult
+from inkline.intelligence.anti_patterns import check_anti_patterns, AntiPatternResult
+from inkline.intelligence.quality_scorer import score_deck, QualityScore
+from inkline.intelligence.polish import polish_deck, PolishResult
+from inkline.intelligence.design_brief import generate_brief, DesignBrief
 from inkline.intelligence.vishwakarma import (
     VISHWAKARMA_SYSTEM_PREAMBLE,
     VISHWAKARMA_AUDIT_CRITERIA,
@@ -90,4 +94,13 @@ __all__ = [
     "BRIDGE_FIRST",
     "AUDIT_MANDATORY",
     "ARCHON_OVERSIGHT",
+    # Impeccable design intelligence
+    "check_anti_patterns",
+    "AntiPatternResult",
+    "score_deck",
+    "QualityScore",
+    "polish_deck",
+    "PolishResult",
+    "generate_brief",
+    "DesignBrief",
 ]

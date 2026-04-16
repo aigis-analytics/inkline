@@ -5,12 +5,18 @@ and documents. You (Claude) drive it via Bash. This file is your complete refere
 
 ---
 
+## ⚠️ MODEL POLICY
+
+- **Specs, architecture, design decisions**: Always use **Opus** (`claude-opus-4-6`)
+- **Implementation / coding**: Use **Sonnet** (`claude-sonnet-4-6`) unless Opus is explicitly requested
+
 ## ⚠️ SPEC BEFORE CODE
 
 All non-trivial changes to Inkline must start with a spec in `plan_docs/`.
 
 | Spec | Status | Covers |
 |---|---|---|
+| `plan_docs/impeccable-design-intelligence-spec.md` | Approved for implementation | Anti-pattern library, quality scoring, auto-polish, design brief generation |
 | `plan_docs/design-system-spec.md` | Approved for implementation | Decision framework, taste enforcer, self-learning, deck ingestion |
 | `plan_docs/visual-auditor-self-learning-spec.md` | Superseded by design-system-spec | Per-brand pattern memory (partially implemented) |
 | `plan_docs/two-agent-design-loop-spec.md` | Implemented | Phase 1 planner + Phase 2 DesignAdvisor |

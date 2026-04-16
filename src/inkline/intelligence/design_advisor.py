@@ -584,6 +584,7 @@ class DesignAdvisor:
         goal: str = "",
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
+        brief: Optional[Any] = None,
     ) -> list[dict[str, Any]]:
         """Design a slide deck from structured content sections.
 
@@ -673,6 +674,7 @@ class DesignAdvisor:
                     contact=contact, audience=audience, goal=goal,
                     additional_guidance=additional_guidance,
                     reference_archetypes=reference_archetypes,
+                    brief=brief,
                 )
 
                 # Merge: replace LLM-designed slides with exact ones at
@@ -822,6 +824,7 @@ class DesignAdvisor:
         goal: str = "",
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
+        brief: Optional[Any] = None,
     ) -> list[dict[str, Any]]:
         """Use an LLM to design the optimal slide deck (two-phase approach).
 
@@ -844,7 +847,7 @@ class DesignAdvisor:
         log.info("DesignAdvisor Phase 1: planning deck structure (%d sections)...", len(sections))
         plan = self._plan_deck_llm(
             title, sections, goal=goal, audience=audience,
-            additional_guidance=additional_guidance,
+            additional_guidance=additional_guidance, brief=brief,
         )
         log.info("DesignAdvisor Phase 1: plan has %d slides", len(plan))
         for i, entry in enumerate(plan):
@@ -1125,11 +1128,14 @@ class DesignAdvisor:
         goal: str = "",
         audience: str = "",
         additional_guidance: str = "",
+        brief: Optional[Any] = None,
     ) -> list[dict[str, Any]]:
         """Phase 1: Ask LLM to outline the deck structure.
 
         Small, fast call (~3K sys + ~6K user). Returns list of plan entries.
         The plan is then reviewed by _review_plan_llm before per-slide design begins.
+        If a DesignBrief is provided, its story arc and visual strategy are injected
+        into the planning prompt for higher first-pass quality.
         """
         system_prompt = self._build_plan_system_prompt()
 
@@ -1138,6 +1144,31 @@ class DesignAdvisor:
             parts.append(f"Audience: {audience}")
         if goal:
             parts.append(f"Goal: {goal}")
+
+        # Inject design brief context if available
+        if brief is not None:
+            parts.append("\n## Design Brief (follow this strategy)")
+            if getattr(brief, "deck_purpose", ""):
+                parts.append(f"Purpose: {brief.deck_purpose}")
+            if getattr(brief, "story_arc", ""):
+                parts.append(f"Story arc: {brief.story_arc}")
+            if getattr(brief, "visual_strategy", ""):
+                parts.append(f"Visual strategy: {brief.visual_strategy}")
+            if getattr(brief, "key_message", ""):
+                parts.append(f"Key message: {brief.key_message}")
+            if getattr(brief, "tone", ""):
+                parts.append(f"Tone: {brief.tone}")
+            if getattr(brief, "anti_goals", None):
+                parts.append(f"Anti-goals (do NOT): {', '.join(brief.anti_goals)}")
+            if getattr(brief, "section_briefs", None):
+                parts.append("\nPer-section guidance:")
+                for sb in brief.section_briefs:
+                    title_str = sb.get("title", "")
+                    exhibit = sb.get("suggested_exhibit", "")
+                    intent = sb.get("intent", "")
+                    parts.append(f"  - {title_str}: {intent} → suggest {exhibit}")
+            parts.append("")
+
         if additional_guidance:
             parts.append(f"\nAdditional guidance: {additional_guidance.strip()}")
 
