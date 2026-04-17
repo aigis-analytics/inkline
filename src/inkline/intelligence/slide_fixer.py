@@ -183,7 +183,11 @@ def validate_and_fix_slides(
                         "action": "truncated_text",
                     })
                 elif isinstance(item, dict):
+                    # card-type "body" fields are handled by the card-specific check above
+                    _is_card_type = stype in ("three_card", "four_card", "feature_grid")
                     for key in ("body", "desc", "label"):
+                        if key == "body" and _is_card_type:
+                            continue
                         val = item.get(key, "")
                         if isinstance(val, str) and len(val) > MAX_BULLET_CHARS:
                             item[key] = _truncate_at_word(val, MAX_BULLET_CHARS)

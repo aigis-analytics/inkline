@@ -1063,8 +1063,6 @@ class TypstSlideRenderer:
 
   v(1fr)
   {kpi_block}
-  v(1fr)
-
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 

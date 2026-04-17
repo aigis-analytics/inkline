@@ -183,18 +183,20 @@ def bar_row(label: str, value: str, pct: float, color: str, muted: str) -> str:
   )"""
 
 
-def kpi_card(value: str, label: str, fill: str, text_color: str) -> str:
+def kpi_card(value: str, label: str, fill: str, text_color: str, height: str = "auto") -> str:
     """KPI metric card for stat strips."""
+    height_attr = f"height: {height}," if height != "auto" else ""
     return f"""block(
     fill: {_rgb(fill)},
     radius: 4pt,
-    inset: 10pt,
+    inset: (x: 10pt, y: 16pt),
     width: 100%,
+    {height_attr}
   )[
-    #align(center)[
-      #text(weight: "bold", size: 22pt, fill: {_rgb(text_color)})[{_esc_content(value)}]
-      #v(4pt)
-      #text(size: 8pt, fill: {_rgb(text_color)})[#upper[{_esc_content(label)}]]
+    #align(center + horizon)[
+      #text(weight: "bold", size: 26pt, fill: {_rgb(text_color)})[{_esc_content(value)}]
+      #v(6pt)
+      #text(size: 9pt, fill: {_rgb(text_color)})[#upper[{_esc_content(label)}]]
     ]
   ]"""
 
