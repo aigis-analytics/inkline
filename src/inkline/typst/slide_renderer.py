@@ -324,13 +324,13 @@ FIELD_LIMITS: dict[str, dict[str, int]] = {
     "feature_grid": {
         "title": 45,
         "features.title": 22,  # 13pt bold inner 3-col (6.07cm)
-        "features.body": 80,   # 12pt inner 3-col = 26 chars/line × ~3 lines
+        "features.body": 130,  # 12pt inner 3-col: ~22 chars/line × 6 lines validated
         "footnote": 90,
     },
     "process_flow": {
         "title": 45,
         "steps.title": 22,
-        "steps.body": 90,     # revalidated ceiling
+        "steps.body": 130,    # 4-step layout: ~130 chars fit without overflow
         "footnote": 90,
     },
     "icon_stat": {
@@ -460,12 +460,30 @@ class TypstSlideRenderer:
         )
 
     def _image_markup(self, image_path: str, **kwargs) -> str:
-        """Return Typst image markup, or a placeholder if the file is missing."""
+        """Return Typst image markup, or a placeholder if the file is missing.
+
+        Path resolution order when image_root is set:
+          1. image_root / image_path  (exact relative path)
+          2. image_root / "charts" / image_path  (charts sub-directory)
+          3. image_path as absolute path
+        The resolved Typst-relative path is used in the image() call so Typst
+        can locate the file from its root directory.
+        """
         from pathlib import Path
         exists = False
+        typst_path = image_path  # path used in generated Typst source
         if image_path:
             if self._image_root:
-                exists = (Path(self._image_root) / image_path).exists()
+                root = Path(self._image_root)
+                candidate = root / image_path
+                if candidate.exists():
+                    exists = True
+                else:
+                    # Fallback: check charts/ subdirectory
+                    charts_candidate = root / "charts" / image_path
+                    if charts_candidate.exists():
+                        exists = True
+                        typst_path = "charts/" + image_path
             else:
                 exists = Path(image_path).exists()
             if not exists:
@@ -476,7 +494,7 @@ class TypstSlideRenderer:
 
         if exists:
             args = ", ".join(f'{k.replace("_", "-")}: {v}' for k, v in kwargs.items())
-            return f'image("{image_path}", {args})' if args else f'image("{image_path}")'
+            return f'image("{typst_path}", {args})' if args else f'image("{typst_path}")'
 
         # Typst-native placeholder: colored rect with text.
         # Use caller-supplied height/width kwargs so placeholder takes the same
@@ -1024,12 +1042,14 @@ class TypstSlideRenderer:
         vertical = d.get("vertical", False)
 
         if vertical:
-            body = f"""stack(
+            body = f"""v(1fr)
+  stack(
     spacing: 8pt,
     {kpis_str}
   )"""
         else:
-            body = f"""grid(
+            body = f"""v(1fr)
+  grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
     gutter: 8pt,
     {kpis_str}

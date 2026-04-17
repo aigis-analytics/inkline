@@ -115,7 +115,9 @@ print("[ARCHON] save_slide_spec → OK in 0.1s")
 
 # ── Phase 4: export_pdf_with_audit ──────────────────────────────────────────
 print("[ARCHON] Phase: export_pdf_with_audit")
-export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="consulting")
+CHARTS_DIR = Path("~/.local/share/inkline/output/charts").expanduser()
+export_typst_slides(slides=slides, output_path=str(OUTPUT), brand="minimal", template="consulting",
+                    image_root=str(OUTPUT.parent))  # image_root = output/ so charts/foo.png resolves
 
 # Per-slide visual audit via bridge /vision endpoint
 doc = pymupdf.open(str(OUTPUT))
@@ -123,14 +125,25 @@ n = len(doc)
 for i, page in enumerate(doc):
     pix = page.get_pixmap(dpi=120)
     img_b64 = base64.b64encode(pix.tobytes("png")).decode()
+    audit_prompt = (
+        f"Slide {i+1}/{n}: Perform a rigorous quality audit. Check ALL of the following:\n"
+        "1. TEXT TRUNCATION — Is any text cut off with '...' or clipped at the edge? FAIL if yes.\n"
+        "2. BLANK SPACE — Is more than 40% of the content area empty/white with no data or visuals? FAIL if yes.\n"
+        "3. IMAGE PLACEHOLDER — Does any chart area show 'Chart not available' or a grey placeholder instead of a real image? FAIL if yes.\n"
+        "4. OVERFLOW — Does any text or element extend beyond the slide boundary or overlap the footer? FAIL if yes.\n"
+        "5. READABILITY — Is the font size so small that key text is illegible at normal viewing distance? FAIL if yes.\n"
+        "6. MESSAGE DELIVERY — Does the slide communicate a clear, complete point? Would an executive understand the key insight without extra context? FAIL if it's too vague or incomplete.\n"
+        "7. VISUAL DENSITY — For chart/dashboard slides, is the chart placeholder the only content (i.e. no real chart rendered)? FAIL if yes.\n"
+        "Reply: OK if all checks pass. FAIL: <specific issue> if any check fails. Be strict — partial truncation counts as a FAIL."
+    )
     r = subprocess.run(["curl", "-s", "-X", "POST", "http://localhost:8082/vision",
         "-H", "Content-Type: application/json",
         "-d", json.dumps({
             "image_base64": img_b64,
-            "prompt": f"Slide {i+1}/{n}: Are there any overflow, blank content areas, or rendering errors? Reply OK or FAIL with one-line reason."
+            "prompt": audit_prompt,
         })], capture_output=True, text=True)
     result = json.loads(r.stdout).get("response", "")
-    print(f"  Vision audit slide {i+1}/{n}: {result[:80]}")
+    print(f"  Vision audit slide {i+1}/{n}: {result[:120]}")
     if "FAIL" in result.upper():
         print(f"  ⚠ Visual issue on slide {i+1} — fix before delivery")
 
