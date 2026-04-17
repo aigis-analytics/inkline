@@ -1195,8 +1195,18 @@ def _flatten_values(data: Any) -> list[Any]:
     return values
 
 
+_CARD_TYPES = {"three_card", "four_card", "feature_grid"}
+
+
 def _shorten_longest_field(data: dict, stype: str) -> None:
-    """Find and shorten the longest text field on a slide."""
+    """Find and shorten the longest text field on a slide.
+
+    Card types (three_card, four_card, feature_grid) are skipped — they use
+    adaptive font sizing to handle overflow, so shortening body text here only
+    creates a truncation loop when the visual audit reports clipping.
+    """
+    if stype in _CARD_TYPES:
+        return
     for field in _CONTENT_FIELDS.get(stype, []):
         items = _get_nested(data, field)
         if not items or not isinstance(items, list):
