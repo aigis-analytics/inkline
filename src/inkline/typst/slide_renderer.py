@@ -1033,7 +1033,7 @@ class TypstSlideRenderer:
         for k in kpis:
             fill = t["accent"] if k.get("highlight") else t["card_fill"]
             text_color = t["title_fg"] if k.get("highlight") else t["text"]
-            kpi_markups.append(kpi_card(k["value"], k["label"], fill, text_color))
+            kpi_markups.append(kpi_card(k["value"], k["label"], fill, text_color, height="5.5cm"))
 
         kpis_str = ",\n    ".join(kpi_markups)
         n_cols = len(kpi_markups)
@@ -1139,9 +1139,20 @@ class TypstSlideRenderer:
 
   #v(1fr)
 
-  // Bottom — confidentiality
+  // Bottom — confidentiality + footer
   #align(center)[
     #text(size: 8pt, weight: "bold", tracking: 1pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}]
+  ]
+  #v(8pt)
+  #line(length: 100%, stroke: 0.5pt + {_rgb(t['border'])})
+  #v(4pt)
+  #context[
+    #grid(
+      columns: (1fr, auto),
+      align: horizon,
+      text(size: 8pt, fill: {_rgb(t['muted'])})[{_esc(t.get("footer_text", t.get("name", "")))}],
+      text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[#counter(page).display() / #counter(page).final().first()],
+    )
   ]
 ]"""
 
