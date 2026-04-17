@@ -1724,16 +1724,8 @@ class TypstSlideRenderer:
 
         cells_str = ",\n    ".join(cells)
 
-        body = f"""v(1fr)
-
-  grid(
-    columns: (1fr, 1fr, 1fr),
-    gutter: 10pt,
-    {cells_str}
-  )
-
-  v(1fr)"""
-
+        # Build slide without _body_block to avoid the hard 9cm clip.
+        # Place footer at the absolute bottom; let the grid fill remaining space.
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -1743,9 +1735,17 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(10pt)
+  v(8pt)
 
-  {self._body_block(body, footnote)}
+  v(1fr)
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 10pt,
+    {cells_str}
+  )
+  v(1fr)
+
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
     # -- Dashboard slide (chart + stats + bullets) -------------------------
