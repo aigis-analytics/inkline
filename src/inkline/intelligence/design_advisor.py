@@ -648,6 +648,29 @@ class DesignAdvisor:
         )
         return response.content[0].text
 
+    @staticmethod
+    def _suggest_template_for_audience(audience: str) -> str:
+        """Return a slide template name suited to the stated audience.
+
+        Only called when the caller has not already specified a template
+        (i.e. template == "brand"). Keeps template auto-selection lightweight
+        without an LLM call.
+        """
+        a = audience.lower()
+        if any(k in a for k in ("bank", "finance", "investment", "equity", "debt", "credit")):
+            return "banking"
+        if any(k in a for k in ("board", "trustee", "governor", "director", "non-exec")):
+            return "boardroom"
+        if any(k in a for k in ("investor", "vc", "venture", "fund", "lp", "limited partner")):
+            return "investor"
+        if any(k in a for k in ("mckinsey", "consultant", "partner", "engagement manager")):
+            return "consulting"
+        if any(k in a for k in ("pitch", "startup", "founder", "seed", "series")):
+            return "pitch"
+        if any(k in a for k in ("executive", "c-suite", "ceo", "cfo", "coo", "cto", "svp")):
+            return "executive"
+        return "brand"  # No strong signal — keep brand default
+
     def design_deck(
         self,
         title: str,
@@ -742,6 +765,16 @@ class DesignAdvisor:
             return slides
 
         # LLM mode: send auto + guided sections to LLM
+        # Auto-suggest a template when the caller left it at the brand default
+        # and provided an audience hint — keeps template selection out of the LLM
+        # prompt while still producing audience-appropriate styling.
+        if self.template == "brand" and audience:
+            suggested = self._suggest_template_for_audience(audience)
+            if suggested != "brand":
+                log.info("DesignAdvisor: auto-selecting template '%s' for audience: %s",
+                         suggested, audience)
+                self.template = suggested
+
         if self.mode == "llm" and (self.llm_caller is not None or self.api_key):
             try:
                 llm_only = [s for _, s in llm_sections]
@@ -946,6 +979,38 @@ class DesignAdvisor:
                      entry.get("slide_type", "?"),
                      str(entry.get("title", ""))[:55])
 
+        # === PHASE 1a: VFEP audit — reject plans with too many text layouts ===
+        from inkline.intelligence.plan_auditor import audit_plan
+        _MAX_AUDIT_RETRIES = 2
+        for _audit_attempt in range(_MAX_AUDIT_RETRIES):
+            audit = audit_plan(plan)
+            if audit.passed:
+                log.info("DesignAdvisor Phase 1a: VFEP audit passed "
+                         "(T5=%d/%d, %.0f%%)", audit.t5_count, audit.content_count, audit.t5_ratio * 100)
+                break
+            log.warning(
+                "DesignAdvisor Phase 1a: VFEP audit FAILED (attempt %d/%d) — "
+                "T5=%.0f%%, violations=%d. Retrying planning with feedback.",
+                _audit_attempt + 1, _MAX_AUDIT_RETRIES,
+                audit.t5_ratio * 100, len(audit.consecutive_violations),
+            )
+            _vfep_guidance = (
+                f"{additional_guidance}\n\nVFEP AUDIT FEEDBACK — MUST FIX BEFORE SUBMITTING:\n"
+                f"{audit.feedback}"
+            ).strip()
+            plan = self._plan_deck_llm(
+                title, sections, goal=goal, audience=audience,
+                additional_guidance=_vfep_guidance, brief=brief,
+            )
+        else:
+            # After retries, accept whatever we have (Archon still reviews next)
+            audit = audit_plan(plan)
+            log.warning(
+                "DesignAdvisor Phase 1a: VFEP audit still failing after %d retries "
+                "(T5=%.0f%%) — proceeding to Archon review.",
+                _MAX_AUDIT_RETRIES, audit.t5_ratio * 100,
+            )
+
         # === PHASE 1b: Archon reviews plan before any rendering ===
         # Text-only review: checks story arc, slide type fitness, exhibit
         # opportunities, coverage, and commercial viability.
@@ -1085,14 +1150,41 @@ class DesignAdvisor:
             "or decomposition. NEVER plan a slide that is only numbers — always pair",
             "every metric with a chart that proves, contextualises, or explains it.",
             "",
-            "FORBIDDEN AT PLANNING TIME (low information density):",
-            "  stat, kpi_strip, icon_stat   — bare numbers with no chart context",
-            "  timeline, process_flow       — single-thread linear slides; low density",
-            "  content, split, table        — text-heavy narrative slides",
-            "  four_card, three_card, feature_grid, progress_bars, pyramid",
-            "These types exist ONLY as render-time overflow fallbacks. Do NOT plan them.",
-            "NOTE: timeline / process content can appear as ONE PANEL inside a multi_chart",
-            "  alongside supporting data charts — that is the preferred approach.",
+            "═══════════════════════════════════════════════════════════════",
+            "VISUAL-FIRST EXHAUSTION PROTOCOL (VFEP)",
+            "═══════════════════════════════════════════════════════════════",
+            "Before assigning ANY slide type, work through this 5-tier cascade:",
+            "",
+            "  T1 — QUANTITATIVE: Does the section contain metrics, percentages, counts,",
+            "       financial figures, or time-series data?",
+            "       If yes → dashboard, chart_caption, chart, multi_chart, bar_chart, kpi_strip, stat",
+            "",
+            "  T2 — SEQUENCE / JOURNEY: Does the section describe steps, phases,",
+            "       milestones, a timeline, or a before→after progression?",
+            "       If yes → multi_chart with entity_flow/ladder panel, process_flow, timeline",
+            "",
+            "  T3 — CONTRAST / COMPARISON: Does the section juxtapose two or more",
+            "       options, scenarios, states, or entities?",
+            "       If yes → comparison, three_card, four_card",
+            "",
+            "  T4 — GROUPED CATEGORIES: Does the section list features, capabilities,",
+            "       attributes, or items that can be grouped visually?",
+            "       If yes → feature_grid, icon_stat, four_card, three_card, progress_bars",
+            "",
+            "  T5 — TEXT FALLBACK (LAST RESORT ONLY): Use split, content, or table ONLY",
+            "       when T1–T4 genuinely do not apply. When you assign a T5 layout,",
+            "       you MUST include this in the notes field:",
+            "         vfep_justification: <one sentence explaining why T1-T4 were exhausted>",
+            "",
+            "HARD LIMITS:",
+            "  - No more than 30% of non-structural slides may be T5 (split/content/table).",
+            "  - No 3+ consecutive slides of the same slide_type.",
+            "  - stat/kpi_strip MAY appear when metrics need no chart context (T1 fallback).",
+            "  - timeline/process_flow MAY appear standalone when sequence data is rich.",
+            "  - four_card/three_card/feature_grid are PREFERRED over split/content.",
+            "",
+            "NOTE: timeline / process content can also appear as ONE PANEL inside a multi_chart",
+            "  alongside supporting data charts — that is often the best approach.",
             "",
             "═══════════════════════════════════════════════════════════════",
             "AVAILABLE SLIDE TYPES",

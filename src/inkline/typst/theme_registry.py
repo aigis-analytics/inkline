@@ -97,6 +97,15 @@ SLIDE_TEMPLATES: dict[str, dict] = {
         "card_fill_override": "#F9FAFB",
         "surface_override": "#F9FAFB",
     },
+    "banking": {
+        "desc": "Investment banking — navy header, dark content, muted gold accent",
+        "title_bg_override": "#1B3060",
+        "title_fg_override": "#FFFFFF",
+        "accent_override": "#C9A84C",
+        "bg_override": "#FFFFFF",
+        "card_fill_override": "#F5F7FA",
+        "surface_override": "#F5F7FA",
+    },
     "brand": {
         "desc": "Uses brand colors directly — no template overrides",
     },
@@ -175,7 +184,22 @@ def _load_user_templates() -> None:
 _load_user_templates()
 
 
-def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:
+def _build_footer_text(brand: "BaseBrand") -> str:
+    """Build the rendered footer string from brand fields.
+
+    Uses ``brand.footer_text`` as the user-supplied attribution line.
+    Appends ``brand.attribution_text`` only when ``brand.show_attribution``
+    is True.  Returns an empty string when both sources are blank.
+    """
+    parts = []
+    if brand.footer_text:
+        parts.append(brand.footer_text)
+    if getattr(brand, "show_attribution", False) and getattr(brand, "attribution_text", ""):
+        parts.append(brand.attribution_text)
+    return " · ".join(parts)
+
+
+def brand_to_typst_theme(brand: "BaseBrand", template: str = "brand") -> dict:
     """Generate a Typst theme dict from a BaseBrand instance.
 
     Parameters
@@ -215,7 +239,7 @@ def brand_to_typst_theme(brand: BaseBrand, template: str = "brand") -> dict:
         "logo_light_path": brand.logo_light_path,
         # Metadata
         "confidentiality": brand.confidentiality,
-        "footer_text": brand.footer_text,
+        "footer_text": _build_footer_text(brand),
         # Chart colors
         "chart_colors": brand.chart_colors,
     }

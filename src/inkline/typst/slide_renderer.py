@@ -245,20 +245,20 @@ FIELD_LIMITS: dict[str, dict[str, int]] = {
         "title": 45,
         "left.heading": 26,   # 18pt bold half-col
         "right.heading": 26,
-        "left.items": 55,     # 14pt half-col = 39 chars/line × 1.4 lines avg
-        "right.items": 55,
+        "left.items": 65,     # 14pt half-col — revalidated ceiling
+        "right.items": 65,
         "footnote": 90,
     },
     "three_card": {
         "title": 45,
         "cards.title": 24,    # 13pt bold inner 3-col (6.07cm)
-        "cards.body": 85,     # 12pt inner 3-col = 26 chars/line × ~3.3 lines
+        "cards.body": 95,     # 12pt inner 3-col — revalidated ceiling
         "footnote": 90,
     },
     "four_card": {
         "title": 45,
-        "cards.title": 36,    # 13pt bold inner 2-col (9.96cm)
-        "cards.body": 120,    # 12pt inner 2-col = 43 chars/line × ~2.8 lines
+        "cards.title": 42,    # 13pt bold inner 2-col (9.96cm) — revalidated ceiling
+        "cards.body": 145,    # 12pt inner 2-col = 43 chars/line × ~3.4 lines
         "footnote": 90,
     },
     "stat": {
@@ -330,7 +330,7 @@ FIELD_LIMITS: dict[str, dict[str, int]] = {
     "process_flow": {
         "title": 45,
         "steps.title": 22,
-        "steps.body": 80,
+        "steps.body": 90,     # revalidated ceiling
         "footnote": 90,
     },
     "icon_stat": {
@@ -604,21 +604,28 @@ class TypstSlideRenderer:
         date = d.get("date", "")
         subtitle = d.get("subtitle", "")
         left_footer = d.get("left_footer", "")
+        secondary_headline = d.get("secondary_headline", "")
         heading_font = t.get("heading_font", "Inter")
 
         # Resolve title bg/fg — if brand bg is light, use it for title too
-        # (matches advisor pitch style: cream bg, black text, logo visible)
         title_bg = t.get("title_bg", t.get("bg", "#1B283B"))
         title_fg = t.get("title_fg", "#FFFFFF")
-        # Logo path for title slide
         logo_path = t.get("logo_light_path", "")
 
-        # Title slide layout matches advisor pitch:
-        # - Large shield left-aligned, vertically centred with company name
-        # - Company name in huge bold uppercase to the right of shield
-        # - Tagline below in bold uppercase
-        # - Horizontal line, then subtitle text
-        # - Footer with date + confidentiality
+        # Adaptive vertical spacing: when secondary_headline or both subtitle +
+        # left_footer are present, compress the upper spacer so the lower half
+        # is visually filled rather than blank.
+        has_lower_content = bool(secondary_headline or subtitle or left_footer)
+        upper_frac = "0.6fr" if has_lower_content else "1fr"
+
+        lower_block = ""
+        if secondary_headline:
+            lower_block += f'#v(20pt)\n  #text(size: 14pt, fill: {_rgb(t["muted"])})[{_esc(secondary_headline)}]\n  '
+        if subtitle:
+            lower_block += f'#text(size: 11pt, fill: {_rgb(t["muted"])})[{_esc(subtitle)}]#v(4pt)\n  '
+        if left_footer:
+            lower_block += f'#text(weight: "bold", size: 11pt, fill: {_rgb(title_fg)})[{_esc(left_footer)}]#v(4pt)\n  '
+
         return f"""#page(
   fill: {_rgb(title_bg)},
   margin: (top: 1.4cm, bottom: 1.2cm, left: 1.6cm, right: 1.6cm),
@@ -627,9 +634,9 @@ class TypstSlideRenderer:
 )[
   #set text(fill: {_rgb(title_fg)})
 
-  #v(1fr)
+  #v({upper_frac})
 
-  // Shield + company name — shield is large, left-aligned, name to the right
+  // Shield + company name
   #grid(
     columns: (4.5cm, 1fr),
     gutter: 16pt,
@@ -646,9 +653,7 @@ class TypstSlideRenderer:
   #v(0.5cm)
   #line(length: 100%, stroke: 0.5pt + {_rgb(t['muted'])})
   #v(0.4cm)
-  {f'#text(size: 11pt, fill: {_rgb(t["muted"])})[{_esc(subtitle)}]#v(4pt)' if subtitle else ''}
-  {f'#text(weight: "bold", size: 11pt, fill: {_rgb(title_fg)})[{_esc(left_footer)}]#v(4pt)' if left_footer else ''}
-
+  {lower_block}
   #v(1fr)
 
   // Footer — date + confidentiality
@@ -1053,10 +1058,50 @@ class TypstSlideRenderer:
         email = d.get("email", "")
         company = d.get("company", t.get("name", ""))
         tagline = d.get("tagline", "")
+        cta = d.get("cta", "")
+        website = d.get("website", "")
         heading_font = t.get("heading_font", "Inter")
-
-        # Self-contained #page() — no set rule leak
         logo_path = t.get("logo_light_path", "")
+
+        has_contact = any([name, role, email])
+
+        if has_contact:
+            # Full closing: company + tagline + optional CTA + contact block
+            cta_block = (
+                f'#v(0.5cm)\n    '
+                f'#text(weight: "bold", size: 16pt, fill: {_rgb(t["accent"])})[{_esc(cta)}]\n    '
+                if cta else ""
+            )
+            name_block = (
+                f'#v(0.6cm)\n    '
+                f'#block(fill: {_rgb(t["accent"])}, inset: (x: 14pt, y: 6pt), radius: 4pt)['
+                f'#text(weight: "bold", size: 14pt, fill: white)[{_esc(name)}]]\n    '
+                if name else ""
+            )
+            role_block = (
+                f'#v(0.3cm)\n    #text(size: 10pt, fill: {_rgb(t["muted"])})[{_esc(role)}]\n    '
+                if role else ""
+            )
+            email_block = (
+                f'#v(2pt)\n    #text(size: 10pt, weight: "bold", fill: {_rgb(t["accent2"])})[{_esc(email)}]\n    '
+                if email else ""
+            )
+            website_block = (
+                f'#v(6pt)\n    #text(size: 10pt, fill: {_rgb(t["muted"])})[{_esc(website)}]\n    '
+                if website else ""
+            )
+            contact_section = f"{cta_block}{name_block}{role_block}{email_block}{website_block}"
+        else:
+            # Minimal closing: no contact — just brand + tagline + decorative accent line
+            cta_text = cta or tagline
+            contact_section = (
+                f'#v(0.8cm)\n    '
+                f'#line(length: 6cm, stroke: 2pt + {_rgb(t["accent"])})\n    '
+                f'#v(0.4cm)\n    '
+                f'#text(size: 14pt, fill: {_rgb(t["muted"])})[{_esc(cta_text)}]\n    '
+                if cta_text else
+                f'#v(0.8cm)\n    #line(length: 6cm, stroke: 2pt + {_rgb(t["accent"])})\n    '
+            )
 
         return f"""#page(
   fill: {_rgb(t['title_bg'])},
@@ -1069,17 +1114,10 @@ class TypstSlideRenderer:
   #v(1fr)
   #align(center)[
     {f'#image("{logo_path}", width: 1.5cm)#v(0.2cm)' if logo_path else ''}
-    #text(weight: "bold", size: 44pt, font: "{heading_font}", tracking: -1pt)[#upper[{_esc(company)}]]
-    #v(0.2cm)
-    #text(size: 12pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
-    #v(0.6cm)
-    #block(fill: {_rgb(t['accent'])}, inset: (x: 14pt, y: 6pt), radius: 4pt)[
-      #text(weight: "bold", size: 14pt, fill: white)[{_esc(name)}]
-    ]
+    #text(weight: "bold", size: 36pt, font: "{heading_font}", tracking: -1pt)[#upper[{_esc(company)}]]
     #v(0.3cm)
-    #text(size: 10pt, fill: {_rgb(t['muted'])})[{_esc(role)}]
-    #v(2pt)
-    #text(size: 10pt, weight: "bold", fill: {_rgb(t['accent2'])})[{_esc(email)}]
+    #text(size: 16pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
+    {contact_section}
   ]
 
   #v(1fr)

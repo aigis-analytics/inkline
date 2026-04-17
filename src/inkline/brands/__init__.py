@@ -175,7 +175,9 @@ class BaseBrand:
 
     # ── Document metadata ────────────────────────────────────────────
     confidentiality: str = "Confidential"
-    footer_text: str = ""
+    footer_text: str = ""          # User attribution line (empty = no footer)
+    attribution_text: str = ""     # Tool/framework credit (opt-in only)
+    show_attribution: bool = False  # Set True to append attribution_text to footer
     tagline: str = ""
 
     # ── Slide-specific ───────────────────────────────────────────────

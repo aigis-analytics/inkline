@@ -34,7 +34,9 @@ MinimalBrand = BaseBrand(
     ],
 
     confidentiality="",
-    footer_text="Branded documents and decks · github.com/u3126117/inkline",
+    footer_text="",
+    attribution_text="Branded documents and decks · github.com/u3126117/inkline",
+    show_attribution=False,
     tagline="Because your output should be as good as your analysis",
 
     # A modern indigo + amber chart palette
