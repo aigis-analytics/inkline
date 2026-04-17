@@ -357,6 +357,13 @@ FIELD_LIMITS: dict[str, dict[str, int]] = {
         "charts.title": 30,
         "footnote": 90,
     },
+    "team_grid": {
+        "title": 45,
+        "members.name": 30,    # Bold 14pt in third-col ~7cm → 26 chars; 30 with safety
+        "members.role": 35,    # 10pt italic in third-col → 36 chars
+        "members.bio": 120,    # 9pt 3-line bio at ~7cm → ~120 chars
+        "footnote": 90,
+    },
 }
 
 
@@ -574,6 +581,12 @@ class TypstSlideRenderer:
             "chart_caption": self._chart_caption_slide,
             "multi_chart": self._multi_chart_slide,
             "section_divider": self._section_divider_slide,
+            # New slide types (P4)
+            "credentials": self._credentials_slide,
+            "testimonial": self._testimonial_slide,
+            "before_after": self._before_after_slide,
+            # New slide types (P5)
+            "team_grid": self._team_grid_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -2015,6 +2028,332 @@ class TypstSlideRenderer:
       {f'#v(4pt)#text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{caption}]' if caption else ''}
     ],
   )"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(10pt)
+
+  {self._body_block(body, footnote)}
+}}"""
+
+    # -- Credentials (tombstone grid) slide --------------------------------
+
+    def _credentials_slide(self, d: dict) -> str:
+        """Grid of 4-8 tombstone cells (track record / deal history).
+
+        data: section, title, tombstones [{name, detail}], footnote
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        tombstones = d.get("tombstones", [])[:8]
+        footnote = d.get("footnote", "")
+
+        if not tombstones:
+            return self._content_slide(d)
+
+        n = len(tombstones)
+        # Determine grid columns: 3 cols for ≤6 items, 4 cols for 7-8 items
+        n_cols = 3 if n <= 6 else 4
+        col_spec = "(" + ", ".join(["1fr"] * n_cols) + ",)"
+
+        cells = []
+        for tb in tombstones:
+            name = _esc(tb.get("name", ""))
+            detail = _esc(tb.get("detail", ""))
+            cell = (
+                f"block("
+                f"  fill: {_rgb(t['card_fill'])},"
+                f"  stroke: (top: 3pt + {_rgb(t['accent'])}),"
+                f"  inset: 10pt,"
+                f"  width: 100%,"
+                f"  height: 100%,"
+                f")[\n"
+                f"  #text(weight: \"bold\", size: 11pt, fill: {_rgb(t['text'])})[{name}]\n"
+                f"  #v(4pt)\n"
+                f"  #text(size: 9pt, fill: {_rgb(t['muted'])})[{detail}]\n"
+                f"]"
+            )
+            cells.append(cell)
+
+        cells_str = ",\n    ".join(cells)
+        grid_body = f"""grid(
+  columns: {col_spec},
+  rows: (auto,),
+  gutter: 8pt,
+  {cells_str},
+)"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(8pt)
+
+  {self._body_block(grid_body, footnote)}
+}}"""
+
+    # -- Testimonial (pull-quote) slide ------------------------------------
+
+    # -- Team grid (management team bios) slide ---------------------------
+
+    def _team_grid_slide(self, d: dict) -> str:
+        """Management team / advisory board bio grid.
+
+        2-3 members → single row.  4 members → 2×2 grid.
+
+        data: section, title, members [{name, role, bio, image_path?, logos?}], footnote?
+
+        image_path resolution (same as chart slides):
+          - absolute path  → used as-is
+          - relative path  → resolved under self._image_root (charts/ dir)
+          - None / missing → initials placeholder circle
+        Logo path uses identical resolution; missing logos are silently skipped.
+        """
+        from pathlib import Path
+
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        footnote = d.get("footnote", "")
+        members = d.get("members", [])[:4]
+        n = len(members)
+        if n == 0:
+            return self._content_slide(d)
+
+        # Headshot and logo sizes depend on member count
+        if n == 4:
+            photo_pt = 100
+        elif n == 2:
+            photo_pt = 130
+        else:
+            photo_pt = 120  # 3 members (most common)
+
+        def _resolve_img(path: str | None) -> str | None:
+            """Return resolved absolute path string, or None if not found / not provided."""
+            if not path:
+                return None
+            p = Path(path)
+            if p.is_absolute():
+                return str(p) if p.exists() else None
+            if self._image_root:
+                candidate = Path(self._image_root) / path
+                if candidate.exists():
+                    return str(candidate)
+            return None
+
+        def _initials(name: str) -> str:
+            """Extract up to 2 initials from a name."""
+            parts = name.strip().split()
+            if len(parts) >= 2:
+                return (parts[0][0] + parts[-1][0]).upper()
+            return name[:2].upper() if name else "?"
+
+        def _member_card(m: dict, compact: bool) -> str:
+            """Render one member card as Typst markup."""
+            name = _esc(m.get("name", ""))
+            role = _esc(m.get("role", ""))
+            bio = _esc(m.get("bio", ""))
+            image_path = m.get("image_path")
+            logos = m.get("logos", []) or []
+
+            p_pt = photo_pt - 20 if compact else photo_pt
+            p_cm_str = f"{p_pt / 28.35:.2f}cm"  # convert pt → cm for Typst
+
+            resolved_img = _resolve_img(image_path)
+
+            if resolved_img:
+                photo_markup = (
+                    f'box(width: {p_cm_str}, height: {p_cm_str}, clip: true, radius: 4pt)[\n'
+                    f'  #image("{resolved_img}", width: {p_cm_str}, height: {p_cm_str}, fit: "cover")\n'
+                    f']'
+                )
+            else:
+                # Initials circle placeholder
+                initials = _initials(m.get("name", ""))
+                photo_markup = (
+                    f'circle(radius: {p_pt / 2}pt, fill: {_rgb(t["accent"])})[#align(center + horizon)['
+                    f'#text(weight: "bold", size: {max(12, p_pt // 5)}pt, fill: white)[{initials}]]]'
+                )
+
+            # Logo strip — only render logos that resolve to an existing file
+            logo_items = []
+            for logo_path in logos[:4]:
+                resolved_logo = _resolve_img(logo_path)
+                if resolved_logo:
+                    logo_items.append(
+                        f'image("{resolved_logo}", height: 16pt, fit: "contain")'
+                    )
+
+            logo_strip = ""
+            if logo_items:
+                logos_str = ", ".join(logo_items)
+                logo_strip = (
+                    f'\n  #v(4pt)\n'
+                    f'  #line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n'
+                    f'  #v(4pt)\n'
+                    f'  #grid(columns: ({", ".join(["auto"] * len(logo_items))}), gutter: 8pt, {logos_str})\n'
+                )
+
+            return (
+                f'block(width: 100%, inset: 8pt)[\n'
+                f'  #align(center)[#{{' + photo_markup + f'}}]\n'
+                f'  #v(6pt)\n'
+                f'  #align(center)[#text(weight: "bold", size: 14pt, fill: {_rgb(t["text"])})[{name}]]\n'
+                f'  #v(2pt)\n'
+                f'  #align(center)[#text(size: 10pt, fill: {_rgb(t["accent"])}, style: "italic")[{role}]]\n'
+                f'  #v(4pt)\n'
+                f'  #text(size: 9pt, fill: {_rgb(t["muted"])})[{bio}]'
+                + logo_strip +
+                f'\n]'
+            )
+
+        if n == 4:
+            # 2×2 grid
+            cells = [_member_card(m, compact=True) for m in members]
+            grid_body = (
+                f'grid(\n'
+                f'  columns: (1fr, 1fr),\n'
+                f'  gutter: 10pt,\n'
+                f'  {cells[0]},\n'
+                f'  {cells[1]},\n'
+                f'  {cells[2]},\n'
+                f'  {cells[3]},\n'
+                f')'
+            )
+        else:
+            # Single row: 2 or 3 members
+            cols = ", ".join(["1fr"] * n)
+            cards_str = ",\n    ".join(_member_card(m, compact=False) for m in members)
+            grid_body = (
+                f'grid(\n'
+                f'  columns: ({cols}),\n'
+                f'  gutter: 14pt,\n'
+                f'  {cards_str},\n'
+                f')'
+            )
+
+        body = f"v(1fr)\n\n  {grid_body}\n\n  v(1fr)"
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+
+  {self._body_block(body, footnote)}
+}}"""
+
+    def _testimonial_slide(self, d: dict) -> str:
+        """Large pull-quote with attribution.
+
+        data: section, quote, attribution, image_path?, footnote?
+        """
+        t = self.t
+        section = d.get("section", "")
+        quote = _esc(d.get("quote", ""))
+        attribution = _esc(d.get("attribution", ""))
+        footnote = d.get("footnote", "")
+        heading_font = t.get("heading_font", "Inter")
+
+        body = f"""align(center + horizon)[
+  text(size: 11pt, fill: {_rgb(t['muted'])})[{section_badge(section, t['muted'])}]
+  v(1fr)
+  text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201c]
+  v(4pt)
+  block(width: 85%)[
+    #align(center)[
+      #text(weight: "bold", size: 22pt, font: "{heading_font}", fill: {_rgb(t['text'])}, style: "italic")[{quote}]
+    ]
+  ]
+  v(4pt)
+  text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201d]
+  v(12pt)
+  align(center)[
+    #text(size: 11pt, fill: {_rgb(t['muted'])})[{attribution}]
+  ]
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
+]"""
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+  {body}
+}}"""
+
+    # -- Before/After (two-panel transformation) slide --------------------
+
+    def _before_after_slide(self, d: dict) -> str:
+        """Two equal panels: Before (left) and After (right).
+
+        data: section, title, left {label, items, colour?}, right {label, items, colour?}, footnote?
+        """
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        footnote = d.get("footnote", "")
+
+        def _resolve_colour(key: str) -> str:
+            colour_map = {
+                "accent": t.get("accent", "#3B82F6"),
+                "warning": "#F59E0B",
+                "muted": t.get("muted", "#64748B"),
+                "error": "#EF4444",
+                "success": "#10B981",
+            }
+            return colour_map.get(key, t.get("accent", "#3B82F6"))
+
+        def _panel(side_data: dict, is_right: bool) -> str:
+            label = _esc(side_data.get("label", "Before" if not is_right else "After"))
+            items = side_data.get("items", [])[:5]
+            colour_key = side_data.get("colour", "accent" if is_right else "muted")
+            colour = _resolve_colour(colour_key)
+            items_str = "\n    ".join(f"- {_esc(str(item))}" for item in items)
+            bg_fill = t.get("card_fill", "#F8FAFC")
+            stroke_side = "right" if not is_right else "left"
+            return (
+                f"block("
+                f"  fill: {_rgb(bg_fill)},"
+                f"  stroke: ({stroke_side}: 4pt + {_rgb(colour)}),"
+                f"  inset: (top: 10pt, bottom: 10pt, left: 12pt, right: 12pt),"
+                f"  width: 100%,"
+                f"  height: 100%,"
+                f")[\n"
+                f"  #text(weight: \"bold\", size: 13pt, fill: {_rgb(colour)})[{label}]\n"
+                f"  #v(8pt)\n"
+                f"  #list(indent: 6pt, {', '.join(repr(_esc(str(it))) for it in items)})\n"
+                f"]"
+            )
+
+        left_panel = _panel(d.get("left", {}), is_right=False)
+        right_panel = _panel(d.get("right", {}), is_right=True)
+
+        body = f"""grid(
+  columns: (1fr, 1fr),
+  rows: (auto,),
+  gutter: 16pt,
+  {left_panel},
+  {right_panel},
+)"""
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})

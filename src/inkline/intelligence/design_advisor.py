@@ -51,10 +51,18 @@ SLIDE_TYPES = [
     "timeline", "process_flow", "icon_stat", "progress_bars",
     "pyramid", "comparison", "feature_grid", "dashboard",
     "chart_caption", "multi_chart", "closing", "section_divider",
+    # New slide types (P4)
+    "credentials", "testimonial", "before_after",
+    # New slide types (P5)
+    "team_grid",
 ]
 
 # Slide type descriptions for the LLM
 SLIDE_TYPE_GUIDE = """
+You are a senior presentation designer who has built investor and board decks for top-tier
+professional services clients. Your default reflex is visual, not textual. You make confident
+design decisions without hedging.
+
 ====================================================================
 PRIME DIRECTIVE: PREFER VISUALS OVER TEXT, ALWAYS.
 ====================================================================
@@ -83,6 +91,44 @@ REQUIRED CADENCE:
 - Every multi-step concept should be process_flow or timeline.
 
 ====================================================================
+SLIDE TYPE DECISION SEQUENCE (follow in order for every content slide)
+====================================================================
+
+STEP 1 — WHAT IS THE PRIMARY CONTENT TYPE?
+  data (metrics/quantitative)  → chart types, icon_stat, kpi_strip, stat
+  comparison (A vs B)          → comparison, split, four_card, three_card
+  process (sequential steps)   → process_flow (≤4 steps), timeline (≤6 events with dates)
+  narrative (conceptual)       → three_card, pyramid, feature_grid
+
+STEP 2 — IS THERE A DOMINANT SINGLE METRIC?
+  yes, one hero number         → icon_stat or stat first
+  yes, 3-5 KPIs               → kpi_strip
+  no dominant metric           → continue to Step 3
+
+STEP 3 — HOW MANY ITEMS?
+  exactly 3                    → three_card, process_flow (3 steps), icon_stat (3 stats)
+  exactly 4                    → four_card, process_flow (4 steps), multi_chart equal_4
+  exactly 6                    → feature_grid (exactly 6), split (6 per side), table
+  4-8 tombstone/deal items    → credentials
+  complex multi-facet data    → multi_chart (pick layout by count)
+
+====================================================================
+ANTI-PATTERN → CORRECT TRANSFORMATION EXAMPLES
+====================================================================
+
+BAD: content slide with 3 metrics in bullets
+  → GOOD: icon_stat with 3 stats (value + icon + label each)
+  Reason: numbers in bullets are scannable only as stats; icon_stat creates 3x visual impact
+
+BAD: table comparing two options (2 columns, 5 rows)
+  → GOOD: comparison slide (left.name="Option A", right.name="Option B", rows with metrics)
+  Reason: comparison layout highlights delta and makes winner obvious at a glance
+
+BAD: two consecutive chart_caption slides covering related data facets
+  → GOOD: single multi_chart slide (layout="equal_2" or layout="hero_left")
+  Reason: side-by-side exhibits let the audience see correlation; two slides require page turns
+
+====================================================================
 HARD CAPACITY LIMITS — ENFORCED BY RENDERER (TRUNCATION IS AUTOMATIC)
 ====================================================================
 These limits come from FONT MATH: page width 22.6cm, Source Sans 3 at
@@ -96,10 +142,10 @@ TITLES — 45 chars max (ALL slide types)
   BAD: "Corsair offers proven GoA cash flow with material 2P upside" = 59 → TRUNCATED ✗
 
 PER-FIELD CHAR LIMITS (renderer enforces these exactly):
-  content   items:           80 chars each  (14pt full-width = 84/line)
+  content   items:           70 chars each  (14pt full-width = 84/line; tighter for readability)
   split     left/right heading: 26 chars    (18pt bold half-col)
             left/right items:  55 chars each
-  three_card cards.title:   24 chars   |  cards.body:    85 chars
+  three_card cards.title:   24 chars   |  cards.body:    75 chars
   four_card  cards.title:   36 chars   |  cards.body:   120 chars
   stat       stats.value: 8/12/16 chars for 4/3/2 stats  ← CRITICAL
              DO NOT write "$18.33/boe" for a 4-stat slide — it wraps.
@@ -115,7 +161,7 @@ PER-FIELD CHAR LIMITS (renderer enforces these exactly):
   chart_caption bullets: 80 chars each  |  caption: 90 chars
   dashboard  stats.value: 10  |  stats.label: 22  |  bullets: 70 chars
   icon_stat  stats.value: 14  |  stats.label: 22  |  stats.desc: 50 chars
-  footnote: 90 chars (ALL slide types)
+  footnote: 80 chars (ALL slide types)
 
 ITEM COUNTS (items beyond limit are SILENTLY DROPPED):
 - chart_caption bullets: MAX 4
@@ -191,6 +237,22 @@ NARRATIVE LAYOUTS:
 - split: Two-column layout (right side gets accent fill). data: {section, title, left_title, left_items, right_title, right_items}
   Use for: us-vs-them, before-vs-after, problem-vs-solution.
 - comparison: Structured side-by-side with metrics. data: {section, title, left {name, items [{label, value}]}, right {name, items [{label, value}]}, footnote}
+
+SPECIALITY LAYOUTS:
+- credentials: Grid of 4-8 tombstone cells (track record / deal history). data: {section, title, tombstones [{name, detail}], footnote}
+  Use for: track record slides, portfolio showcase, deal history. 2 rows × 2-4 cols layout.
+  CAPACITY: 4-8 tombstones (warn if fewer or more).
+- testimonial: Large pull-quote slide. data: {section, quote, attribution, image_path?, footnote?}
+  Use for: client validation, endorsements, social proof. Quote ≤200 chars, attribution ≤60 chars.
+- before_after: Two equal panels (left=Before, right=After). data: {section, title, left {label, items, colour?}, right {label, items, colour?}, footnote?}
+  Use for: transformation stories, process improvements, before/after comparisons. 3-5 items per side.
+
+- team_grid: Management team / advisory board bios. data: {section, title, members [{name, role, bio, image_path?, logos?}], footnote?}
+  Use for: management team, advisory board, key personnel slides. Always place after the title slide or
+  before the business model in pitch decks.
+  CAPACITY: 2-4 members. 2-3 members → single row; 4 members → 2×2 grid.
+  image_path: filename resolved from charts/ dir, or full absolute path. None → initials placeholder.
+  logos: optional list of employer logo filenames (max 4 per member); missing files silently skipped.
 
 STRUCTURAL:
 - title: Opening slide. data: {company, tagline, date, subtitle, left_footer}
@@ -478,6 +540,20 @@ class DesignAdvisor:
             or os.environ.get("INKLINE_BRIDGE_URL", "")
             or self.DEFAULT_BRIDGE_URL
         )
+        # Load decision matrix YAML for deterministic prompt injection
+        self.decision_matrix: dict = {}
+        _matrix_path = Path(__file__).parent / "decision_matrix_default.yaml"
+        if _matrix_path.exists():
+            try:
+                import yaml as _yaml
+                with open(_matrix_path, "r", encoding="utf-8") as _f:
+                    self.decision_matrix = _yaml.safe_load(_f) or {}
+            except Exception:
+                try:
+                    # Minimal fallback without yaml dep: just record path available
+                    self.decision_matrix = {"_path": str(_matrix_path)}
+                except Exception:
+                    pass
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """Route an LLM call: injected caller → bridge → Anthropic SDK.
@@ -669,6 +745,21 @@ class DesignAdvisor:
         if self.mode == "llm" and (self.llm_caller is not None or self.api_key):
             try:
                 llm_only = [s for _, s in llm_sections]
+
+                # 1.5: Make design_brief mandatory for decks with ≥5 sections
+                if brief is None and len(sections) >= 5:
+                    try:
+                        from inkline.intelligence.design_brief import generate_brief
+                        brief = generate_brief(
+                            sections=sections,
+                            goal=goal or "Board-level audience; goal: clear decision support.",
+                            audience=audience or "Board-level audience",
+                            title=title,
+                        )
+                        log.info("DesignAdvisor: auto-generated design brief for %d-section deck", len(sections))
+                    except Exception as _brief_err:
+                        log.info("DesignAdvisor: design brief generation skipped (%s)", _brief_err)
+
                 llm_slides = self._design_deck_llm(
                     title, llm_only, date=date, subtitle=subtitle,
                     contact=contact, audience=audience, goal=goal,
@@ -1096,6 +1187,15 @@ class DesignAdvisor:
             "      fine-grained labelling; the divider announces a major gear-change only.",
             "",
             "═══════════════════════════════════════════════════════════════",
+            "OPENER RULE — first two content slides after title",
+            "═══════════════════════════════════════════════════════════════",
+            "For the first two content slides (after the title slide), and for any section",
+            "containing a single dominant insight (one key number, one key finding), use a",
+            "single bold exhibit: stat, icon_stat with one dominant metric at display_xl,",
+            "or a Tier 1B structural infographic. Do NOT use multi_chart for these slides.",
+            "The opener must create visual impact — it sets the tone for the entire deck.",
+            "",
+            "═══════════════════════════════════════════════════════════════",
             "PLANNING RULES",
             "═══════════════════════════════════════════════════════════════",
             "- Start title (source_index=0), end closing (source_index=0)",
@@ -1197,7 +1297,20 @@ class DesignAdvisor:
                 parts.append(preview)
             parts.append("")
 
-        parts.append("Output the deck plan as a JSON array inside ```json ... ``` markers.")
+        parts.append("\n## Three-Step Quality Check (run before returning JSON)")
+        parts.append(
+            "Before returning your slide plan, run this three-step check:\n"
+            "1. TIER CHECK: Count slides by tier. If tier-5 (content) > 1, return to those"
+            " slides and convert the weakest to tier 1 or 2.\n"
+            "2. CONSOLIDATION CHECK: Find any two adjacent slides covering related data facets."
+            " Can they share a multi_chart layout? If yes, consolidate.\n"
+            "3. ACTION TITLE CHECK: Verify every slide title contains at least one of: a"
+            " number/metric, a comparison word (more, fewer, higher, faster, lower), or a"
+            " direction word (grew, declined, exceeded, fell, surpassed). If not, rewrite"
+            " to state the insight.\n"
+            "Only return your JSON after completing this check."
+        )
+        parts.append("\nOutput the deck plan as a JSON array inside ```json ... ``` markers.")
         user_prompt = "\n".join(parts)
 
         log.info("DesignAdvisor Phase 1 call: %d sys / %d user chars",

@@ -337,6 +337,12 @@ _IMPLICIT_PATTERNS = [
     (re.compile(r"too (?:many|much) (labels?|bars?|categories|data points?|text)", re.I), "density_feedback"),
     # Direct chart type request: "use a dumbbell chart instead"
     (re.compile(r"use (?:a |an )?([\w_]+) chart", re.I), "chart_type_change"),
+    # P6.3: Design quality signals
+    (re.compile(r"make (?:it |this |the )?more visual", re.I), "too_textual"),
+    (re.compile(r"(?:reduce|less) (?:the )?text", re.I), "too_verbose"),
+    (re.compile(r"too many slides", re.I), "too_many_slides"),
+    (re.compile(r"change (?:the )?template", re.I), "template_change"),
+    (re.compile(r"(?:the title is wrong|fix (?:the )?title)", re.I), "bad_title"),
 ]
 
 _CHART_TYPE_ALIASES = {

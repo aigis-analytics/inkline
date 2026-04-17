@@ -216,6 +216,9 @@ def render_chart(
         "sidebar_profile": _render_infographic_sidebar_profile,
         "metaphor_backdrop": _render_infographic_metaphor_backdrop,
         "chart_row": _render_infographic_chart_row,
+        # New chart types (P5)
+        "bump_chart": _render_bump_chart,
+        "staircase": _render_staircase,
         # Institutional exhibit types
         "marimekko": _render_marimekko,
         "entity_flow": _render_entity_flow,
@@ -2468,6 +2471,124 @@ def _render_chart_into_ax(fig, subplot_spec, chart_spec, sub_w, sub_h):
                 tmp.unlink()
             except OSError:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# 17a. Bump chart — ranking over time
+# ---------------------------------------------------------------------------
+
+def _render_bump_chart(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Bump chart — inverted Y-axis showing rank changes over time.
+
+    data:
+        x: list — time periods (e.g. ["Q1 2023", "Q2 2023", ...])
+        series: list of {name, values} — rank at each period (1=best, ascending)
+    """
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+
+    x = data.get("x", [])
+    series = data.get("series", [])
+    if not x or not series:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                color=muted, transform=ax.transAxes)
+        return fig
+
+    x_pos = list(range(len(x)))
+    # Determine max rank for y-axis inversion
+    all_ranks = [v for s in series for v in s.get("values", [])]
+    max_rank = max(all_ranks) if all_ranks else len(series)
+
+    for i, s in enumerate(series):
+        color = colors[i % len(colors)]
+        ranks = s.get("values", [])
+        name = s.get("name", f"Series {i+1}")
+        if not ranks:
+            continue
+
+        # Draw thick line (3pt equivalent in inches)
+        ax.plot(x_pos[:len(ranks)], ranks, color=color, linewidth=3,
+                marker="o", markersize=8, markerfacecolor=color,
+                markeredgecolor=bg, markeredgewidth=1.5, label=name, solid_capstyle="round")
+
+        # Label at rightmost point
+        if ranks:
+            ax.text(len(ranks) - 1 + 0.15, ranks[-1], f" {name}",
+                    color=color, fontsize=max(7, _font(width) - 1),
+                    va="center", ha="left")
+
+    # Invert Y axis so rank 1 is at top
+    ax.set_ylim(max_rank + 0.5, 0.5)
+    ax.set_yticks(list(range(1, max_rank + 1)))
+    ax.set_yticklabels([str(r) for r in range(1, max_rank + 1)],
+                       color=text_color, fontsize=_font(width))
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(x, color=text_color, fontsize=_font(width))
+
+    # Clean styling — no gridlines, no top/right spines
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(muted)
+    ax.spines["bottom"].set_color(muted)
+    ax.tick_params(colors=muted)
+    ax.set_facecolor(bg)
+    fig.patch.set_facecolor(bg)
+    ax.yaxis.label.set_color(text_color)
+    ax.set_ylabel("Rank", color=muted, fontsize=_font(width))
+    ax.grid(False)
+
+    _plt.tight_layout(pad=0.4)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 17b. Staircase / step-line chart
+# ---------------------------------------------------------------------------
+
+def _render_staircase(data, *, colors, accent, bg, text_color, muted, width, height):
+    """Step-line chart with drawstyle='steps-post'.
+
+    Useful for discrete period measurements: headcount by quarter,
+    regulatory thresholds, capacity additions.
+    Same data format as line_chart.
+
+    data:
+        x: list — x-axis values
+        series: list of {name, values}
+        x_label: str (optional)
+        y_label: str (optional)
+    """
+    fig, ax = _plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor(bg)
+    _style_axes(ax, bg, text_color, muted, fontsize=_font(width))
+
+    x = data.get("x", [])
+    series = data.get("series", [])
+    x_pos = list(range(len(x)))
+
+    for i, s in enumerate(series):
+        color = colors[i % len(colors)]
+        values = s.get("values", [])
+        ax.step(x_pos[:len(values)], values, color=color, linewidth=2.5,
+                where="post", label=s.get("name", f"Series {i+1}"))
+        # Marker at each step
+        ax.plot(x_pos[:len(values)], values, "o", color=color, markersize=5,
+                markeredgecolor=bg, markeredgewidth=1)
+
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(x, rotation=45 if len(x) > 8 else 0,
+                       ha="right" if len(x) > 8 else "center")
+    if data.get("x_label"):
+        ax.set_xlabel(data["x_label"], color=text_color, fontsize=10)
+    if data.get("y_label"):
+        ax.set_ylabel(data["y_label"], color=text_color, fontsize=10)
+    if len(series) > 1:
+        ax.legend(**_legend_kw(width, n_series=len(series), labelcolor=text_color))
+
+    ax.grid(axis="y", alpha=0.3, color=muted)
+    _plt.tight_layout(pad=0.4)
+    return fig
 
 
 # ---------------------------------------------------------------------------

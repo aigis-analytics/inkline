@@ -32,6 +32,14 @@ VISUAL_TYPES = {
     "bar_chart", "feature_grid",
 }
 
+# Tier 1B structural infographic chart types (used for Visual Boldness scoring)
+TIER_1B_CHART_TYPES = frozenset({
+    "radial_pinwheel", "hexagonal_honeycomb", "waffle", "iceberg",
+    "funnel_kpi_strip", "persona_dashboard", "dual_donut", "ladder",
+    "pyramid_detailed", "funnel_ribbon", "process_curved_arrows",
+    "semicircle_taxonomy", "petal_teardrop", "metaphor_backdrop", "sidebar_profile",
+})
+
 WEAK_TITLES = {
     "overview", "summary", "introduction", "background",
     "the problem", "the solution", "agenda", "next steps",
@@ -47,13 +55,17 @@ ACTION_WORDS = re.compile(
 )
 
 # Weights for each dimension
+# Original 6 dimensions summed to 1.0; new dims 7+8 add 0.08 each.
+# Existing weights scaled by 0.84 to make room (0.84 + 0.08 + 0.08 = 1.00).
 WEIGHTS = {
-    "visual_variety": 0.20,
-    "data_ink_ratio": 0.20,
-    "typography": 0.15,
-    "colour_discipline": 0.15,
-    "flow": 0.15,
-    "density": 0.15,
+    "visual_variety": 0.17,
+    "data_ink_ratio": 0.17,
+    "typography": 0.13,
+    "colour_discipline": 0.13,
+    "flow": 0.12,
+    "density": 0.12,
+    "narrative_continuity": 0.08,
+    "visual_boldness": 0.08,
 }
 
 # Capacity limits per slide type (for density scoring)
@@ -73,6 +85,15 @@ CAPACITY = {
     "bar_chart": 12,
     "comparison": 6,
     "pyramid": 5,
+    "credentials": 8,
+    "before_after": 5,  # per side
+}
+
+# Tightened character limits (P3.3)
+CHAR_LIMITS = {
+    "content_bullet": 70,   # was 80
+    "card_body": 75,         # was 85
+    "footnote": 80,          # was 90
 }
 
 
@@ -341,6 +362,100 @@ def _score_density(slides: list[dict]) -> tuple[int, list[str]]:
     return max(0, min(100, avg)), issues
 
 
+def _score_narrative_continuity(slides: list[dict]) -> tuple[int, list[str]]:
+    """Dimension 7: Narrative Continuity — section transitions with dividers."""
+    if not slides:
+        return 70, []
+
+    issues: list[str] = []
+    total_transitions = 0
+    unsignalled = 0
+    prev_section = None
+
+    for i, s in enumerate(slides):
+        st = s.get("slide_type", "")
+        if st in ("title", "closing"):
+            prev_section = None
+            continue
+        section = s.get("data", {}).get("section", "")
+        if not section:
+            continue
+        if prev_section is not None and section != prev_section:
+            total_transitions += 1
+            if st != "section_divider" and (i > 0 and slides[i - 1].get("slide_type") != "section_divider"):
+                unsignalled += 1
+                issues.append(f"Unsignalled transition from '{prev_section}' to '{section}'")
+        prev_section = section
+
+    if total_transitions == 0:
+        return 80, []  # No transitions to signal — neutral score
+
+    ratio = unsignalled / max(total_transitions, 1)
+    score = int(100 * (1.0 - ratio))
+    return max(0, min(100, score)), issues
+
+
+def _score_visual_boldness(slides: list[dict]) -> tuple[int, list[str]]:
+    """Dimension 8: Visual Boldness — Tier 1B infographics and annotated charts."""
+    if not slides:
+        return 0, []
+
+    issues: list[str] = []
+    content_slides = [s for s in slides if s.get("slide_type") not in ("title", "closing", "section_divider")]
+    if not content_slides:
+        return 0, []
+
+    raw_score = 0.0
+    content_count = 0
+    first_content = True
+
+    for s in content_slides:
+        st = s.get("slide_type", "")
+        cr = s.get("data", {}).get("chart_request", {})
+        chart_type = cr.get("chart_type", "")
+
+        # +0.2 per Tier 1B slide
+        if chart_type in TIER_1B_CHART_TYPES:
+            raw_score += 0.2
+
+        # +0.1 per chart slide with accent_index
+        if st in {"chart", "chart_caption", "dashboard", "multi_chart"} and "accent_index" in cr:
+            raw_score += 0.1
+
+        # -0.1 per content slide beyond first
+        if st == "content":
+            if first_content:
+                first_content = False
+            else:
+                raw_score -= 0.1
+                content_count += 1
+
+    if content_count > 0:
+        issues.append(f"{content_count} extra content (bullet) slides reduce visual boldness")
+
+    score = int(min(1.0, max(0.0, raw_score)) * 100)
+    return score, issues
+
+
+def _audit_chart_annotations(slides: list[dict]) -> list[str]:
+    """Check that chart slides have at least one annotation element (caption, bullets, stats)."""
+    warnings: list[str] = []
+    chart_types = {"chart", "chart_caption", "dashboard"}
+    for i, s in enumerate(slides):
+        if s.get("slide_type") not in chart_types:
+            continue
+        data = s.get("data", {})
+        has_caption = bool(data.get("caption", "").strip())
+        has_bullets = bool(data.get("bullets"))
+        has_stats = bool(data.get("stats"))
+        if not (has_caption or has_bullets or has_stats):
+            warnings.append(
+                f"Slide {i} ({s.get('slide_type')}): chart slide has no annotation "
+                "(caption, bullets, or stats). Audience cannot read the key insight."
+            )
+    return warnings
+
+
 # ---------------------------------------------------------------------------
 # Main scoring function
 # ---------------------------------------------------------------------------
@@ -352,16 +467,20 @@ _DIMENSION_SCORERS = {
     "colour_discipline": _score_colour_discipline,
     "flow": _score_flow,
     "density": _score_density,
+    "narrative_continuity": _score_narrative_continuity,
+    "visual_boldness": _score_visual_boldness,
 }
 
 # Suggestions keyed by dimension name
 _DIMENSION_SUGGESTIONS = {
     "visual_variety": "Diversify slide types — replace repeated content slides with charts, cards, or kpi_strip",
     "data_ink_ratio": "Add more visual slides (charts, dashboards, KPIs) to improve data-to-ink ratio",
-    "typography": "Use action titles that state conclusions, keep bullets under 100 chars",
+    "typography": "Use action titles that state conclusions, keep bullets under 70 chars",
     "colour_discipline": "Add accent_index to charts and limit colour count to 6 or fewer",
     "flow": "Improve story arc — open with data, use section dividers, end with a closing slide",
     "density": "Balance content density — aim for 50-90% capacity utilisation per slide",
+    "narrative_continuity": "Add section_divider slides between topic changes for clear narrative flow",
+    "visual_boldness": "Add Tier 1B structural infographics (iceberg, waffle, radial_pinwheel) and annotate charts with accent_index",
 }
 
 
@@ -395,6 +514,9 @@ def score_deck(slides: list[dict], brand: str | None = None) -> QualityScore:
         dim_score, dim_issues = scorer_fn(slides)
         dimensions[dim_name] = dim_score
         all_issues.extend(dim_issues)
+
+    # Chart annotation audit (logs alongside quality issues)
+    all_issues.extend(_audit_chart_annotations(slides))
 
     # Weighted total
     total = int(sum(dimensions[d] * WEIGHTS[d] for d in WEIGHTS))

@@ -235,6 +235,125 @@ def record_brand_rule(brand: str, rule: str) -> str:
 
 
 # =========================================================================
+# New API functions (P6.4) — slide-type approval tracking
+# =========================================================================
+
+def record_pattern(
+    brand: str,
+    slide_type: str,
+    section_type: str,
+    approved: bool = True,
+) -> None:
+    """Record a slide type usage for a given brand + section type.
+
+    Appends to per-brand YAML at ~/.config/inkline/patterns/{brand}.yaml.
+    Aggregates: if the (slide_type, section_type) combo exists, increments count.
+    If approved is False, records a rejection that lowers approval rate.
+
+    Args:
+        brand: Brand name (e.g., "minimal").
+        slide_type: The slide type used (e.g., "icon_stat").
+        section_type: The section category (e.g., "financials", "executive_summary").
+        approved: True if accepted by user / passed audit; False if rejected.
+    """
+    path = _get_patterns_dir() / f"{brand}.yaml"
+    data = _load_yaml(path)
+    patterns = data.get("patterns", [])
+
+    # Find existing entry for this combo
+    for p in patterns:
+        if p.get("section_type") == section_type and p.get("slide_type") == slide_type:
+            p["count"] = p.get("count", 0) + 1
+            approvals = p.get("approvals", 0)
+            if approved:
+                p["approvals"] = approvals + 1
+            p["approval_rate"] = p["approvals"] / p["count"]
+            p["timestamp"] = datetime.now().strftime("%Y-%m-%d")
+            _save_yaml(path, {"brand": brand, "patterns": patterns})
+            return
+
+    # New entry
+    patterns.append({
+        "section_type": section_type,
+        "slide_type": slide_type,
+        "approved": approved,
+        "count": 1,
+        "approvals": 1 if approved else 0,
+        "approval_rate": 1.0 if approved else 0.0,
+        "timestamp": datetime.now().strftime("%Y-%m-%d"),
+    })
+    _save_yaml(path, {"brand": brand, "patterns": patterns})
+    log.info("record_pattern: brand=%s section=%s type=%s approved=%s",
+             brand, section_type, slide_type, approved)
+
+
+def get_preferred_types(brand: str, section_type: str) -> list[str]:
+    """Return slide types ordered by approval rate for brand + section_type.
+
+    Only includes slide types with at least 2 observations. Returns an empty
+    list if no data is available.
+
+    Args:
+        brand: Brand name.
+        section_type: Section category to look up.
+
+    Returns:
+        List of slide type strings, highest approval rate first.
+    """
+    path = _get_patterns_dir() / f"{brand}.yaml"
+    data = _load_yaml(path)
+    patterns = data.get("patterns", [])
+
+    candidates = [
+        p for p in patterns
+        if p.get("section_type") == section_type and p.get("count", 0) >= 2
+    ]
+    candidates.sort(key=lambda p: p.get("approval_rate", 0.0), reverse=True)
+    return [p["slide_type"] for p in candidates]
+
+
+def get_pattern_summary(brand: str) -> dict:
+    """Return a summary of all recorded patterns for a brand.
+
+    Returns a dict with structure:
+    {
+        "brand": str,
+        "total_patterns": int,
+        "by_section": {section_type: [{slide_type, count, approval_rate}]},
+    }
+
+    Args:
+        brand: Brand name.
+
+    Returns:
+        Dict with pattern summary, or an empty summary if no data.
+    """
+    path = _get_patterns_dir() / f"{brand}.yaml"
+    data = _load_yaml(path)
+    patterns = data.get("patterns", [])
+
+    by_section: dict[str, list] = {}
+    for p in patterns:
+        section = p.get("section_type", "unknown")
+        by_section.setdefault(section, [])
+        by_section[section].append({
+            "slide_type": p.get("slide_type", ""),
+            "count": p.get("count", 0),
+            "approval_rate": p.get("approval_rate", 0.0),
+        })
+
+    # Sort each section's entries by approval rate desc
+    for entries in by_section.values():
+        entries.sort(key=lambda x: x["approval_rate"], reverse=True)
+
+    return {
+        "brand": brand,
+        "total_patterns": len(patterns),
+        "by_section": by_section,
+    }
+
+
+# =========================================================================
 # Helpers
 # =========================================================================
 

@@ -164,28 +164,55 @@ def _pl01_trim_long_titles(slide: dict, idx: int, brand: Optional[dict]) -> list
     return applied
 
 
+_CHART_CONTEXT_TYPES = frozenset({"chart", "chart_caption", "dashboard", "multi_chart"})
+
+
 def _pl02_trim_verbose_bullets(slide: dict, idx: int, brand: Optional[dict]) -> list[dict]:
-    """PL-02: Trim verbose bullets. Items >100 chars: keep first sentence."""
+    """PL-02: Trim verbose bullets. Items >100 chars: keep first sentence.
+
+    For chart-context slides (chart_caption, dashboard, chart, multi_chart):
+    further trim to ≤8 words (fragment style) and strip trailing punctuation.
+    """
     applied = []
     data = slide.get("data", {})
     items = data.get("items", [])
+    is_chart_context = slide.get("slide_type") in _CHART_CONTEXT_TYPES
+
     for i, item in enumerate(items):
-        if isinstance(item, str) and len(item) > 100:
-            before = item
+        if not isinstance(item, str):
+            continue
+        original = item
+        changed = False
+
+        if len(item) > 100:
             # Split at sentence boundary
             sentences = re.split(r'(?<=[.!?])\s+', item)
             if len(sentences) > 1:
-                new_item = sentences[0]
+                item = sentences[0]
             else:
-                # No sentence boundary — truncate at word boundary
-                new_item = item[:97].rsplit(" ", 1)[0] + "..."
-            items[i] = new_item
+                item = item[:97].rsplit(" ", 1)[0] + "..."
+            changed = True
+
+        if is_chart_context:
+            # Trim to ≤8 words (label/fragment style)
+            words = item.split()
+            if len(words) > 8:
+                item = " ".join(words[:8])
+                changed = True
+            # Strip trailing punctuation
+            stripped = item.rstrip(".,;:!?")
+            if stripped != item:
+                item = stripped
+                changed = True
+
+        if changed and item != original:
+            items[i] = item
             applied.append({
                 "rule_id": "PL-02",
                 "slide_index": idx,
-                "description": f"Trimmed bullet {i} from {len(before)} to {len(new_item)} chars",
-                "before": before,
-                "after": new_item,
+                "description": f"Trimmed bullet {i} from {len(original)} to {len(item)} chars",
+                "before": original,
+                "after": item,
             })
     return applied
 
@@ -498,6 +525,120 @@ def _pl11_ensure_closing_contact(slide: dict, idx: int, brand: Optional[dict]) -
     return applied
 
 
+def _pl13_financial_abbreviations(slide: dict, idx: int, brand: Optional[dict]) -> list[dict]:
+    """PL-13: Normalise financial abbreviations in titles, bullets, captions, table cells."""
+    applied = []
+    data = slide.get("data", {})
+
+    def _apply_abbrevs(text: str) -> str:
+        """Apply financial abbreviation substitutions."""
+        if not text:
+            return text
+
+        # Year + suffix patterns (e.g. "2025 Forecast" → "2025F")
+        text = re.sub(r'\b(\d{4})\s+Forecast\b', r'\1F', text, flags=re.IGNORECASE)
+        text = re.sub(r'\b(\d{4})\s+Actuals?\b', r'\1A', text, flags=re.IGNORECASE)
+        text = re.sub(r'\b(\d{4})\s+Budget\b', r'\1B', text, flags=re.IGNORECASE)
+        text = re.sub(r'\b(\d{4})\s+Estimate\b', r'\1E', text, flags=re.IGNORECASE)
+
+        # Currency denomination patterns
+        text = re.sub(r'\bUSD\s+billion\b', 'USDbn', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bUS\$\s+billion\b', 'USDbn', text, flags=re.IGNORECASE)
+        text = re.sub(r'\$\s+billion\b', 'USDbn', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bUSD\s+million\b', 'USDm', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bUS\$\s+million\b', 'USDm', text, flags=re.IGNORECASE)
+        text = re.sub(r'\$\s+million\b', 'USDm', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bUSD\s+thousand\b', 'USDk', text, flags=re.IGNORECASE)
+
+        # Rate/metric abbreviations
+        text = re.sub(r'\bbasis points\b', 'bps', text, flags=re.IGNORECASE)
+        text = re.sub(r'\byear[-\s]on[-\s]year\b', 'YoY', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bquarter[-\s]on[-\s]quarter\b', 'QoQ', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bcompound annual growth rate\b', 'CAGR', text, flags=re.IGNORECASE)
+        text = re.sub(
+            r'\bearnings before interest,?\s+taxes,?\s+depreciation\s+and\s+amortis[ae]tion\b',
+            'EBITDA', text, flags=re.IGNORECASE
+        )
+        return text
+
+    changes: list[tuple[str, str, str]] = []  # (field_desc, before, after)
+
+    # Slide title
+    if "title" in data:
+        before = data["title"]
+        after = _apply_abbrevs(before)
+        if after != before:
+            data["title"] = after
+            changes.append(("title", before, after))
+
+    # Bullet items (both "items" and "bullets" fields)
+    for field_key in ("items", "bullets"):
+        item_list = data.get(field_key, [])
+        if not isinstance(item_list, list):
+            continue
+        for i_idx, item in enumerate(item_list):
+            if isinstance(item, str):
+                after = _apply_abbrevs(item)
+                if after != item:
+                    item_list[i_idx] = after
+                    changes.append((f"{field_key}[{i_idx}]", item, after))
+
+    # Caption
+    if "caption" in data:
+        before = data["caption"]
+        after = _apply_abbrevs(before)
+        if after != before:
+            data["caption"] = after
+            changes.append(("caption", before, after))
+
+    # Table headers and cells
+    headers = data.get("headers", [])
+    for i_idx, h in enumerate(headers):
+        if isinstance(h, str):
+            after = _apply_abbrevs(h)
+            if after != h:
+                headers[i_idx] = after
+                changes.append((f"headers[{i_idx}]", h, after))
+
+    rows = data.get("rows", [])
+    for r_idx, row in enumerate(rows):
+        if isinstance(row, list):
+            for c_idx, cell in enumerate(row):
+                if isinstance(cell, str):
+                    after = _apply_abbrevs(cell)
+                    if after != cell:
+                        row[c_idx] = after
+                        changes.append((f"rows[{r_idx}][{c_idx}]", cell, after))
+
+    # Chart labels (chart_data fields)
+    cr = data.get("chart_request", {})
+    cd = cr.get("chart_data", {})
+    for field_name in ("x", "y_label", "x_label"):
+        val = cd.get(field_name)
+        if isinstance(val, str):
+            after = _apply_abbrevs(val)
+            if after != val:
+                cd[field_name] = after
+                changes.append((f"chart_data.{field_name}", val, after))
+        elif isinstance(val, list):
+            for i_idx, v in enumerate(val):
+                if isinstance(v, str):
+                    after = _apply_abbrevs(v)
+                    if after != v:
+                        val[i_idx] = after
+                        changes.append((f"chart_data.{field_name}[{i_idx}]", v, after))
+
+    for change in changes:
+        applied.append({
+            "rule_id": "PL-13",
+            "slide_index": idx,
+            "description": f"Financial abbreviation: {change[0]} '{change[1][:40]}' → '{change[2][:40]}'",
+            "before": change[1],
+            "after": change[2],
+        })
+    return applied
+
+
 def _pl12_compact_sparse_tables(slide: dict, idx: int, brand: Optional[dict]) -> list[str]:
     """PL-12: Advisory only. Table with 1-2 columns and <3 rows -> suggest kpi_strip."""
     advisories = []
@@ -536,6 +677,7 @@ def polish_deck(slides: list[dict], brand: Any = None) -> PolishResult:
     # Per-slide rules (order matters: PL-09 before PL-01 so title case runs first)
     per_slide_rules = [
         _pl09_sentence_case_titles,
+        _pl13_financial_abbreviations,  # PL-13 before PL-01 so abbrevs run before title trim
         _pl01_trim_long_titles,
         _pl02_trim_verbose_bullets,
         _pl03_balance_card_heights,

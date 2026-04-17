@@ -217,7 +217,8 @@ VISHWAKARMA_SYSTEM_PREAMBLE = f"""
 
 SCORING: Before finalising your slide list, count your slide types.
   - TIER 1C (multi-exhibit):              should be ≥ 30% of content slides
-  - TIER 1A+1B (infographic):             should be ≥ 20% of content slides
+  - TIER 1A (KPI callout):               should be ≥ 10% of content slides
+  - TIER 1B (structural infographic):    should be ≥ 15% of content slides
   - TIER 2 (institutional exhibit):       should be ≥ 20% of content slides
   - TIER 3 (structural visual):           ≤ 30% of content slides
   - TIER 4 (table):                       ≤ 2 per deck
@@ -228,6 +229,11 @@ AMBITION CHECK: Before returning JSON, run this scan in order:
   1. CONSOLIDATION — find groups of 2-4 adjacent slides covering related facets.
      Can they share one slide as a 1C multi_chart? If yes, consolidate.
      For each slot in the layout, re-apply the 1B → 1A → Tier 2 selector.
+
+  1.5 TIER 1B CHECK — count radial_pinwheel, hexagonal_honeycomb, waffle, iceberg,
+       funnel_kpi_strip, persona_dashboard, dual_donut, ladder, and pyramid_detailed slides.
+       If count / content_slides < 0.15, add at least one 1B structural infographic.
+       Candidates: any section showing structure/hierarchy/composition/flow as text.
 
   2. UPGRADE — for every remaining single-exhibit slide:
      - Showing structure/hierarchy as text? → iceberg, pyramid_detailed, or ladder

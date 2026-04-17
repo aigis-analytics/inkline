@@ -406,7 +406,7 @@ for i, s in enumerate(slides, 1):
 
 ---
 
-## Slide type catalogue (all 21)
+## Slide type catalogue (all 22)
 
 Capacity limits are hard — the renderer silently drops anything beyond them.
 
@@ -448,12 +448,16 @@ Capacity limits are hard — the renderer silently drops anything beyond them.
 
 ### Structural
 
-| Type | Data shape |
-|------|-----------|
-| `title` | `{company, tagline, date, subtitle?, left_footer?}` |
-| `closing` | `{name, role, email, company, tagline}` |
-| `content` | `{section, title, items, footnote?}` — USE SPARINGLY, max 6 bullets |
-| `section_divider` | `{section, title}` |
+| Type | Data shape | Limits |
+|------|-----------|--------|
+| `title` | `{company, tagline, date, subtitle?, left_footer?}` | |
+| `closing` | `{name, role, email, company, tagline}` | |
+| `content` | `{section, title, items, footnote?}` — USE SPARINGLY, max 6 bullets | 6 bullets |
+| `section_divider` | `{section, title}` | |
+| `credentials` | `{section, title, tombstones [{name, detail}], footnote?}` | 4–8 tombstones |
+| `testimonial` | `{section, quote, attribution, footnote?}` | quote ≤200 chars |
+| `before_after` | `{section, title, left {label, items, colour?}, right {label, items, colour?}, footnote?}` | 3–5 items/side |
+| `team_grid` | `{section, title, members [{name, role, bio, image_path?, logos?}], footnote?}` | 2–4 members |
 
 ### Title length hard limit
 **Slide titles MUST be ≤ 50 characters.** Titles longer than 50 chars wrap and push

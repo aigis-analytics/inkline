@@ -160,6 +160,12 @@ class BaseBrand:
     mono_font: str = "Roboto Mono"
     heading_size: int = 28      # Slide heading size (pt)
     body_size: int = 14         # Slide body size (pt)
+    # Font weight tokens — templates should use these rather than hardcoding weights.
+    # Standard CSS/OpenType weight values: 100=Thin, 300=Light, 400=Regular,
+    # 500=Medium, 600=SemiBold, 700=Bold, 800=ExtraBold, 900=Black.
+    heading_weight: int = 700   # Bold — for slide headings and titles
+    body_weight: int = 400      # Regular — for body text and bullets
+    muted_weight: int = 300     # Light — for captions, footnotes, muted text
 
     # ── Assets (resolved via user asset dirs + package assets) ───────
     logo_dark_path: str = ""    # Logo for dark backgrounds

@@ -383,6 +383,97 @@ rules:
     source: [GS-standard]
     status: active
 
+  # ─── RANKING OVER TIME ────────────────────────────────────────────────────
+
+  - id: DM-028
+    data_structure: n_categories_time_series
+    message_type: ranking_or_comparison
+    density: any
+    chart_type: bump_chart
+    enforce: {}
+    notes: "use when the story is rank changes over time, not absolute values"
+    confidence: 0.80
+    observations: 0
+    source: [GS-standard]
+    status: active
+
+  # ─── DISCRETE PERIOD MEASUREMENTS ────────────────────────────────────────
+
+  - id: DM-029
+    data_structure: n_categories_time_series
+    message_type: change_over_time
+    density: any
+    chart_type: staircase
+    enforce: {}
+    notes: "use for headcount, regulatory thresholds, capacity — step-line format"
+    confidence: 0.78
+    observations: 0
+    source: [GS-standard]
+    status: active
+
+##############################################################################
+# SLIDE TYPE CAPACITY LIMITS
+##############################################################################
+
+capacity_limits:
+  icon_stat: {min: 2, max: 4}
+  kpi_strip: {min: 3, max: 5}
+  three_card: {exact: 3}
+  four_card: {exact: 4}
+  feature_grid: {exact: 6}
+  process_flow: {max: 4}
+  timeline: {max: 6}
+  progress_bars: {max: 6}
+  table: {max_rows: 6, max_cols: 6}
+  split: {max_per_side: 6}
+  credentials: {min: 4, max: 8}
+  testimonial: {max_quote_chars: 200, max_attribution_chars: 60}
+  before_after: {min_per_side: 3, max_per_side: 5}
+  team_grid: {min: 2, max: 4}
+  content: {max_bullets: 6}
+  comparison: {max_rows: 6}
+  pyramid: {min: 3, max: 5}
+  bar_chart: {max_bars: 12}
+
+##############################################################################
+# DECISION SEQUENCE (for slide type selection)
+##############################################################################
+
+slide_type_decision_sequence:
+  step1_content_type:
+    data_quantitative:
+      primary: [icon_stat, stat, kpi_strip, chart_caption, dashboard]
+      note: "If single dominant metric: icon_stat first. If time-series: chart_caption."
+    data_comparison:
+      primary: [comparison, split, four_card, three_card]
+      note: "Head-to-head of 2 options: comparison. Multiple variables: multi_chart."
+    process_sequential:
+      primary: [process_flow, timeline]
+      note: "Steps with order: process_flow (≤4 steps). Events with dates: timeline (≤6)."
+    conceptual_categories:
+      primary: [three_card, four_card, feature_grid, pyramid]
+      note: "Exactly 3: three_card. Exactly 4: four_card. Exactly 6: feature_grid."
+    narrative_text:
+      primary: [three_card, split, content]
+      note: "content (bullet list) is LAST RESORT only."
+    team_and_people:
+      primary: [team_grid]
+      note: "Management team, advisory board, key personnel. 2-4 members."
+
+  step2_dominant_metric:
+    single_hero_number:
+      primary: [icon_stat, stat]
+      note: "If metric has an icon: icon_stat. Pure number: stat."
+    multiple_kpis:
+      primary: [kpi_strip, icon_stat]
+      note: "3-5 KPIs: kpi_strip. With icons: icon_stat."
+
+  step3_item_count:
+    exactly_3: [three_card, process_flow, icon_stat, stat]
+    exactly_4: [four_card, process_flow, "multi_chart equal_4"]
+    exactly_6: [feature_grid, split, table]
+    range_4_to_8: [credentials, timeline, progress_bars]
+
 ##############################################################################
 # DATA STRUCTURE VOCABULARY (Axis 1)
 # single_number | two_values_comparison | n_categories_one_value |

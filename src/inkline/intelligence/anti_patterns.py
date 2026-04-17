@@ -690,6 +690,367 @@ def _check_sp04(slides: list[dict]) -> list[AntiPatternResult]:
 
 
 # ---------------------------------------------------------------------------
+# Typography Patterns (TP-07) — Action title verification
+# ---------------------------------------------------------------------------
+
+_COMPARISON_WORDS = frozenset({
+    "more", "fewer", "higher", "lower", "faster", "slower",
+    "better", "worse", "greater", "less", "above", "below",
+})
+
+_DIRECTION_WORDS = frozenset({
+    "grew", "declined", "rose", "fell", "increased", "decreased",
+    "exceeded", "surpassed", "outperformed", "underperformed",
+    "improved", "worsened", "gained", "lost",
+})
+
+_DIGIT_RE = re.compile(r"\d")
+
+
+def _check_tp07(slides: list[dict]) -> list[AntiPatternResult]:
+    """TP-07: Action title verification — title must contain a number, comparison, or direction word."""
+    results: list[AntiPatternResult] = []
+    for i, s in enumerate(slides):
+        st = s.get("slide_type", "")
+        if st in ("title", "closing", "section_divider"):
+            continue
+        title = _get_title(s).strip()
+        if not title:
+            continue
+        title_lower = title.lower()
+        title_words = set(title_lower.split())
+
+        has_digit = bool(_DIGIT_RE.search(title))
+        has_comparison = bool(title_words & _COMPARISON_WORDS)
+        has_direction = bool(title_words & _DIRECTION_WORDS)
+
+        if not (has_digit or has_comparison or has_direction):
+            results.append(AntiPatternResult(
+                rule_id="TP-07",
+                category="typography",
+                severity="warning",
+                message=(
+                    f"Slide {i}: title '{title}' appears to be a topic label, not an action title. "
+                    "Add a metric, comparison, or direction word."
+                ),
+                slide_indices=[i],
+                suggestion=(
+                    "Rewrite to state the insight, e.g. 'Revenue grew 34% YoY' not 'Revenue Overview'"
+                ),
+            ))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Structural Patterns (SP-05) — Appendix problem detection
+# ---------------------------------------------------------------------------
+
+def _check_sp05(slides: list[dict]) -> list[AntiPatternResult]:
+    """SP-05: Too many supporting slides, not enough multi_chart exhibits."""
+    if not slides:
+        return []
+    content_slides = [
+        s for s in slides if s.get("slide_type") not in ("title", "closing", "section_divider")
+    ]
+    total = max(len(content_slides), 1)
+    content_count = sum(
+        1 for s in content_slides if s.get("slide_type") in ("content", "table")
+    )
+    multi_chart_count = sum(
+        1 for s in content_slides if s.get("slide_type") == "multi_chart"
+    )
+    if content_count > 0.30 * total and multi_chart_count < 0.15 * total:
+        return [AntiPatternResult(
+            rule_id="SP-05",
+            category="structural",
+            severity="warning",
+            message=(
+                f"Deck has too many supporting slides: {content_count} content/table slides "
+                f"({content_count/total:.0%}) with only {multi_chart_count} multi_chart slides. "
+                "Consider moving detail slides to an appendix section."
+            ),
+            slide_indices=list(range(len(slides))),
+            suggestion="Use multi_chart layouts for data-rich sections and move text/tables to appendix",
+        )]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Data Patterns (DP-05) — Apology footnote
+# ---------------------------------------------------------------------------
+
+_APOLOGY_WORDS = re.compile(
+    r"\b(approximate|estimated|assumed|subject to change|indicative|not guaranteed)\b",
+    re.IGNORECASE,
+)
+
+
+def _check_dp05(slides: list[dict]) -> list[AntiPatternResult]:
+    """DP-05: Footnote contains a qualification that signals uncertainty."""
+    results: list[AntiPatternResult] = []
+    for i, s in enumerate(slides):
+        footnote = s.get("data", {}).get("footnote", "")
+        if not footnote:
+            continue
+        if _APOLOGY_WORDS.search(footnote):
+            results.append(AntiPatternResult(
+                rule_id="DP-05",
+                category="data",
+                severity="warning",
+                message=(
+                    f"Slide {i}: footnote contains a qualification that signals uncertainty: "
+                    f"'{footnote[:80]}'"
+                ),
+                slide_indices=[i],
+                suggestion="Replace with a source attribution or methodology note instead of a caveat",
+            ))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Data Patterns (DP-06) — Data dump (no dominant element)
+# Note: DP-04 already exists (time series with <3 data points)
+# ---------------------------------------------------------------------------
+
+def _check_dp06(slides: list[dict]) -> list[AntiPatternResult]:
+    """DP-06: Chart slide has no dominant element (no accent, stat callout, or insight bullets)."""
+    results: list[AntiPatternResult] = []
+    chart_slide_types = {"chart", "chart_caption", "dashboard", "multi_chart"}
+    for i, s in enumerate(slides):
+        if s.get("slide_type") not in chart_slide_types:
+            continue
+        data = s.get("data", {})
+        cr = data.get("chart_request", {})
+
+        has_accent = "accent_index" in cr
+        has_stat = bool(data.get("stats"))
+        has_bullets = bool(data.get("bullets")) or bool(data.get("items"))
+        has_caption = bool(data.get("caption", "").strip())
+
+        if not (has_accent or has_stat or has_bullets or has_caption):
+            results.append(AntiPatternResult(
+                rule_id="DP-06",
+                category="data",
+                severity="warning",
+                message=(
+                    f"Slide {i}: chart slide has no dominant element. "
+                    "Add accent_index, stat callout, or insight bullets to focus audience attention."
+                ),
+                slide_indices=[i],
+                suggestion="Add accent_index to the chart_request, or add bullets/stats to the slide data",
+            ))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Appearance Patterns (AP-05) — Symmetric deck (low visual rhythm)
+# ---------------------------------------------------------------------------
+
+def _check_ap05(slides: list[dict]) -> list[AntiPatternResult]:
+    """AP-05: Deck has low visual variety rhythm (too uniform slide types)."""
+    import math
+    if len(slides) < 8:
+        return []
+    content_slides = [
+        s for s in slides if s.get("slide_type") not in ("title", "closing", "section_divider")
+    ]
+    if len(content_slides) < 8:
+        return []
+
+    types = [s.get("slide_type", "") for s in content_slides]
+    # Count transitions (type changes)
+    transitions = [1 if types[i] != types[i - 1] else 0 for i in range(1, len(types))]
+    if not transitions:
+        return []
+
+    # Compute std dev of local windows (measure of rhythmic variety)
+    window = 4
+    window_scores = []
+    for start in range(0, len(transitions) - window + 1):
+        w = transitions[start:start + window]
+        window_scores.append(sum(w))
+
+    if not window_scores:
+        return []
+
+    mean_val = sum(window_scores) / len(window_scores)
+    variance = sum((x - mean_val) ** 2 for x in window_scores) / len(window_scores)
+    std_dev = math.sqrt(variance)
+
+    if std_dev < 1.5:
+        return [AntiPatternResult(
+            rule_id="AP-05",
+            category="layout",
+            severity="warning",
+            message=(
+                f"Deck has low visual variety rhythm (std dev of type changes: {std_dev:.1f}). "
+                "Vary slide density: use high-impact Tier 1 slides for key points, "
+                "lighter layouts for supporting detail."
+            ),
+            slide_indices=list(range(len(slides))),
+            suggestion=(
+                "Alternate between dense data exhibits (multi_chart, dashboard) and "
+                "focused single-exhibit slides (icon_stat, three_card) to create visual rhythm"
+            ),
+        )]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Appearance Patterns (AP-06) — Section transition without divider (warning level)
+# ---------------------------------------------------------------------------
+
+def _check_ap06(slides: list[dict]) -> list[AntiPatternResult]:
+    """AP-06: Section transition without a section_divider slide (warning level upgrade of LP-04)."""
+    results: list[AntiPatternResult] = []
+    prev_section = None
+    for i, s in enumerate(slides):
+        st = s.get("slide_type", "")
+        if st in ("title", "closing"):
+            prev_section = None
+            continue
+        section = s.get("data", {}).get("section", "")
+        if not section:
+            prev_section = None
+            continue
+        if prev_section is not None and section != prev_section:
+            if st != "section_divider" and (i > 0 and slides[i - 1].get("slide_type") != "section_divider"):
+                results.append(AntiPatternResult(
+                    rule_id="AP-06",
+                    category="layout",
+                    severity="warning",
+                    message=(
+                        f"Slide {i}: section transition from '{prev_section}' to '{section}' "
+                        "without a section_divider slide. Consider adding a divider."
+                    ),
+                    slide_indices=[i],
+                    suggestion=f"Insert a section_divider slide before slide {i} to signal the topic change",
+                ))
+        prev_section = section
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Capacity checks for new slide types
+# ---------------------------------------------------------------------------
+
+def _check_new_slide_capacities(slides: list[dict]) -> list[AntiPatternResult]:
+    """Capacity checks for credentials, testimonial, before_after slide types."""
+    results: list[AntiPatternResult] = []
+    for i, s in enumerate(slides):
+        st = s.get("slide_type", "")
+        data = s.get("data", {})
+
+        if st == "credentials":
+            tombstones = data.get("tombstones", [])
+            n = len(tombstones)
+            if n < 4:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-01",
+                    category="structural",
+                    severity="warning",
+                    message=f"Slide {i}: credentials slide has only {n} tombstones (minimum 4)",
+                    slide_indices=[i],
+                    suggestion="Add more tombstones or use a different slide type for fewer items",
+                ))
+            elif n > 8:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-01",
+                    category="structural",
+                    severity="error",
+                    message=f"Slide {i}: credentials slide has {n} tombstones (maximum 8)",
+                    slide_indices=[i],
+                    suggestion="Reduce to 8 tombstones — move overflow to a second credentials slide",
+                ))
+
+        elif st == "testimonial":
+            quote = data.get("quote", "")
+            attribution = data.get("attribution", "")
+            if len(quote) > 200:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-02",
+                    category="typography",
+                    severity="error",
+                    message=f"Slide {i}: testimonial quote is {len(quote)} chars (max 200)",
+                    slide_indices=[i],
+                    suggestion="Shorten the quote to 200 characters or fewer",
+                ))
+            if len(attribution) > 60:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-02",
+                    category="typography",
+                    severity="warning",
+                    message=f"Slide {i}: testimonial attribution is {len(attribution)} chars (max 60)",
+                    slide_indices=[i],
+                    suggestion="Shorten attribution to 60 characters or fewer",
+                ))
+
+        elif st == "before_after":
+            for side_key in ("left", "right"):
+                side = data.get(side_key, {})
+                items = side.get("items", [])
+                n = len(items)
+                if n < 3:
+                    results.append(AntiPatternResult(
+                        rule_id="CAP-03",
+                        category="structural",
+                        severity="warning",
+                        message=f"Slide {i}: before_after {side_key} side has only {n} items (minimum 3)",
+                        slide_indices=[i],
+                        suggestion="Add more items to the panel",
+                    ))
+                elif n > 5:
+                    results.append(AntiPatternResult(
+                        rule_id="CAP-03",
+                        category="structural",
+                        severity="error",
+                        message=f"Slide {i}: before_after {side_key} side has {n} items (maximum 5)",
+                        slide_indices=[i],
+                        suggestion="Reduce to 5 items per side",
+                    ))
+
+        elif st == "team_grid":
+            members = data.get("members", [])
+            n = len(members)
+            if n < 2:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-04",
+                    category="structural",
+                    severity="error",
+                    message=f"Slide {i}: team_grid has only {n} member(s) (minimum 2)",
+                    slide_indices=[i],
+                    suggestion="Need at least 2 team members",
+                ))
+            elif n > 4:
+                results.append(AntiPatternResult(
+                    rule_id="CAP-05",
+                    category="structural",
+                    severity="error",
+                    message=f"Slide {i}: team_grid has {n} members (maximum 4)",
+                    slide_indices=[i],
+                    suggestion="team_grid supports max 4 members; use two slides for larger teams",
+                ))
+            # Warn on bios over 120 chars
+            for member in members:
+                bio = member.get("bio", "")
+                if isinstance(bio, str) and len(bio) > 120:
+                    results.append(AntiPatternResult(
+                        rule_id="CAP-04",
+                        category="typography",
+                        severity="warning",
+                        message=(
+                            f"Slide {i}: team member '{member.get('name', '?')}' has a bio of "
+                            f"{len(bio)} chars (recommended max 120)"
+                        ),
+                        slide_indices=[i],
+                        suggestion="Shorten the bio to 120 characters or fewer to avoid truncation",
+                    ))
+                    break  # One warning per slide is enough
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Registry of all check functions
 # ---------------------------------------------------------------------------
 
@@ -698,17 +1059,26 @@ _ALL_CHECKS = [
     _check_lp05, _check_lp06, _check_lp07,
     _check_tp01, _check_tp02, _check_tp03, _check_tp04,
     _check_tp05, _check_tp06,
+    _check_tp07,
     _check_cp01, _check_cp02, _check_cp03, _check_cp04,
     _check_dp01, _check_dp02, _check_dp03, _check_dp04,
+    _check_dp05, _check_dp06,
     _check_sp01, _check_sp02, _check_sp03, _check_sp04,
+    _check_sp05,
+    _check_ap05, _check_ap06,
+    _check_new_slide_capacities,
 ]
 
 
-def check_anti_patterns(slides: list[dict]) -> list[AntiPatternResult]:
+_INVESTOR_TEMPLATES = frozenset({"investor", "pitch", "boardroom"})
+
+
+def check_anti_patterns(slides: list[dict], template: str = "") -> list[AntiPatternResult]:
     """Run all anti-pattern checks against a slide deck.
 
     Args:
         slides: List of slide spec dicts, each with "slide_type" and "data" keys.
+        template: Optional template name — used to upgrade DP-03 severity for investor/pitch/boardroom.
 
     Returns:
         List of AntiPatternResult for every detected issue, sorted by slide index.
@@ -716,6 +1086,14 @@ def check_anti_patterns(slides: list[dict]) -> list[AntiPatternResult]:
     results: list[AntiPatternResult] = []
     for check_fn in _ALL_CHECKS:
         results.extend(check_fn(slides))
+
+    # DP-03 severity upgrade: error for investor/pitch/boardroom templates
+    if template.lower() in _INVESTOR_TEMPLATES:
+        for r in results:
+            if r.rule_id == "DP-03":
+                r.severity = "error"
+                r.message = r.message.replace("warning", "error")
+
     # Sort by first slide index, then by rule_id
     results.sort(key=lambda r: (r.slide_indices[0] if r.slide_indices else 0, r.rule_id))
     return results
