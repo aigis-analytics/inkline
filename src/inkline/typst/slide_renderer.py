@@ -1196,12 +1196,14 @@ class TypstSlideRenderer:
   // Footer rule + page number
   #line(length: 100%, stroke: 0.5pt + white.transparentize(50%))
   #v(4pt)
-  #grid(
-    columns: (1fr, auto),
-    align: horizon,
-    text(size: 8pt, fill: white.transparentize(40%))[{_esc(t.get("footer_text", t.get("name", "")))}],
-    text(size: 8pt, weight: "bold", fill: white.transparentize(30%))[#counter(page).display() / #context counter(page).final().first()],
-  )
+  #context[
+    #grid(
+      columns: (1fr, auto),
+      align: horizon,
+      text(size: 8pt, fill: white.transparentize(40%))[{_esc(t.get("footer_text", t.get("name", "")))}],
+      text(size: 8pt, weight: "bold", fill: white.transparentize(30%))[#counter(page).display() / #counter(page).final().first()],
+    )
+  ]
 ]"""
 
     # ==================================================================
