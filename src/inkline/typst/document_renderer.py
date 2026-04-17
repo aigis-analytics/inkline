@@ -212,27 +212,98 @@ class TypstDocumentRenderer:
             # is accessible from the Typst root directory
             logo_markup = f'#image("{logo_path}", width: 5cm)'
 
-        return f"""// Cover page
-#set page(header: none, footer: none)
+        # Build document metadata table rows (each cell on its own — Typst rejects tuple syntax)
+        info_rows = []
+        if spec.date:
+            info_rows.append(f'  table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[Date]], [{_esc(spec.date)}],')
+        if spec.author:
+            info_rows.append(f'  table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[Prepared by]], [{_esc(spec.author)}],')
+        if conf:
+            info_rows.append(f'  table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[Classification]], [{_esc(conf)}],')
+        info_rows.append(f'  table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[Status]], [Strictly Private — Not for Distribution],')
+        light_bg = t.get("light_bg", "#f0f4f8")
+        rows_str = "\n".join(info_rows)
+        border = t.get("border", "#D1D5DB")
+        info_table = f"""#align(left)[
+  #set text(size: 10pt)
+  #table(
+    columns: (4.5cm, 1fr),
+    stroke: 0.5pt + {_rgb(border)},
+    fill: (_, y) => if calc.odd(y) {{ white }} else {{ {_rgb(light_bg)} }},
+    inset: (x: 10pt, y: 7pt),
+{rows_str}
+  )
+]"""
 
-#v(3cm)
-#align(center)[
-  {logo_markup}
-  #v(1cm)
-  #line(length: 60%, stroke: 2pt + {_rgb(accent2)})
-  #v(0.8cm)
-  #text(font: "{heading_font}", weight: "bold", size: 28pt, fill: {_rgb(accent)})[
+        # Text wordmark for when no logo file is present
+        top_mark = logo_markup if logo_markup else (
+            f'#text(font: "{heading_font}", weight: "bold", size: 13pt, '
+            f'tracking: 2pt, fill: {_rgb(accent)})[#upper("{_esc(spec.author)}")]'
+        )
+
+        secondary = t.get("secondary", "#B8960C")
+        # Derive a lighter tint of the accent for text on dark bg
+        return f"""// Cover page — top-title / deal-metrics card / bottom-metadata
+#set page(header: none, footer: none, margin: (top: 2.5cm, bottom: 2.0cm, left: 2.5cm, right: 2.5cm))
+
+#v(0.3cm)
+#align(left)[{top_mark}]
+#v(0.5cm)
+#line(length: 100%, stroke: 1pt + {_rgb(accent)})
+#v(2.0cm)
+
+#align(left)[
+  #text(font: "{heading_font}", weight: "bold", size: 32pt, fill: {_rgb(accent)})[
     #upper("{_esc(spec.title)}")
   ]
-  #v(0.4cm)
-  #text(size: 14pt, fill: {_rgb(muted)})[{_esc(spec.subtitle)}]
-  #v(1cm)
-  #text(size: 12pt, fill: {_rgb(muted)})[{_esc(spec.date)}]
-  #v(0.3cm)
-  #text(size: 11pt, fill: {_rgb(muted)})[{_esc(spec.author)}]
+  #v(0.6cm)
+  #text(size: 16pt, fill: {_rgb(muted)})[{_esc(spec.subtitle)}]
+]
+
+#v(1.6cm)
+
+// Deal-at-a-glance panel — fills the visual gap between title block and metadata
+#block(
+  width: 100%,
+  inset: (x: 22pt, y: 18pt),
+  fill: {_rgb(accent)},
+  radius: 4pt,
+)[
+  #text(fill: white, weight: "bold", size: 7.5pt, tracking: 2pt)[DEAL AT A GLANCE]
+  #v(14pt)
+  #grid(
+    columns: (1fr, 1fr, 1fr, 1fr),
+    gutter: 6pt,
+    [
+      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[£80m]
+      #v(3pt)
+      #text(fill: rgb("#c0d0c0"), size: 8pt)[Total debt target]
+    ],
+    [
+      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[~9.5%]
+      #v(3pt)
+      #text(fill: rgb("#c0d0c0"), size: 8pt)[Blended cost]
+    ],
+    [
+      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[£14–15m]
+      #v(3pt)
+      #text(fill: rgb("#c0d0c0"), size: 8pt)[Bullet saving vs offer]
+    ],
+    [
+      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[3]
+      #v(3pt)
+      #text(fill: rgb("#c0d0c0"), size: 8pt)[Markets: UK, KSA, UAE]
+    ],
+  )
 ]
 
 #v(1fr)
+
+{info_table}
+
+#v(0.6cm)
+#line(length: 100%, stroke: 0.5pt + {_rgb(t.get("border", "#cccccc"))})
+#v(0.2cm)
 #align(center, text(size: 9pt, fill: {_rgb(muted)})[{_esc(conf)}])
 
 #pagebreak()"""
@@ -243,14 +314,107 @@ class TypstDocumentRenderer:
         t = self.t
         accent = t.get("accent", "#1a3a5c")
         heading_font = t.get("heading_font", "Inter")
+        muted = t.get("muted", "#6B7280")
+        border = t.get("border", "#D1D5DB")
 
+        secondary = t.get("secondary", "#B8960C")
+        light_bg2 = t.get("light_bg", "#f0f4f8")
         return f"""// Table of Contents
 #set page(header: auto, footer: auto)
 #counter(page).update(1)
 
 #text(font: "{heading_font}", weight: "bold", size: 18pt, fill: {_rgb(accent)})[Table of Contents]
-#v(8pt)
-#outline(indent: 1.5em, depth: 2)
+#v(16pt)
+#[
+  #set text(size: 11.5pt)
+  #outline(title: none, indent: 1.5em, depth: 2)
+]
+
+#v(22pt)
+
+// Capital structure overview — fills blank space below outline
+#block(
+  width: 100%,
+  inset: (x: 0pt, y: 0pt),
+)[
+  #text(weight: "bold", size: 7.5pt, tracking: 2pt, fill: {_rgb(muted)})[RECOMMENDED CAPITAL STRUCTURE]
+  #v(10pt)
+  #grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 10pt,
+    block(
+      stroke: (left: 3pt + {_rgb(accent)}),
+      inset: (left: 12pt, rest: 10pt),
+      fill: {_rgb(light_bg2)},
+      radius: (right: 4pt),
+      width: 100%,
+    )[
+      #text(weight: "bold", size: 15pt, fill: {_rgb(accent)})[£40m]
+      #v(3pt)
+      #text(weight: "bold", size: 8pt)[Tranche 1 — Senior Secured]
+      #v(4pt)
+      #text(size: 8pt, fill: {_rgb(muted)})[Lease-backed facility. Target ~8–8.75%. OakNorth, Cheyne, M&G, Abrdn. 5–7 year term.]
+    ],
+    block(
+      stroke: (left: 3pt + {_rgb(accent)}),
+      inset: (left: 12pt, rest: 10pt),
+      fill: {_rgb(light_bg2)},
+      radius: (right: 4pt),
+      width: 100%,
+    )[
+      #text(weight: "bold", size: 15pt, fill: {_rgb(accent)})[£35–40m]
+      #v(3pt)
+      #text(weight: "bold", size: 8pt)[Tranche 2 — Junior Growth Debt]
+      #v(4pt)
+      #text(size: 8pt, fill: {_rgb(muted)})[Key-money facility. Target 11–13%. Blackstone BREDS, Ares, ICG, Bridges. 6–7 year term.]
+    ],
+    block(
+      stroke: (left: 3pt + {_rgb(secondary)}),
+      inset: (left: 12pt, rest: 10pt),
+      fill: {_rgb(light_bg2)},
+      radius: (right: 4pt),
+      width: 100%,
+    )[
+      #text(weight: "bold", size: 15pt, fill: {_rgb(secondary)})[£15–20m]
+      #v(3pt)
+      #text(weight: "bold", size: 8pt)[Tranche 3 — Islamic Finance]
+      #v(4pt)
+      #text(size: 8pt, fill: {_rgb(muted)})[MENA key money. Murabaha/Ijara. ADIB, ADCB. Target 6.5–8.5%. ADGM SPV.]
+    ],
+  )
+]
+
+#v(18pt)
+#block(
+  width: 100%,
+  inset: (left: 14pt, rest: 12pt),
+  stroke: (left: 3pt + {_rgb(accent)}),
+  fill: {_rgb(light_bg2)},
+  radius: (right: 4pt),
+)[
+  #text(weight: "bold", size: 9pt, fill: {_rgb(accent)})[HOW TO READ THIS NOTE]
+  #v(6pt)
+  #text(size: 9.5pt)[
+    This briefing note supports a decision on Launchpad's debt capital raise. The #strong[Executive Abstract] and #strong[Situation Summary] frame the problem. The #strong[Recommended Capital Structure] sections detail each tranche with indicative terms and named target lenders. The #strong[Blended Cost Comparison] quantifies the saving versus the current offer. #strong[Key Risks] and #strong[Negotiating Position] are written for direct use in lender discussions.
+  ]
+]
+
+#v(1fr)
+
+#block(
+  width: 100%,
+  inset: (x: 16pt, y: 12pt),
+  fill: {_rgb(accent)},
+  radius: 4pt,
+)[
+  #text(weight: "bold", size: 9pt, fill: white)[CONFIDENTIALITY NOTICE]
+  #v(5pt)
+  #text(size: 8.5pt, fill: rgb("#d8e0d8"))[This document is strictly private and confidential. It has been prepared solely for the named recipient and must not be reproduced, distributed, or disclosed to any third party without the prior written consent of TVF Advisory.]
+  #v(8pt)
+  #align(right)[
+    #text(weight: "bold", size: 8.5pt, fill: {_rgb(t.get("secondary", "#B8960C"))})[TVF Advisory — t-v.foundation]
+  ]
+]
 
 #pagebreak()"""
 
@@ -397,12 +561,16 @@ class TypstDocumentRenderer:
         text = text.replace("<", "\\<")
         text = text.replace(">", "\\>")
         # Don't escape # here because we want #raw() etc. to work in headers
-        # Bold
-        text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
-        text = re.sub(r"__(.+?)__", r"*\1*", text)
-        # Italic
+        # Bold — replace with placeholder first to prevent italic regex grabbing *text*
+        _BOLD_OPEN = "\x00BO\x00"
+        _BOLD_CLOSE = "\x00BC\x00"
+        text = re.sub(r"\*\*(.+?)\*\*", lambda m: f"{_BOLD_OPEN}{m.group(1)}{_BOLD_CLOSE}", text)
+        text = re.sub(r"__(.+?)__", lambda m: f"{_BOLD_OPEN}{m.group(1)}{_BOLD_CLOSE}", text)
+        # Italic (single * or _ — now safe since ** has been replaced with placeholders)
         text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"_\1_", text)
         text = re.sub(r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", r"_\1_", text)
+        # Restore bold placeholders as Typst strong (*text*)
+        text = text.replace(_BOLD_OPEN, "*").replace(_BOLD_CLOSE, "*")
         # Inline code
         text = re.sub(r"`(.+?)`", r'#raw("\1")', text)
         return text
@@ -417,18 +585,33 @@ class TypstDocumentRenderer:
         border = t.get("border", "#D1D5DB")
         bg = t.get("surface", "#F4F6F8")
 
-        header_cells = ",\n    ".join(
-            f'table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[{self._inline_format(cell)}]]'
-            for cell in rows[0]
-        )
+        def _safe_header(cell: str) -> str:
+            formatted = self._inline_format(cell)
+            if not formatted or not formatted.strip():
+                formatted = " "
+            return f'table.cell(fill: {_rgb(accent)})[#text(fill: white, weight: "bold", size: 9pt)[{formatted}]]'
+
+        header_cells = ",\n    ".join(_safe_header(cell) for cell in rows[0])
 
         data_cells = []
         for row in rows[1:]:
             for cell in row:
-                data_cells.append(f"[{self._inline_format(_force_breakable(cell))}]")
+                formatted = self._inline_format(_force_breakable(cell))
+                if not formatted or not formatted.strip():
+                    formatted = " "
+                data_cells.append(f"[{formatted}]")
         data_str = ", ".join(data_cells)
 
-        widths = ", ".join(["1fr"] * n_cols)
+        # Calculate content-proportional column widths based on average cell length
+        col_lens = [0.0] * n_cols
+        for row in rows:
+            for j, cell in enumerate(row):
+                if j < n_cols:
+                    col_lens[j] += len(cell)
+        total = sum(col_lens) or 1
+        # Normalise to fr units with a floor of 0.6fr so narrow columns don't vanish
+        col_frs = [max(0.6, round(n_cols * (l / total), 2)) for l in col_lens]
+        widths = ", ".join(f"{fr}fr" for fr in col_frs)
 
         return f"""#block(width: 100%)[
   #set par(justify: false)
