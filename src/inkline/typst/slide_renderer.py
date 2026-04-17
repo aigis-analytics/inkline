@@ -216,11 +216,10 @@ def get_multi_chart_slot(layout: str, chart_index: int, n_charts: int) -> tuple[
 # Card inset = 14pt = 0.494cm each side:  inner 2-col = 9.96cm  |  inner 3-col = 6.07cm
 
 def _clamp(text: str | None, n: int) -> str:
-    """Truncate text to at most n characters, appending '…' if cut."""
+    """Pass text through unchanged; Typst handles overflow via adaptive sizing."""
     if not text:
         return text or ""
-    s = str(text)
-    return s if len(s) <= n else s[:n - 1] + "…"
+    return str(text)
 
 
 def _clamp_list(items: list, n: int) -> list:
@@ -1688,6 +1687,12 @@ class TypstSlideRenderer:
 
         # Brand discipline: ALL number badges use the single brand accent
         # colour, NOT a rainbow. Best practice: 2-3 colour brand system.
+
+        # Adaptive body font size: reduce when cards carry long text to prevent
+        # content from being clipped by the _body_block 9cm boundary.
+        total_body = sum(len(f.get("body", "")) for f in features)
+        body_size = "9pt" if total_body < 500 else "8pt" if total_body < 700 else "7.5pt"
+
         cells = []
         for i, f in enumerate(features):
             icon = f.get("icon", "")
@@ -1710,7 +1715,7 @@ class TypstSlideRenderer:
           text(weight: "bold", size: 11pt, fill: {_rgb(t['text'])})[#upper[{f_title}]],
         )
         #v(4pt)
-        #text(size: 9pt, fill: {_rgb(t['muted'])})[{f_body}]
+        #text(size: {body_size}, fill: {_rgb(t['muted'])})[{f_body}]
       ]""")
 
         # Pad to 6 cells with empty blocks for clean grid
