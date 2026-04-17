@@ -753,16 +753,6 @@ class TypstSlideRenderer:
 
         cards_str = ",\n    ".join(card_markups)
 
-        body = f"""v(1fr)
-
-  grid(
-    columns: (1fr, 1fr, 1fr),
-    gutter: 14pt,
-    {cards_str}
-  )
-
-  v(1fr)"""
-
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -772,8 +762,17 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
+  v(8pt)
 
-  {self._body_block(body, footnote)}
+  v(1fr)
+  grid(
+    columns: (1fr, 1fr, 1fr),
+    gutter: 14pt,
+    {cards_str}
+  )
+  v(1fr)
+
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
     # -- Four card slide ---------------------------------------------------
@@ -1045,14 +1044,16 @@ class TypstSlideRenderer:
   stack(
     spacing: 8pt,
     {kpis_str}
-  )"""
+  )
+  v(1fr)"""
         else:
             body = f"""v(1fr)
   grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
     gutter: 8pt,
     {kpis_str}
-  )"""
+  )
+  v(1fr)"""
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
