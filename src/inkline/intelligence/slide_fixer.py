@@ -65,7 +65,7 @@ CHART_CONTAINER_CM: dict[str, float] = {
 MAX_TITLE_CHARS = 45    # titles >45 chars risk wrapping to 2 lines (Source Sans 3 22pt, 22.6cm width)
 MAX_BULLET_CHARS = 200
 MAX_CELL_CHARS = 50
-MAX_CARD_BODY_CHARS = 200  # card body text: adaptive font sizing handles overflow; full prose allowed
+MAX_CARD_BODY_CHARS = 280  # card body text: adaptive font sizing handles overflow; full prose allowed
 
 # Table hard limits (independent of SLIDE_CAPACITY which may be set higher
 # for content-allocation purposes in layout_selector)
@@ -435,20 +435,20 @@ def _fix_content_reduction(
                 _set_nested(data, field, items[:reduced])
                 modified = True
 
-        # Truncate text to 150 chars
+        # Truncate text to 300 chars (overflow fix — adaptive font sizing handles rest)
         for field in _CONTENT_FIELDS.get(stype, []):
             items = _get_nested(data, field)
             if not items or not isinstance(items, list):
                 continue
             for j, item in enumerate(items):
-                if isinstance(item, str) and len(item) > 150:
-                    items[j] = _truncate_at_word(item, 145)
+                if isinstance(item, str) and len(item) > 300:
+                    items[j] = _truncate_at_word(item, 280)
                     modified = True
                 elif isinstance(item, dict):
                     for key in ("body", "desc"):
                         val = item.get(key, "")
-                        if isinstance(val, str) and len(val) > 150:
-                            item[key] = _truncate_at_word(val, 145)
+                        if isinstance(val, str) and len(val) > 300:
+                            item[key] = _truncate_at_word(val, 280)
                             modified = True
 
     if modified:

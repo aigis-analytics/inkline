@@ -1040,20 +1040,16 @@ class TypstSlideRenderer:
         vertical = d.get("vertical", False)
 
         if vertical:
-            body = f"""v(1fr)
-  stack(
+            kpi_block = f"""stack(
     spacing: 8pt,
     {kpis_str}
-  )
-  v(1fr)"""
+  )"""
         else:
-            body = f"""v(1fr)
-  grid(
+            kpi_block = f"""grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
     gutter: 8pt,
     {kpis_str}
-  )
-  v(1fr)"""
+  )"""
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
@@ -1064,9 +1060,12 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(20pt)
 
-  {self._body_block(body, footnote)}
+  v(1fr)
+  {kpi_block}
+  v(1fr)
+
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
     # -- Closing slide -----------------------------------------------------
@@ -1154,26 +1153,55 @@ class TypstSlideRenderer:
     def _section_divider_slide(self, d: dict) -> str:
         """Full-bleed accent page used to separate major deck sections.
 
-        data: title (required), subtitle? (optional tagline)
+        data: title (required), section? (eyebrow label), subtitle? (optional tagline)
         """
         t = self.t
         title = d.get("title", "")
+        section = d.get("section", "")
         subtitle = d.get("subtitle", "")
         heading_font = t.get("heading_font", "Inter")
+        logo_path = t.get("logo_light_path", "")
+
+        logo_block = (
+            f'#image("{logo_path}", height: 1.0cm)'
+            if logo_path else
+            f'#text(weight: "bold", size: 9pt, tracking: 2pt, fill: white.transparentize(30%))'
+            f'[#upper[{_esc(t.get("name", ""))}]]'
+        )
+        eyebrow = (
+            f'#text(size: 10pt, weight: "bold", tracking: 2pt, '
+            f'fill: white.transparentize(35%))[#upper[{_esc(section)}]]#v(12pt)'
+            if section else ""
+        )
+        subtitle_block = (
+            f'#v(0.5cm)#text(size: 14pt, fill: white.transparentize(25%))[{_esc(subtitle)}]'
+            if subtitle else ""
+        )
 
         return f"""#page(
   fill: {_rgb(t['accent'])},
-  margin: (top: 1.4cm, bottom: 1.2cm, left: 1.6cm, right: 1.6cm),
+  margin: (top: 1.2cm, bottom: 1.0cm, left: 1.6cm, right: 1.6cm),
   header: none,
   footer: none,
 )[
   #set text(fill: white)
+  // Logo row
+  #align(right)[{logo_block}]
   #v(1fr)
-  #align(horizon)[
-    #text(weight: "bold", size: 40pt, font: "{heading_font}", tracking: -0.5pt)[{_esc(title)}]
-    {f'#v(0.5cm)#text(size: 14pt, fill: white.transparentize(25%))[{_esc(subtitle)}]' if subtitle else ''}
-  ]
+  // Section eyebrow + title
+  {eyebrow}
+  #text(weight: "bold", size: 36pt, font: "{heading_font}", tracking: -0.5pt)[{_esc(title)}]
+  {subtitle_block}
   #v(1fr)
+  // Footer rule + page number
+  #line(length: 100%, stroke: 0.5pt + white.transparentize(50%))
+  #v(4pt)
+  #grid(
+    columns: (1fr, auto),
+    align: horizon,
+    text(size: 8pt, fill: white.transparentize(40%))[{_esc(t.get("footer_text", t.get("name", "")))}],
+    text(size: 8pt, weight: "bold", fill: white.transparentize(30%))[#counter(page).display() / #context counter(page).final().first()],
+  )
 ]"""
 
     # ==================================================================
