@@ -65,7 +65,7 @@ CHART_CONTAINER_CM: dict[str, float] = {
 MAX_TITLE_CHARS = 45    # titles >45 chars risk wrapping to 2 lines (Source Sans 3 22pt, 22.6cm width)
 MAX_BULLET_CHARS = 200
 MAX_CELL_CHARS = 50
-MAX_CARD_BODY_CHARS = 80  # card body text: ~2 short sentences; longer → overflow on three_card/four_card
+MAX_CARD_BODY_CHARS = 200  # card body text: adaptive font sizing handles overflow; full prose allowed
 
 # Table hard limits (independent of SLIDE_CAPACITY which may be set higher
 # for content-allocation purposes in layout_selector)
