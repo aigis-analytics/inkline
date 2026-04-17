@@ -236,10 +236,13 @@ def _degrade_placeholder_slides(slides: list, root: str) -> list:
 
         if slide_type == "multi_chart":
             charts = data.get("charts", [])
-            # Keep only charts that have a real image on disk
+            # Keep only charts that have a real image on disk (check root/ and root/charts/)
             good_charts = [
                 c for c in charts
-                if c.get("image_path") and (root_path / c["image_path"]).exists()
+                if c.get("image_path") and (
+                    (root_path / c["image_path"]).exists()
+                    or (root_path / "charts" / c["image_path"]).exists()
+                )
             ]
             bad_count = len(charts) - len(good_charts)
 
@@ -282,7 +285,14 @@ def _degrade_placeholder_slides(slides: list, root: str) -> list:
 
         elif slide_type in ("chart", "chart_caption", "dashboard"):
             image_path = data.get("image_path", "")
-            if image_path and not (root_path / image_path).exists():
+            # Check both root/ and root/charts/ so callers don't need to
+            # include the "charts/" prefix in image_path.
+            image_found = (
+                not image_path
+                or (root_path / image_path).exists()
+                or (root_path / "charts" / image_path).exists()
+            )
+            if image_path and not image_found:
                 # Convert to content slide with available narrative
                 log.warning(
                     "Degrading slide '%s' (%s) → content: image '%s' missing",
@@ -332,8 +342,9 @@ def _preflight_images(slides: list, root: str) -> None:
             image_path = data.get("image_path", "")
             if image_path:
                 total_chart_slots += 1
+                # Check both root/ and root/charts/ subdirectory
                 full = root_path / image_path
-                if not full.exists():
+                if not full.exists() and not (root_path / "charts" / image_path).exists():
                     placeholder_count += 1
                     log.warning(
                         "Pre-flight: image '%s' not found for %s slide — renderer will use placeholder",
@@ -345,7 +356,7 @@ def _preflight_images(slides: list, root: str) -> None:
             if image_path:
                 total_chart_slots += 1
                 full = root_path / image_path
-                if not full.exists():
+                if not full.exists() and not (root_path / "charts" / image_path).exists():
                     placeholder_count += 1
                     log.warning(
                         "Image not found, using placeholder: %s", image_path
