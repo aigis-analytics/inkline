@@ -881,9 +881,18 @@ def export_typst_document(
                 shutil.copy2(logo_file, target)
             root_dir = str(output_path.parent)
         else:
-            # Logo file doesn't exist — strip from source to avoid compile error
-            log.warning("Logo file not found: %s — skipping", logo_file)
-            source = source.replace(f'#image("{logo_path}", width: 5cm)', "")
+            # Logo not in package assets — try user config assets dir
+            import re as _re
+            user_logo = Path.home() / ".config" / "inkline" / "assets" / logo_path
+            if user_logo.exists():
+                target = output_path.parent / logo_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copy2(user_logo, target)
+                root_dir = str(output_path.parent)
+            else:
+                log.warning("Logo file not found: %s — stripping from source", logo_file)
+                source = _re.sub(rf'#image\("{_re.escape(logo_path)}"[^)]*\)', "", source)
 
     compile_typst(source, output_path=output_path, root=root_dir, font_paths=all_font_paths)
 
