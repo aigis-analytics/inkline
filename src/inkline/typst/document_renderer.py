@@ -129,7 +129,7 @@ class TypstDocumentRenderer:
         text_color = t.get("text", "#1A1A1A")
 
         return f"""// Heading styles
-#set heading(numbering: "1.1")
+#set heading(numbering: none)
 
 #show heading.where(level: 1): it => {{
   v(16pt)
