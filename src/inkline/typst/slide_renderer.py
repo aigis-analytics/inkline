@@ -2375,32 +2375,29 @@ class TypstSlideRenderer:
         footnote = d.get("footnote", "")
         heading_font = t.get("heading_font", "Inter")
 
-        body = f"""align(center + horizon)[
-  text(size: 11pt, fill: {_rgb(t['muted'])})[{section_badge(section, t['muted'])}]
-  v(1fr)
-  text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201c]
-  v(4pt)
-  block(width: 85%)[
-    #align(center)[
-      #text(weight: "bold", size: 22pt, font: "{heading_font}", fill: {_rgb(t['text'])}, style: "italic")[{quote}]
-    ]
-  ]
-  v(4pt)
-  text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201d]
-  v(12pt)
-  align(center)[
-    #text(size: 11pt, fill: {_rgb(t['muted'])})[{attribution}]
-  ]
-  v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
-]"""
-
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
   set block(spacing: 0pt)
   set par(spacing: 0em)
-  {body}
+
+  {section_badge(section, t['muted'])}
+  v(1fr)
+  align(center)[
+    #text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201c]
+    #v(4pt)
+    #block(width: 85%)[
+      #align(center)[
+        #text(weight: "bold", size: 22pt, font: "{heading_font}", fill: {_rgb(t['text'])}, style: "italic")[{quote}]
+      ]
+    ]
+    #v(4pt)
+    #text(size: 10pt, fill: {_rgb(t['accent'])}, tracking: 2pt)[\u201d]
+    #v(12pt)
+    #text(size: 11pt, fill: {_rgb(t['muted'])})[{attribution}]
+  ]
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
     # -- Before/After (two-panel transformation) slide --------------------
@@ -2443,7 +2440,7 @@ class TypstSlideRenderer:
                 f")[\n"
                 f"  #text(weight: \"bold\", size: 13pt, fill: {_rgb(colour)})[{label}]\n"
                 f"  #v(8pt)\n"
-                f"  #list(indent: 6pt, {', '.join(repr(_esc(str(it))) for it in items)})\n"
+                f"  #list(indent: 6pt, {', '.join(__import__('json').dumps(_esc(str(it))) for it in items)})\n"
                 f"]"
             )
 
