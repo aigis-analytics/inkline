@@ -157,8 +157,8 @@ Themes live in `inkline.typst.themes` across 13 categories:
 
 | Category     | Examples                                          |
 |--------------|---------------------------------------------------|
-| consulting   | McKinsey, BCG, Bain, Deloitte, PwC, EY, KPMG      |
-| corporate    | Goldman, JPMorgan, MS, BlackRock                  |
+| consulting   | Strategy Blue, Strategy Green, Strategy Red, Professional Services, Advisory Orange, Advisory Yellow, Corporate Blue |
+| corporate    | Pitchbook, Private Banking, MS, BlackRock         |
 | tech         | Stripe, Linear, Vercel, Notion, GitHub            |
 | dark         | Nord, Dracula, Catppuccin Mocha, Carbon           |
 | warm         | Cigar, Creme, Linen, Terracotta, Clementa         |
@@ -230,9 +230,9 @@ Inkline encodes aesthetic quality as three layers that always fire:
 
 **Layer 1 — Decision framework:** The LLM advisor answers three questions
 (data shape → message type → exhibit type), then looks up the answer in a
-decision matrix. No option menu, no entropy. 27 rules seeded from Pareto
-Securities, Launchpad, and Goldman/McKinsey chart grammar. Confidence scores
-update with every feedback event.
+decision matrix. No option menu, no entropy. 27 rules seeded from top-tier
+investment bank and consulting firm chart grammar. Confidence scores update
+with every feedback event.
 
 **Layer 3 — TasteEnforcer:** Ten deterministic rules run before rendering
 regardless of LLM output:
@@ -322,7 +322,7 @@ on scatter adds callout boxes per point.
 
 ### Pitchbook-derived chart types (5, new in v0.5)
 
-Derived from Pareto Securities and Launchpad reference decks. All registered in
+Derived from top-tier investment bank reference decks. All registered in
 the decision matrix with proven (data_structure, message_type) mappings.
 
 | Type | Best for |
@@ -400,7 +400,7 @@ inkline mcp                        # MCP server for Claude Desktop / Claude.ai (
 # Design system / self-learning (v0.5)
 inkline learn                      # process feedback log, update decision matrix
 inkline ingest pitchbook.pdf       # extract design patterns from a reference PDF
-inkline ingest pitchbook.pdf --name pareto_q2  # with custom identifier
+inkline ingest pitchbook.pdf --name q2_deck     # with custom identifier
 ```
 
 ## Repository layout
@@ -420,7 +420,7 @@ src/inkline/
 │   └── themes/              # 90 themes in 13 categories
 ├── intelligence/     # Design advisor + overflow audit + self-learning
 │   ├── design_advisor.py          # DesignAdvisor — decision framework + _inject_decision_matrix()
-│   ├── decision_matrix_default.yaml # 27 seed rules (Pareto/Launchpad/Goldman)
+│   ├── decision_matrix_default.yaml # 27 seed rules (top-tier bank/consulting grammar)
 │   ├── aggregator.py              # Aggregator — feedback events → confidence updates
 │   ├── deck_analyser.py           # DeckAnalyser — PDF → chart heuristics → DM candidates
 │   ├── feedback.py                # capture_feedback(), detect_implicit_feedback()
