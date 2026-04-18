@@ -134,6 +134,26 @@ def _is_dark_bg(hex_color: str) -> bool:
     return (r * 0.299 + g * 0.587 + b * 0.114) < 128
 
 
+def _ensure_readable(fg: str, bg: str, *, dark_fallback: str = "#111111", light_fallback: str = "#FFFFFF") -> str:
+    """Return fg if it has adequate contrast against bg, else return a readable fallback."""
+    if _is_dark_bg(bg) and _is_dark_bg(fg):
+        return light_fallback   # dark-on-dark → use white
+    if not _is_dark_bg(bg) and not _is_dark_bg(fg):
+        return dark_fallback    # light-on-light → use near-black
+    return fg
+
+
+def _lighten_dark_bg(hex_color: str, amount: int = 30) -> str:
+    """Lighten a dark hex color by a fixed RGB amount (for card surfaces on dark themes)."""
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) != 6:
+        return hex_color
+    r = min(255, int(hex_color[0:2], 16) + amount)
+    g = min(255, int(hex_color[2:4], 16) + amount)
+    b = min(255, int(hex_color[4:6], 16) + amount)
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 def parse_design_md(filepath: Path) -> DesignMdStyle | None:
     """Parse a single DESIGN.md file into a DesignMdStyle."""
     try:
@@ -166,13 +186,18 @@ def parse_design_md(filepath: Path) -> DesignMdStyle | None:
         primary = _find_color(named, ['cta', 'link', 'action'], all_hex[0] if all_hex else '#333333')
 
     bg = _find_color(named, ['background', 'page bg', 'canvas', 'page background'], '#FFFFFF')
-    text_color = _find_color(named, ['heading', 'text primary', 'foreground'], '#111111')
+    text_raw = _find_color(named, ['heading', 'text primary', 'foreground'], '')
+    text_color = _ensure_readable(text_raw or ('#FFFFFF' if _is_dark_bg(bg) else '#111111'), bg)
     accent = _find_color(named, ['accent', 'secondary', 'highlight'], primary)
     surface = _find_color(named, ['surface', 'card bg', 'card background', 'container'], '')
     if not surface:
-        surface = '#F8F9FA' if not _is_dark_bg(bg) else '#1A1A2E'
-    border = _find_color(named, ['border', 'divider', 'separator'], '#E5E7EB')
-    muted = _find_color(named, ['muted', 'caption', 'secondary text', 'subtle'], '#6B7280')
+        surface = '#F8F9FA' if not _is_dark_bg(bg) else _lighten_dark_bg(bg, 28)
+    border = _find_color(named, ['border', 'divider', 'separator'], '#E5E7EB' if not _is_dark_bg(bg) else '#444444')
+    muted_raw = _find_color(named, ['muted', 'caption', 'secondary text', 'subtle'], '')
+    if not muted_raw:
+        muted = '#6B7280' if not _is_dark_bg(bg) else '#A0A0B0'
+    else:
+        muted = _ensure_readable(muted_raw, bg, dark_fallback='#6B7280', light_fallback='#A0A0B0')
 
     # Build chart color palette from available colors
     chart_candidates = [v for v in named.values() if v not in (bg, text_color, '#FFFFFF', '#000000')]
@@ -183,7 +208,7 @@ def parse_design_md(filepath: Path) -> DesignMdStyle | None:
     # Title slide: typically dark bg + white text
     is_dark = _is_dark_bg(bg)
     title_bg = bg if is_dark else (text_color if _is_dark_bg(text_color) else '#111111')
-    title_fg = text_color if is_dark else '#FFFFFF'
+    title_fg = _ensure_readable(text_color, title_bg)
 
     # Typography
     heading_font = fonts[0] if fonts else 'Inter'
@@ -260,12 +285,27 @@ def to_slide_template(style: DesignMdStyle) -> dict:
         tpl["card_fill_override"] = style.surface
         tpl["surface_override"] = style.surface
     else:
-        tpl["bg_override"] = style.background
-        tpl["text_override"] = style.text
-        tpl["muted_override"] = style.muted
-        tpl["border_override"] = style.border
-        tpl["card_fill_override"] = style.surface
-        tpl["surface_override"] = style.surface
+        bg = style.background
+        # Guarantee readable text on the slide background
+        text = _ensure_readable(style.text, bg)
+        muted = _ensure_readable(style.muted, bg, dark_fallback='#6B7280', light_fallback='#A0A0B0')
+        # Card surface must stay in the same luminance band as the bg so the
+        # slide-level text color (now forced white) remains readable on the card.
+        # If the extracted surface is light (common when the spec has a "card" color
+        # from the light-mode variant), darken it to stay readable.
+        card = style.surface if _is_dark_bg(style.surface) else _lighten_dark_bg(bg, 28)
+        border = style.border if not _is_dark_bg(style.border) else '#555555'
+        tpl["bg_override"] = bg
+        tpl["text_override"] = text
+        tpl["muted_override"] = muted
+        tpl["border_override"] = border
+        tpl["card_fill_override"] = card
+        tpl["surface_override"] = card
+    # Ensure title_fg is always readable against title_bg
+    tpl["title_fg_override"] = _ensure_readable(
+        tpl.get("title_fg_override", "#FFFFFF"),
+        tpl.get("title_bg_override", "#111111"),
+    )
     return tpl
 
 
