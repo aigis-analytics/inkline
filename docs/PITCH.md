@@ -1,6 +1,6 @@
 # Inkline
 
-**The branded document engine for teams who need McKinsey-grade output at API speed.**
+**The branded document engine for teams who need institutional-grade output at API speed.**
 
 ---
 
@@ -39,7 +39,7 @@ Output formats: **Typst PDF** (default), HTML, WeasyPrint PDF, PPTX, Google Slid
 | Audience                     | Why they need Inkline                                    |
 |------------------------------|----------------------------------------------------------|
 | **Private equity & VC**      | Turn deal-room data into IC memos and LP updates in minutes |
-| **Management consultants**   | Generate McKinsey-style decks without a visual designer  |
+| **Management consultants**   | Generate top-tier consulting decks without a visual designer  |
 | **Founders pitching**        | Produce tier-1 investor decks on demand                  |
 | **Analysts & researchers**   | Ship publication-quality reports with embedded charts    |
 | **Ops & RevOps teams**       | Automated monthly briefings with consistent branding     |
@@ -186,7 +186,7 @@ export_typst_slides(
 )
 ```
 
-→ You get a 4-slide investor deck in the minimal brand, with McKinsey-style
+→ You get a 4-slide investor deck in the minimal brand, with institutional-grade
 layouts, auto-audited for overflow, compiled to PDF in <2 seconds.
 
 ---

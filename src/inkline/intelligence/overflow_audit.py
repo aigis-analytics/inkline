@@ -511,7 +511,7 @@ as WARN. Criteria for sharp storytelling:
    Flag: slide that shows lots of data with no clear hero message. WARN.
 
 17. WOW FACTOR — Rate the overall visual impact on a 1-5 scale:
-   5 = Boardroom-ready. Would look at home in a McKinsey deck.
+   5 = Boardroom-ready. Would look at home in a top-tier institutional deck.
    4 = Professional and clean. Minor improvement opportunities.
    3 = Adequate. Conveys information but unremarkable.
    2 = Needs work. Too dense, too sparse, or visually confusing.

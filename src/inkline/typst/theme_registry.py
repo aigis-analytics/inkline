@@ -54,7 +54,7 @@ SLIDE_TEMPLATES: dict[str, dict] = {
         "surface_override": "#F8FAFC",
     },
     "consulting": {
-        "desc": "McKinsey-style — white bg, action titles",
+        "desc": "Top consulting-style — white bg, action titles",
         "title_bg_override": "#1A2332",
         "title_fg_override": "#FFFFFF",
         "bg_override": "#FFFFFF",

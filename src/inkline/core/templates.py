@@ -106,10 +106,10 @@ def list_templates() -> list[str]:
 
 # ── Built-in Templates ───────────────────────────────────────────────────────
 
-# Consulting (McKinsey-inspired)
+# Consulting (top-tier strategy consulting inspired)
 register_template("consulting", DeckTemplate(
     name="consulting",
-    description="McKinsey-style — white bg, action titles, teal accent, source notes",
+    description="Top consulting-style — white bg, action titles, teal accent, source notes",
     primary="#0891B2",
     secondary="#1A2332",
     accent="#EA580C",

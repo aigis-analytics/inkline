@@ -50,8 +50,8 @@ Usage:
 # ═══════════════════════════════════════════════════════════════════════
 
 MCKINSEY = {
-    "name": "McKinsey",
-    "desc": "Strategy consulting — blue ribbon, Georgia headings, data-forward",
+    "name": "Strategy Blue",
+    "desc": "Top-tier strategy consulting — navy title, blue accent, data-forward",
     "bg": "#FFFFFF",
     "title_bg": "#051C2C",
     "title_fg": "#FFFFFF",
@@ -67,8 +67,8 @@ MCKINSEY = {
 }
 
 BCG = {
-    "name": "BCG",
-    "desc": "Boston Consulting Group — green accent, chart-forward",
+    "name": "Strategy Green",
+    "desc": "Strategy consulting — black title, green accent, chart-forward",
     "bg": "#FFFFFF",
     "title_bg": "#000000",
     "title_fg": "#FFFFFF",
@@ -84,8 +84,8 @@ BCG = {
 }
 
 BAIN = {
-    "name": "Bain",
-    "desc": "Bain & Company — red accent, clean white",
+    "name": "Strategy Red",
+    "desc": "Strategy consulting — red accent, clean white",
     "bg": "#FFFFFF",
     "title_bg": "#000000",
     "title_fg": "#FFFFFF",
@@ -101,8 +101,8 @@ BAIN = {
 }
 
 DELOITTE = {
-    "name": "Deloitte",
-    "desc": "Deloitte — green on black, professional services",
+    "name": "Professional Services",
+    "desc": "Professional services — green accent, formal",
     "bg": "#FFFFFF",
     "title_bg": "#000000",
     "title_fg": "#FFFFFF",
@@ -118,8 +118,8 @@ DELOITTE = {
 }
 
 PWC = {
-    "name": "PwC",
-    "desc": "PricewaterhouseCoopers — warm orange, multi-accent",
+    "name": "Advisory Orange",
+    "desc": "Advisory — warm orange multi-accent, approachable",
     "bg": "#FFFFFF",
     "title_bg": "#000000",
     "title_fg": "#FFFFFF",
@@ -135,8 +135,8 @@ PWC = {
 }
 
 EY = {
-    "name": "Ernst & Young",
-    "desc": "EY — yellow on charcoal, bold contrast",
+    "name": "Advisory Yellow",
+    "desc": "Advisory — yellow on charcoal, bold contrast",
     "bg": "#FFFFFF",
     "title_bg": "#161D23",
     "title_fg": "#FFFFFF",
@@ -152,8 +152,8 @@ EY = {
 }
 
 KPMG = {
-    "name": "KPMG",
-    "desc": "KPMG — deep blue, formal corporate",
+    "name": "Corporate Blue",
+    "desc": "Corporate blue — deep navy, formal",
     "bg": "#FFFFFF",
     "title_bg": "#00338D",
     "title_fg": "#FFFFFF",
@@ -171,7 +171,7 @@ KPMG = {
 # Composite MBB-inspired theme
 CONSULTING = {
     "name": "Consulting",
-    "desc": "McKinsey-style — white bg, action titles, teal accent",
+    "desc": "Top consulting-style — white bg, action titles, teal accent",
     "bg": "#FFFFFF",
     "title_bg": "#1A2332",
     "title_fg": "#FFFFFF",
@@ -225,8 +225,8 @@ INVESTOR = {
 }
 
 GOLDMAN = {
-    "name": "Goldman Sachs",
-    "desc": "Investment banking — blue on white, data-dense",
+    "name": "Pitchbook",
+    "desc": "Investment banking — navy on white, data-dense pitchbook style",
     "bg": "#FFFFFF",
     "title_bg": "#003A70",
     "title_fg": "#FFFFFF",
@@ -242,7 +242,7 @@ GOLDMAN = {
 }
 
 JPMORGAN = {
-    "name": "JP Morgan",
+    "name": "Private Banking",
     "desc": "Private banking — dark navy, trust-building formality",
     "bg": "#FFFFFF",
     "title_bg": "#0C2340",

@@ -398,7 +398,7 @@ class TypstDocumentRenderer:
   #text(weight: "bold", size: 9pt, fill: {_rgb(accent)})[HOW TO READ THIS NOTE]
   #v(6pt)
   #text(size: 9.5pt)[
-    This briefing note supports a decision on Launchpad's debt capital raise. The #strong[Executive Abstract] and #strong[Situation Summary] frame the problem. The #strong[Recommended Capital Structure] sections detail each tranche with indicative terms and named target lenders. The #strong[Blended Cost Comparison] quantifies the saving versus the current offer. #strong[Key Risks] and #strong[Negotiating Position] are written for direct use in lender discussions.
+    This briefing note supports a decision on Acme Co.'s debt capital raise. The #strong[Executive Abstract] and #strong[Situation Summary] frame the problem. The #strong[Recommended Capital Structure] sections detail each tranche with indicative terms and named target lenders. The #strong[Blended Cost Comparison] quantifies the saving versus the current offer. #strong[Key Risks] and #strong[Negotiating Position] are written for direct use in lender discussions.
   ]
 ]
 

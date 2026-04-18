@@ -54,7 +54,7 @@ Stored at: `~/.config/inkline/decision_matrix.yaml`
 ```yaml
 version: 4
 last_updated: "2026-04-14"
-source_decks: ["pareto_dc_2026", "launchpad_march_2026"]
+source_decks: ["reference_deck_1", "reference_deck_2"]
 rules:
   - id: DM-001
     data_structure: "single_number"       # what shape is the data
@@ -252,7 +252,7 @@ TASTE_RULES = [
         "match": {"chart_type": "line"},
         "condition": lambda _: True,
         "enforce": {"spine_style": "minimal", "grid": False},
-        "reason": "Pareto/Goldman standard: clean line on bottom/left axes only",
+        "reason": "Institutional standard: clean line on bottom/left axes only",
     },
 ]
 ```
@@ -430,7 +430,7 @@ def inkline_ingest_reference_deck(
 
 New file: `src/inkline/intelligence/deck_analyser.py`
 
-Builds on the pymupdf analysis already done manually for Pareto/Launchpad, made fully automated:
+Builds on the pymupdf analysis already done for reference decks, made fully automated:
 
 ```python
 class DeckAnalyser:
@@ -578,9 +578,9 @@ inkline learn  ← NEW CLI command
 ## 6. decision_matrix_default.yaml — Full Initial Content
 
 The default matrix ships with 26 rules derived from:
-- Pareto DC financing deck (15 patterns, PT-1→PT-15)
-- Launchpad brochure (9 patterns, LP-1→LP-9)
-- Goldman/McKinsey standard chart grammar (baseline reference)
+- Reference deck A (15 patterns, PT-1→PT-15)
+- Reference deck B (9 patterns, LP-1→LP-9)
+- Investment bank standard chart grammar (baseline reference)
 
 Each rule covers one (data_structure, message_type) pair. Where multiple decks agree → confidence starts at 0.80+. Where only one source → confidence starts at 0.60.
 
@@ -601,7 +601,7 @@ Full content defined in implementation phase (derived from `design_inspiration_a
 | 7 | `deck_analyser.py` (DeckAnalyser class + chart heuristics) | new | High |
 | 8 | `inkline_ingest_reference_deck` MCP tool | edit | Low |
 | 9 | `inkline learn` CLI command | edit | Low |
-| 10 | Promote Pareto/Launchpad analysis into initial matrix (from design_inspiration_analysis.md) | new | Low |
+| 10 | Promote reference deck analysis into initial matrix | new | Low |
 
 Total: ~10 discrete tasks. Tasks 1-6 form the live self-learning loop. Tasks 7-9 add reference deck ingestion. Task 10 seeds the initial matrix.
 

@@ -2,9 +2,9 @@
 
 > **Purpose**: Guide the DesignAdvisor in selecting professional slide layouts,
 > structuring content using consulting-grade patterns, and applying the narrative
-> frameworks used by McKinsey, BCG, and top design firms.
+> frameworks used by top-tier consulting and design firms.
 >
-> **Authority sources**: McKinsey presentation guidelines, Barbara Minto's Pyramid
+> **Authority sources**: Top consulting presentation guidelines, Barbara Minto's Pyramid
 > Principle, Slideworks consulting guides, SlideModel, Beautiful.ai, think-cell.
 
 ---
@@ -88,7 +88,7 @@ The single most important rule in consulting slide design:
 
 ### 2.1 The Pyramid Principle (Minto)
 
-Barbara Minto's framework, standard at McKinsey:
+Barbara Minto's framework, standard in top-tier consulting:
 
 ```
             ┌─────────────┐
@@ -220,7 +220,7 @@ Similar to SCR but inserts an explicit question before the answer:
 └──────────────────────────────────────┘
 ```
 
-**When to use**: Strategic frameworks — BCG matrix, Eisenhower matrix, prioritisation, risk assessment.
+**When to use**: Strategic frameworks — 2x2 priority matrix, Eisenhower matrix, prioritisation, risk assessment.
 
 **Rules**:
 - Label both axes clearly with the dimension being measured.
@@ -379,7 +379,7 @@ Similar to SCR but inserts an explicit question before the answer:
 
 ## 4. Slide Sequencing Patterns
 
-### The "Ghost Deck" Method (McKinsey)
+### The "Ghost Deck" Method
 
 Before building slides, write only the action titles in sequence. If the titles
 read as a coherent story, the structure is sound.
@@ -483,11 +483,11 @@ rhythm and prevent fatigue.
 
 ## References
 
-- [Slideworks — How McKinsey Consultants Make Presentations](https://slideworks.io/resources/how-mckinsey-consultants-make-presentations)
+- [Slideworks — Consulting Presentation Techniques](https://slideworks.io/resources/how-mckinsey-consultants-make-presentations)
 - [Slideworks — The Pyramid Principle](https://slideworks.io/resources/the-pyramid-principle-mckinsey-toolbox-with-examples)
 - [Slideworks — SCR Framework](https://slideworks.io/resources/how-to-use-McKinseys-scr-framework-with-examples)
-- [SlideModel — McKinsey Presentation Structure](https://slidemodel.com/mckinsey-presentation-structure/)
-- [SlideUplift — McKinsey-Style Presentations (2026)](https://slideuplift.com/blog/mckinsey-style-presentation/)
+- [SlideModel — Consulting Presentation Structure](https://slidemodel.com/mckinsey-presentation-structure/)
+- [SlideUplift — Institutional-Style Presentations (2026)](https://slideuplift.com/blog/mckinsey-style-presentation/)
 - [Deckary — Consulting Presentations Guide](https://deckary.com/blog/pillar-consulting-presentations-guide)
 - [Deckary — Executive Summary Slides](https://deckary.com/blog/executive-summary-slides)
 - [think-cell — Pyramid Principle for PowerPoint](https://www.think-cell.com/en/resources/content-hub/using-the-pyramid-principle-to-build-better-powerpoint-presentations)

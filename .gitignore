@@ -38,3 +38,5 @@ output/
 decks/
 scripts/gen_*_investor_deck.py
 scripts/_local_*.py
+docs/design_inspiration_analysis.md
+plan_docs/design-sources-and-philosophy.md

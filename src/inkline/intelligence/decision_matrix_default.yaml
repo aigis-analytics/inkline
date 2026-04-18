@@ -2,9 +2,9 @@
 # Inkline Decision Matrix — Default Rules
 #
 # Derived from:
-#   - Pareto Securities DC financing pitchbook (2026-02-10)  [PT-*]
-#   - Launchpad brochure & fact sheet (March 2026)           [LP-*]
-#   - Goldman/McKinsey standard chart grammar                [GS-*]
+#   - Reference deck A — institutional bank pitchbook        [PT-*]
+#   - Reference deck B — corporate brochure & fact sheet     [LP-*]
+#   - Investment bank standard chart grammar                 [GS-*]
 #
 # Schema per rule:
 #   id             : unique rule ID
@@ -22,8 +22,8 @@
 version: 1
 last_updated: "2026-04-14"
 source_decks:
-  - pareto_dc_2026
-  - launchpad_march_2026
+  - reference_deck_1
+  - reference_deck_2
 
 rules:
 
@@ -38,7 +38,7 @@ rules:
       style: clean
     confidence: 0.95
     observations: 0
-    source: [GS-standard, launchpad_march_2026]
+    source: [institutional-standard, reference_deck_2]
     status: active
 
   - id: DM-002
@@ -49,7 +49,7 @@ rules:
     enforce: {}
     confidence: 0.82
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── TWO-VALUE COMPARISONS ────────────────────────────────────────────────
@@ -63,7 +63,7 @@ rules:
       accent_direction: auto   # post-processor infers from value direction
     confidence: 0.88
     observations: 0
-    source: [pareto_dc_2026]   # PT-15
+    source: [reference_deck_1]   # PT-15
     status: active
 
   - id: DM-004
@@ -75,7 +75,7 @@ rules:
       accent_direction: higher_is_better
     confidence: 0.84
     observations: 0
-    source: [pareto_dc_2026]
+    source: [reference_deck_1]
     status: active
 
   # ─── N CATEGORIES × ONE VALUE (BARS) ──────────────────────────────────────
@@ -91,7 +91,7 @@ rules:
       orientation: vertical_if_le_8_else_horizontal
     confidence: 0.93
     observations: 0
-    source: [pareto_dc_2026, GS-standard]   # PT-3
+    source: [reference_deck_1, institutional-standard]   # PT-3
     status: active
 
   - id: DM-006
@@ -105,7 +105,7 @@ rules:
       label_density: compact
     confidence: 0.91
     observations: 0
-    source: [pareto_dc_2026]
+    source: [reference_deck_1]
     status: active
 
   - id: DM-007
@@ -118,7 +118,7 @@ rules:
       accent_index: -1         # last (most recent) bar highlighted
     confidence: 0.87
     observations: 0
-    source: [pareto_dc_2026, GS-standard]
+    source: [reference_deck_1, institutional-standard]
     status: active
 
   - id: DM-008
@@ -129,7 +129,7 @@ rules:
     enforce: {}
     confidence: 0.90
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── N CATEGORIES × TIME SERIES (TRENDS) ─────────────────────────────────
@@ -145,7 +145,7 @@ rules:
       annotate_endpoints: true
     confidence: 0.92
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   - id: DM-010
@@ -158,7 +158,7 @@ rules:
       accent_series: 0         # first series (usually "our" metric) highlighted
     confidence: 0.85
     observations: 0
-    source: [pareto_dc_2026]
+    source: [reference_deck_1]
     status: active
 
   # ─── COMPOSITION / SHARES ─────────────────────────────────────────────────
@@ -173,7 +173,7 @@ rules:
       accent_series: auto      # series with largest aggregate highlighted
     confidence: 0.88
     observations: 0
-    source: [pareto_dc_2026, GS-standard]
+    source: [reference_deck_1, institutional-standard]
     status: active
 
   - id: DM-012
@@ -185,7 +185,7 @@ rules:
     notes: "prefer when categories have long labels and there are ≥4 periods"
     confidence: 0.82
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── PART-OF-WHOLE (DONUT / PIE) ──────────────────────────────────────────
@@ -199,7 +199,7 @@ rules:
       label_style: direct      # radial labels, no legend panel (PT-14)
     confidence: 0.92
     observations: 0
-    source: [pareto_dc_2026]   # PT-14
+    source: [reference_deck_1]   # PT-14
     status: active
 
   - id: DM-014
@@ -212,7 +212,7 @@ rules:
     notes: "triptych pattern: three donuts in equal_3 multi_chart (PT-14)"
     confidence: 0.90
     observations: 0
-    source: [pareto_dc_2026]
+    source: [reference_deck_1]
     status: active
 
   # ─── WATERFALL / BRIDGE ───────────────────────────────────────────────────
@@ -225,7 +225,7 @@ rules:
     enforce: {}
     confidence: 0.90
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── SCATTER ──────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ rules:
       label_style: annotated   # callout boxes with arrows (PT-4)
     confidence: 0.88
     observations: 0
-    source: [pareto_dc_2026]   # PT-4
+    source: [reference_deck_1]   # PT-4
     status: active
 
   - id: DM-017
@@ -251,7 +251,7 @@ rules:
       label_style: annotated
     confidence: 0.82
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── MATRIX / GRID ────────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ rules:
     notes: "filled circles + cell backgrounds (PT-9)"
     confidence: 0.87
     observations: 0
-    source: [pareto_dc_2026]   # PT-9
+    source: [reference_deck_1]   # PT-9
     status: active
 
   - id: DM-019
@@ -276,7 +276,7 @@ rules:
     enforce: {}
     confidence: 0.84
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   - id: DM-020
@@ -288,7 +288,7 @@ rules:
     notes: "year x % grid showing transition path (PT-8)"
     confidence: 0.85
     observations: 0
-    source: [pareto_dc_2026]   # PT-8
+    source: [reference_deck_1]   # PT-8
     status: active
 
   # ─── PROCESS / TIMELINE ───────────────────────────────────────────────────
@@ -302,7 +302,7 @@ rules:
     notes: "3-band: duration / phase name / task bullets (PT-12)"
     confidence: 0.88
     observations: 0
-    source: [pareto_dc_2026]   # PT-12
+    source: [reference_deck_1]   # PT-12
     status: active
 
   - id: DM-022
@@ -314,7 +314,7 @@ rules:
     notes: "parallel horizontal tracks, no gridlines (LP-7)"
     confidence: 0.87
     observations: 0
-    source: [launchpad_march_2026]   # LP-7
+    source: [reference_deck_2]   # LP-7
     status: active
 
   - id: DM-023
@@ -326,7 +326,7 @@ rules:
     notes: "ascending staircase steps; use when sequence is the message"
     confidence: 0.82
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── NETWORK / HIERARCHY ──────────────────────────────────────────────────
@@ -340,7 +340,7 @@ rules:
     notes: "must provide explicit x,y coords; auto-layout from level field"
     confidence: 0.85
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── TEXT-HEAVY STRUCTURED ────────────────────────────────────────────────
@@ -354,7 +354,7 @@ rules:
     notes: "prefer icon_stat (3-4 metrics) over kpi_strip when icons add meaning"
     confidence: 0.90
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   - id: DM-026
@@ -366,7 +366,7 @@ rules:
     notes: "structured A vs B vs C comparison across 4-8 criteria"
     confidence: 0.84
     observations: 0
-    source: [pareto_dc_2026]
+    source: [reference_deck_1]
     status: active
 
   # ─── RADAR ────────────────────────────────────────────────────────────────
@@ -380,7 +380,7 @@ rules:
     notes: "only when 5-8 axes and the 'shape' is the message"
     confidence: 0.76
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── RANKING OVER TIME ────────────────────────────────────────────────────
@@ -394,7 +394,7 @@ rules:
     notes: "use when the story is rank changes over time, not absolute values"
     confidence: 0.80
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
   # ─── DISCRETE PERIOD MEASUREMENTS ────────────────────────────────────────
@@ -408,7 +408,7 @@ rules:
     notes: "use for headcount, regulatory thresholds, capacity — step-line format"
     confidence: 0.78
     observations: 0
-    source: [GS-standard]
+    source: [institutional-standard]
     status: active
 
 ##############################################################################

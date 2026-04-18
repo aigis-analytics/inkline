@@ -1,4 +1,4 @@
-"""McKinsey Consulting template — professional strategy presentation style.
+"""Strategy consulting template — professional strategy presentation style.
 
 Design principles:
 - Clean white background, dark blue/black text
@@ -34,7 +34,7 @@ def template_mckinsey(
     slide_index: int,
     total_slides: int,
 ) -> list[dict]:
-    """Apply McKinsey consulting template styling.
+    """Apply strategy consulting template styling.
 
     Returns batchUpdate requests for base styling.
     """

@@ -5,7 +5,7 @@
 > formatting, and structural patterns.
 >
 > **Authority sources**: Venngage, Jirav, FASB formatting standards,
-> UK Government Analysis Function, BCG/McKinsey document conventions.
+> UK Government Analysis Function, top-tier consulting document conventions.
 
 ---
 

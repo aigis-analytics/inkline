@@ -537,7 +537,7 @@ def _render_donut(data, *, colors, accent, bg, text_color, muted, width, height)
         label_style?: "legend" (default) | "direct"
             "legend": donut left 55% + right-side legend (avoids label clipping)
             "direct": full-width donut, labels positioned radially outside each
-                      wedge — clean, no legend panel, Pareto/Goldman style.
+                      wedge — clean, no legend panel, institutional bank style.
     """
     import math
 

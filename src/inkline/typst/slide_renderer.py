@@ -1875,7 +1875,7 @@ class TypstSlideRenderer:
         """Multiple chart images arranged in a configurable grid layout.
 
         Supports asymmetric proportions and 2-row arrangements, modelled on
-        institutional bank presentation patterns (Pareto, Goldman Sachs, McKinsey).
+        institutional bank and consulting presentation patterns.
 
         data:
           section: str

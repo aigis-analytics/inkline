@@ -488,7 +488,7 @@ or `./inkline_assets/`.
 ```python
 from inkline.typst.themes import list_themes, search_themes
 
-list_themes(category="consulting")    # McKinsey, BCG, Bain, Deloitte, PwC, EY, KPMG
+list_themes(category="consulting")    # Strategy Blue, Strategy Green, Strategy Red, Professional Services, Advisory Orange, Advisory Yellow, Corporate Blue
 list_themes(category="dark")          # Nord, Dracula, Catppuccin, Carbon
 search_themes("gold")                 # Aurum, Gold Leaf, ...
 ```

@@ -1,6 +1,6 @@
 """Typography scale — enforced size hierarchy for professional slides.
 
-Based on consulting presentation standards (McKinsey/BCG/Goldman):
+Based on top-tier consulting and investment banking presentation standards:
 - Clear hierarchy from display (44pt) down to source note (11pt)
 - Consistent ratio between levels (~1.25× modular scale)
 - Font weight differentiation: bold for headings, regular for body

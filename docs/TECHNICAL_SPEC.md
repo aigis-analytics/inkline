@@ -129,7 +129,7 @@ src/inkline/
 ├── intelligence/
 │   ├── __init__.py          # DesignAdvisor, audit_deck, audit_image
 │   ├── design_advisor.py    # Main entry — design_deck(), _inject_decision_matrix()
-│   ├── decision_matrix_default.yaml  # 27 seed rules (Pareto/Launchpad/GS)
+│   ├── decision_matrix_default.yaml  # 27 seed rules (top-tier investment banks and consulting firms)
 │   ├── aggregator.py        # Aggregator — feedback → confidence → rule promotion
 │   ├── deck_analyser.py     # DeckAnalyser — PDF → chart detection → DM candidates
 │   ├── claude_code.py       # build_claude_code_caller() — subprocess LLM bridge
@@ -747,7 +747,7 @@ is slide-safe. Brand colours are applied in order from `brand.chart_colors`.
 | `gauge`        | `{value: 0-100, label?: str}` | — |
 
 **Enhanced parameters (v0.5):**
-- `style: "clean"` on bar charts: removes y-axis, gridlines, and places value labels directly on bars (Pareto/Goldman style)
+- `style: "clean"` on bar charts: removes y-axis, gridlines, and places value labels directly on bars (institutional style)
 - `accent_index: N` on `grouped_bar`: bar N receives accent colour; all others receive muted palette
 - `accent_series: N` on `stacked_bar`: series N receives accent colour
 - `label_style: "direct"` on `donut`/`pie`: radial labels at segment midpoints, no legend panel
@@ -768,7 +768,7 @@ bank and strategy consulting decks: axis elimination, floating labels,
 
 ### 7.2b New institutional chart types (5, added v0.5)
 
-Derived from Pareto Securities and Launchpad reference decks.
+Derived from top-tier investment bank reference decks.
 
 | Chart type | Input shape | Design intent |
 |------------|-------------|---------------|
@@ -1133,7 +1133,7 @@ Active rules are injected into every `DesignAdvisor` system prompt via
   enforce: {style: clean, accent_index: auto}
   confidence: 0.93       # 0.0–1.0; updated by Aggregator
   observations: 0        # feedback event count
-  source: [pareto_dc_2026, GS-standard]
+  source: [institutional-standard]
   status: active         # active | candidate | low_confidence | flagged
 ```
 
@@ -1315,7 +1315,7 @@ inkline ingest /path/to/pitchbook.pdf --name my_reference_deck
 # Python / MCP
 inkline_ingest_reference_deck(
     pdf_path="/path/to/pitchbook.pdf",
-    deck_name="pareto_q2_2026",
+    deck_name="q2_2026",
     deck_context="investment_banking",
 )
 ```

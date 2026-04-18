@@ -1,7 +1,7 @@
 # Professional Exhibit Design Playbook
 
 > **Purpose**: Translate the specific design patterns used by top-tier investment
-> banks (Pareto Securities, Goldman Sachs, McKinsey, etc.) into concrete, implementable
+> banks and consulting firms into concrete, implementable
 > rules for the DesignAdvisor. These patterns were extracted from analysis of real
 > institutional-grade presentations and represent the gap between amateur slide design
 > and boardroom-grade output.

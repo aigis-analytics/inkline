@@ -217,7 +217,7 @@ VISUAL HEROES (prefer these):
     "three_top_wide" (3 small top + 1 wide bottom = 4 total), "mosaic_5" (2 top + 3 bottom = 5 total).
   Asymmetric layouts: "left_stack" (1 hero left + 2 stacked right = 3 total),
     "right_stack" (2 stacked left + 1 hero right = 3 total), "six_grid" (3×2 = 6 charts).
-  Use for: Pareto-style multi-exhibit slides — market dashboards, 4-panel data pages, 3-donut rows,
+  Use for: institutional multi-exhibit slides — market dashboards, 4-panel data pages, 3-donut rows,
            side-by-side comparisons, mosaic analysis pages, comprehensive 5-6 exhibit summaries.
   Each chart in `charts` list needs an image_path AND a chart_request to auto-render.
   CHART COUNTS: equal_2/hero_left=2, equal_3/hero_left_3/hero_right_3/left_stack/right_stack=3,
@@ -273,7 +273,7 @@ WRITING RULES
 - Footnotes: optional, one short line, source attribution or caveat.
 - Bold emphasis in bullets: wrap the single most important claim in **double asterisks**
   e.g. "Achieved **98% gross margin** at scale in FY25"
-  The renderer converts this to bold accent-colour inline text (Pareto-style).
+  The renderer converts this to bold accent-colour inline text (institutional style).
 
 ====================================================================
 DESIGN TASTE RULES (non-negotiable)
@@ -286,7 +286,7 @@ DESIGN TASTE RULES (non-negotiable)
 2. AXIS REDUCTION.
    For bar charts where comparison is visually obvious: always set style: "clean".
    The renderer removes y-axis, gridlines, and places value labels directly on bars.
-   This follows FT/Bloomberg/Goldman standard — not Excel defaults.
+   This follows FT/Bloomberg standard — not Excel defaults.
 
 3. DONUT AS DISTRIBUTION STORY.
    Three related distributions = three donuts side-by-side (multi_chart equal_3).
@@ -477,7 +477,7 @@ CHART DATA FORMATS (by chart_type) — use EXACTLY these field names:
                         tasks:["Investor outreach","NDAs","Management meetings"]}]}
 
 ENHANCED PARAMETERS for existing chart types:
-- grouped_bar / stacked_bar / waterfall: add style: "clean" for axis-free Pareto style
+- grouped_bar / stacked_bar / waterfall: add style: "clean" for axis-free institutional style
 - grouped_bar: add accent_index: N (0-based) to highlight the most important bar in accent colour
 - stacked_bar: add accent_series: N to highlight one series in accent colour
 - donut / pie: add label_style: "direct" for radial labels outside each segment (no legend)
@@ -1137,8 +1137,8 @@ class DesignAdvisor:
         slides are rendered.
         """
         return "\n".join([
-            "You are a presentation architect working to the standard of McKinsey, Goldman Sachs,",
-            "and Pareto Securities. Given structured content sections, produce an ordered slide plan",
+            "You are a presentation architect working to the standard of the world's leading",
+            "investment banks and consulting firms. Given structured content sections, produce an ordered slide plan",
             "that is information-dense, data-driven, and visually rich — every slide must tell a",
             "complete story with chart evidence, not just announce facts in text.",
             "",

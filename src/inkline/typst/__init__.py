@@ -120,9 +120,8 @@ def _auto_render_charts(
             if h_req and h_path:
                 full_path = Path(root) / "charts" / h_path
                 if not full_path.exists():
-                    # Use a proxy slide dict so size lookup returns full-chart size
-                    proxy = {"slide_type": "chart", "data": data}
-                    charts_to_render.append((proxy, None, h_req, full_path, 0))
+                    # Use a sentinel chart_idx so the render loop picks orbital hero size
+                    charts_to_render.append((slide, None, h_req, full_path, -2))
             for ov_idx, ov_entry in enumerate(data.get("overlays", [])):
                 ov_req = ov_entry.get("chart_request")
                 ov_path = ov_entry.get("image_path")
@@ -148,6 +147,9 @@ def _auto_render_charts(
         "chart": (9.0, 4.5),
     }
     _DEFAULT_SIZE = (7.0, 3.5)
+    # Orbital/halo hero: slide body is ~33.87cm wide × 8.31cm tall → ~13.3" × 3.27"
+    # Matching the 4:1 aspect ratio fills the full width with no blank horizontal band.
+    _ORBITAL_HERO_SIZE = (13.3, 3.27)
 
     for slide, chart_entry, chart_req, full_path, chart_idx in charts_to_render:
         chart_type = chart_req.get("chart_type", "")
@@ -156,7 +158,10 @@ def _auto_render_charts(
             log.warning("Skipping chart_request with missing type or data: %s", full_path.name)
             continue
 
-        if chart_idx == -1:
+        if chart_idx == -2:
+            # Orbital / halo hero chart — wide aspect ratio to fill slide width
+            w, h = _ORBITAL_HERO_SIZE
+        elif chart_idx == -1:
             # Orbital / halo overlay chart — mini-chart size (4.5cm × 3.5cm)
             w, h = 4.5 / 2.54, 3.5 / 2.54  # ~1.77" × 1.38"
         elif slide["slide_type"] == "multi_chart":

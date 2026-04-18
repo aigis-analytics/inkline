@@ -125,7 +125,7 @@ _RULES: list[dict] = [
         "match_context": None,
         "condition": lambda d: d.get("spine_style") not in ("minimal",),
         "enforce": {"spine_style": "minimal", "grid": False},
-        "reason": "Pareto/Goldman standard: clean line on bottom/left axes only",
+        "reason": "Institutional standard: clean line on bottom/left axes only",
     },
 
     # R-09: dumbbell missing accent_direction → default to higher_is_better
