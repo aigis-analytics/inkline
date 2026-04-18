@@ -604,6 +604,9 @@ class TypstSlideRenderer:
             "before_after": self._before_after_slide,
             # New slide types (P5)
             "team_grid": self._team_grid_slide,
+            # New slide types (P6) — orbital / halo
+            "orbital": self._orbital_slide,
+            "halo": self._halo_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -2492,6 +2495,264 @@ class TypstSlideRenderer:
 
   {self._body_block(body, footnote)}
 }}"""
+
+
+    # -- Orbital slide (hero exhibit + up to 4 placed overlays) ---------------
+
+    # Box dimensions (width_cm, height_cm) by (overlay_type, position_family)
+    _ORBITAL_BOX_SIZES: dict[tuple[str, str], tuple[float, float]] = {
+        # (overlay_type, position_family): (width_cm, height_cm)
+        ("stat",    "corner"): (3.8, 2.4),
+        ("stat",    "edge_h"): (6.0, 2.0),  # tc / bc
+        ("stat",    "edge_v"): (3.2, 3.5),  # ml / mr
+        ("bullets", "corner"): (4.5, 3.5),
+        ("bullets", "edge_h"): (7.0, 3.0),
+        ("bullets", "edge_v"): (3.5, 5.0),
+        ("text",    "corner"): (4.5, 3.0),
+        ("text",    "edge_h"): (7.0, 2.5),
+        ("text",    "edge_v"): (3.5, 4.5),
+        ("chart",   "corner"): (4.5, 3.5),
+        ("chart",   "edge_h"): (7.5, 3.5),
+        ("chart",   "edge_v"): (3.5, 5.5),
+    }
+
+    @staticmethod
+    def _orbital_pos_family(pos: str) -> str:
+        if pos in ("tl", "tr", "bl", "br"):
+            return "corner"
+        if pos in ("tc", "bc"):
+            return "edge_h"
+        return "edge_v"  # ml / mr
+
+    @staticmethod
+    def _orbital_typst_anchor(pos: str) -> str:
+        return {
+            "tl": "top + left",
+            "tr": "top + right",
+            "bl": "bottom + left",
+            "br": "bottom + right",
+            "tc": "top + center",
+            "bc": "bottom + center",
+            "ml": "left + horizon",
+            "mr": "right + horizon",
+        }.get(pos, "top + left")
+
+    def _orbital_overlay_markup(self, overlay: dict) -> str:
+        """Render one overlay box as a Typst place() block."""
+        t = self.t
+        pos = overlay.get("position", "tl")
+        ov_type = overlay.get("type", "stat")
+        fam = self._orbital_pos_family(pos)
+        w, h = self._ORBITAL_BOX_SIZES.get((ov_type, fam),
+               self._ORBITAL_BOX_SIZES.get(("stat", "corner"), (3.8, 2.4)))
+        anchor = self._orbital_typst_anchor(pos)
+
+        card_fill = _rgb(t.get("card_fill", "#F8FAFC"))
+        border_col = _rgb(t.get("border", "#E2E8F0"))
+        accent_col = _rgb(t.get("accent", "#6366F1"))
+        text_col = _rgb(t.get("text", "#0F172A"))
+        muted_col = _rgb(t.get("muted", "#64748B"))
+
+        if ov_type == "stat":
+            value = _esc(overlay.get("value", ""))
+            label = _esc(overlay.get("label", ""))
+            desc = _esc(overlay.get("desc", ""))
+            desc_block = f'\n    #v(2pt)\n    #text(size: 7.5pt, fill: {muted_col})[{desc}]' if desc else ""
+            inner = (
+                f'#text(weight: "bold", size: 18pt, fill: {accent_col})[{value}]\n'
+                f'    #v(1pt)\n'
+                f'    #text(size: 7.5pt, fill: {muted_col}, tracking: 0.8pt)[#upper[{label}]]'
+                f'{desc_block}'
+            )
+        elif ov_type == "bullets":
+            title_txt = overlay.get("title", "")
+            items = overlay.get("items", [])[:4]
+            title_block = (
+                f'#text(weight: "bold", size: 9pt, fill: {text_col})[{_esc(title_txt)}]\n    #v(4pt)\n    '
+                if title_txt else ""
+            )
+            bullets_str = "\n      ".join(f"- {_esc(it)}" for it in items)
+            inner = (
+                f'{title_block}'
+                f'#set list(marker: [•])\n'
+                f'    #text(size: 8pt, fill: {muted_col})[\n'
+                f'      {bullets_str}\n'
+                f'    ]'
+            )
+        elif ov_type == "text":
+            body = _esc(overlay.get("body", ""))
+            inner = f'#text(size: 8.5pt, fill: {muted_col})[{body}]'
+        elif ov_type == "chart":
+            img_path = overlay.get("image_path", "")
+            caption = overlay.get("caption", "")
+            img_h = h - (0.5 if caption else 0.0)
+            img_markup = self._image_markup(
+                img_path, width="100%", height=f"{img_h:.2f}cm", fit='"contain"'
+            )
+            cap_block = (
+                f'\n    #v(2pt)\n    #text(size: 7pt, fill: {muted_col})[{_esc(caption)}]'
+                if caption else ""
+            )
+            inner = f'#{img_markup}{cap_block}'
+        else:
+            inner = f'#text(size: 8pt, fill: {muted_col})[Overlay]'
+
+        # dx/dy offsets to push overlays into the content area and away from header/footer
+        # Slide: 25.4cm wide, 14.29cm tall. Margins: 1.4cm left/right, 1.4cm top, 1.2cm bottom
+        # Header chrome (section badge + v + title + v): ~2.4cm from top margin → ~3.8cm from page top
+        # Footer: ~1.2cm from bottom → bottom overlays need dy to stay above footer
+        # place(top+...) has dy from top of page content area (after margin). Use dy to skip header.
+        # place(bottom+...) has dy from bottom of content area going up.
+        HEADER_SKIP = 3.6   # cm from top of page to push past header into body
+        FOOTER_SKIP = 1.5   # cm from bottom of page to push above footer
+        dx_offset = ""
+        dy_offset = ""
+        if pos in ("tl", "tr", "tc"):
+            dy_offset = f", dy: {HEADER_SKIP}cm"
+        elif pos in ("bl", "br", "bc"):
+            dy_offset = f", dy: -{FOOTER_SKIP}cm"
+        if pos == "tc":
+            dx_offset = f", dx: {-w/2:.2f}cm"
+        elif pos == "bc":
+            dx_offset = f", dx: {-w/2:.2f}cm"
+
+        return (
+            f'place({anchor}{dx_offset}{dy_offset},\n'
+            f'  box(width: {w:.2f}cm, height: {h:.2f}cm, inset: 7pt,\n'
+            f'      fill: {card_fill}, stroke: 0.5pt + {border_col}, radius: 3pt)[\n'
+            f'    {inner}\n'
+            f'  ]\n'
+            f')'
+        )
+
+    def _orbital_leader_line(self, overlay: dict) -> str:
+        """Return Typst markup for one halo leader line (place-based)."""
+        t = self.t
+        muted_col = t.get("muted", "#64748B")
+        pos = overlay.get("position", "tl")
+        ov_type = overlay.get("type", "stat")
+        fam = self._orbital_pos_family(pos)
+        w, h = self._ORBITAL_BOX_SIZES.get((ov_type, fam),
+               self._ORBITAL_BOX_SIZES.get(("stat", "corner"), (3.8, 2.4)))
+
+        # Slide centre in absolute page coordinates (cm from top-left of page)
+        # Page is 25.4cm wide, 14.29cm tall; margins 1.4cm left/right, 1.4cm top, 1.2cm bottom
+        # Content centre ≈ (25.4/2, 1.4 + 9.0/2 + 2.0) ≈ (12.7, 7.9) relative to page
+        cx, cy = 12.7, 7.9  # slide centre in page-absolute coords
+
+        # Box anchor point (inner corner pointing toward centre)
+        # We express start coords relative to Typst place() anchor
+        # For simplicity, use dx/dy offsets from anchor
+        offsets = {
+            "tl": (w, h),        # inner corner = bottom-right of box
+            "tr": (0.0, h),      # inner corner = bottom-left of box
+            "bl": (w, 0.0),      # inner corner = top-right of box
+            "br": (0.0, 0.0),    # inner corner = top-left of box
+            "tc": (w / 2, h),    # bottom-centre
+            "bc": (w / 2, 0.0),  # top-centre
+            "ml": (w, h / 2),    # right-centre
+            "mr": (0.0, h / 2),  # left-centre
+        }
+        sx, sy = offsets.get(pos, (w / 2, h / 2))
+
+        # Page-absolute position of the anchor (top-left of placed box)
+        anchor_abs = {
+            "tl": (1.4, 3.4),         # left margin, below header
+            "tr": (25.4 - 1.4 - w, 3.4),
+            "bl": (1.4, 14.29 - 1.2 - h),
+            "br": (25.4 - 1.4 - w, 14.29 - 1.2 - h),
+            "tc": (25.4 / 2 - w / 2, 3.4),
+            "bc": (25.4 / 2 - w / 2, 14.29 - 1.2 - h),
+            "ml": (1.4, 14.29 / 2 - h / 2),
+            "mr": (25.4 - 1.4 - w, 14.29 / 2 - h / 2),
+        }
+        ax, ay = anchor_abs.get(pos, (1.4, 3.4))
+
+        # Start = box anchor + inner-corner offset
+        start_x = ax + sx
+        start_y = ay + sy
+
+        # End = slide centre (absolute)
+        end_x = cx
+        end_y = cy
+
+        # Express end relative to start for Typst line()
+        rel_x = end_x - start_x
+        rel_y = end_y - start_y
+
+        # Render as a place(top+left) with absolute offsets, then line()
+        return (
+            f'place(top + left, dx: {start_x:.3f}cm, dy: {start_y:.3f}cm,\n'
+            f'  line(start: (0cm, 0cm), end: ({rel_x:.3f}cm, {rel_y:.3f}cm),\n'
+            f'       stroke: 0.5pt + {_rgb(muted_col)}.lighten(40%))\n'
+            f')'
+        )
+
+    def _orbital_slide(self, d: dict, leader_lines: bool = False) -> str:
+        """Orbital slide: hero exhibit fills body, overlays sit above via place()."""
+        t = self.t
+        section = d.get("section", "")
+        title = d.get("title", "")
+        hero = d.get("hero", {})
+        overlays = d.get("overlays", [])[:4]
+        footnote = d.get("footnote", "")
+
+        # Hero image
+        img_path = hero.get("image_path", "")
+        hero_markup = self._image_markup(
+            img_path, width="100%", height="100%", fit='"contain"'
+        ) if img_path else (
+            f'block(fill: {_rgb(t["card_fill"])}, width: 100%, height: 100%)[]'
+        )
+
+        # Build overlay blocks
+        overlay_blocks = "\n\n  ".join(
+            self._orbital_overlay_markup(ov) for ov in overlays
+        )
+
+        # Build leader lines (halo mode only)
+        leader_blocks = ""
+        if leader_lines and overlays:
+            lines = []
+            for ov in overlays:
+                try:
+                    lines.append(self._orbital_leader_line(ov))
+                except Exception:
+                    pass
+            leader_blocks = "\n\n  ".join(lines)
+            if leader_blocks:
+                leader_blocks = "\n\n  // Halo leader lines\n  " + leader_blocks
+
+        overlay_section = ""
+        if overlay_blocks:
+            overlay_section = f"\n\n  // Overlay boxes\n  {overlay_blocks}"
+        if leader_blocks:
+            overlay_section += leader_blocks
+
+        return f"""#{{
+  set page(fill: {_rgb(t['bg'])})
+  set text(fill: {_rgb(t['text'])})
+  set block(spacing: 0pt)
+  set par(spacing: 0em)
+
+  {section_badge(section, t['muted'])}
+  v(6pt)
+  {slide_title(title, t['text'])}
+  v(6pt)
+
+  // Hero exhibit — fills all remaining space above footer
+  block(width: 100%, height: {self.BODY_H_CM - 0.69:.2f}cm, clip: false)[
+    #{hero_markup}
+  ]
+{overlay_section}
+
+  // Footer
+  {footer_bar(footnote, t['border'], t['muted'])}
+}}"""
+
+    def _halo_slide(self, d: dict) -> str:
+        """Halo slide: orbital + thin leader lines from each overlay toward exhibit centre."""
+        return self._orbital_slide(d, leader_lines=True)
 
 
 def _esc(text) -> str:

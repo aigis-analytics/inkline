@@ -112,6 +112,24 @@ def _auto_render_charts(
                 full_path = Path(root) / c_path
                 if not full_path.exists():
                     charts_to_render.append((slide, chart_entry, c_req, full_path, chart_idx))
+        # orbital / halo: hero chart_request + overlay chart_requests
+        if slide.get("slide_type") in ("orbital", "halo"):
+            hero = data.get("hero", {})
+            h_req = hero.get("chart_request")
+            h_path = hero.get("image_path")
+            if h_req and h_path:
+                full_path = Path(root) / "charts" / h_path
+                if not full_path.exists():
+                    # Use a proxy slide dict so size lookup returns full-chart size
+                    proxy = {"slide_type": "chart", "data": data}
+                    charts_to_render.append((proxy, None, h_req, full_path, 0))
+            for ov_idx, ov_entry in enumerate(data.get("overlays", [])):
+                ov_req = ov_entry.get("chart_request")
+                ov_path = ov_entry.get("image_path")
+                if ov_req and ov_path:
+                    full_path = Path(root) / "charts" / ov_path
+                    if not full_path.exists():
+                        charts_to_render.append((slide, ov_entry, ov_req, full_path, -1))
 
     if not charts_to_render:
         return
@@ -138,7 +156,10 @@ def _auto_render_charts(
             log.warning("Skipping chart_request with missing type or data: %s", full_path.name)
             continue
 
-        if slide["slide_type"] == "multi_chart":
+        if chart_idx == -1:
+            # Orbital / halo overlay chart — mini-chart size (4.5cm × 3.5cm)
+            w, h = 4.5 / 2.54, 3.5 / 2.54  # ~1.77" × 1.38"
+        elif slide["slide_type"] == "multi_chart":
             # Slot-based sizing: compute the exact cell dimensions for this layout
             # and chart position so the PNG fills the Typst slot with no letterboxing.
             try:
@@ -454,7 +475,12 @@ def export_typst_slides(
     if image_root:
         root = str(image_root)
     else:
-        has_images = any(s.get("data", {}).get("image_path") for s in slides)
+        has_images = any(
+            s.get("data", {}).get("image_path")
+            or s.get("data", {}).get("hero", {}).get("image_path")
+            or any(ov.get("image_path") for ov in s.get("data", {}).get("overlays", []))
+            for s in slides
+        )
         has_logo = bool(theme.get("logo_light_path"))
         if has_images or has_logo:
             root = str(output_path.parent)
