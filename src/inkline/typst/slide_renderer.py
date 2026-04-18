@@ -1047,6 +1047,7 @@ class TypstSlideRenderer:
         else:
             kpi_block = f"""grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
+    rows: (1fr,),
     gutter: 8pt,
     {kpis_str}
   )"""
@@ -1062,9 +1063,12 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(8pt)
 
-  {kpi_block}
+  grid(
+    rows: (1fr,),
+    {kpi_block}
+  )
 
-  v(1fr)
+  v(4pt)
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
@@ -1495,12 +1499,16 @@ class TypstSlideRenderer:
   v(8pt)
 
   grid(
-    columns: ({cols_str}),
-    gutter: 14pt,
-    {blocks_str}
+    rows: (1fr,),
+    grid(
+      columns: ({cols_str}),
+      rows: (1fr,),
+      gutter: 14pt,
+      {blocks_str}
+    )
   )
 
-  v(1fr)
+  v(4pt)
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
@@ -1596,7 +1604,7 @@ class TypstSlideRenderer:
     ]
   ])""")
 
-        tiers_str = "\n  v(4pt)\n".join(tier_blocks)
+        tiers_str = "\n  v(1fr)\n".join(tier_blocks)
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
