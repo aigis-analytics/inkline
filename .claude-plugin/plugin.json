@@ -1,0 +1,17 @@
+{
+  "name": "inkline",
+  "description": "Branded document and slide deck generation via the Inkline Archon pipeline. Teaches Claude the bridge workflow, slide type catalogue, and generation constraints. Provides /inkline:deck, /inkline:doc, and /inkline:setup commands.",
+  "version": "0.1.0",
+  "keywords": [
+    "slides",
+    "documents",
+    "pdf",
+    "presentation",
+    "typst",
+    "branded"
+  ],
+  "author": {
+    "name": "u3126117",
+    "url": "https://github.com/u3126117/inkline"
+  }
+}
