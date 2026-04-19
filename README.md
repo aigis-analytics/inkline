@@ -25,17 +25,17 @@ Inkline is the only code-first slide toolkit with built-in design intelligence, 
 | Programmatic (code-first) | ✓ | ✗ | ✗ | ✗ | ✓ |
 | LLM design intelligence | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Per-slide visual audit | ✓ | ✗ | ✗ | ✗ | ✗ |
-| **AI image generation** | ✓ | ✗ | ✗ | ✓ | ✗ |
-| **Workflow automation (n8n)** | ✓ | ✗ | ✗ | ✗ | ✗ |
+| AI image generation | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **Workflow automation (n8n)** | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Brand system / tokens | ✓ | limited | limited | limited | ✗ |
 | Self-learning from feedback | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Typst PDF output (not PPTX) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **Self-hosted / local** | ✓ | ✗ | ✗ | ✗ | ✓ |
 | 22+ slide type library | ✓ | ✗ | limited | ✓ | ✗ |
 | 37 templates | ✓ | limited | limited | ✓ | ✗ |
 | 90 themes | ✓ | ✗ | ✗ | limited | ✗ |
 | Chart auto-rendering | ✓ | ✓ | limited | ✓ | ✗ |
 | Open source | ✓ | ✗ | ✗ | ✗ | ✓ |
-| Local / self-hosted | ✓ | ✗ | ✗ | ✗ | ✓ |
 
 ---
 
@@ -45,7 +45,7 @@ Inkline is the only code-first slide toolkit with built-in design intelligence, 
 - **Per-slide visual audit** — every exported slide is inspected by a vision model against 11 design-quality and gate checks before delivery
 - **Self-learning loop** — user feedback (explicit approvals/rejections + implicit conversation signals) updates rule confidence in a local decision matrix; ingests reference PDFs to extract new patterns
 - **Brand system** — token-based brand registry (colours, fonts, logos, confidentiality strings); drop a `.py` file in `~/.config/inkline/brands/` and your brand auto-registers
-- **AI image generation** — orchestrate Gemini API via n8n to auto-generate branded backgrounds, icons, and illustrations (see [n8n Integration](#n8n--workflow-automation))
+- **Programmable image generation** — orchestrate Gemini API via n8n from Python, enabling batch asset generation and fully-automated workflows (see [n8n Integration](#n8n--workflow-automation))
 - **90 themes × 37 templates × 22 slide types × 31 chart types** — covers institutional finance, consulting, tech, editorial, and creative registers
 - **Typst backend** — fast, deterministic PDF compilation with no browser dependency; no PPTX export required
 - **MCP server** — native integration with Claude Desktop and Claude.ai for conversational deck generation
@@ -112,9 +112,9 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
 
 ## n8n + Workflow Automation
 
-**Generate branded backgrounds, icons, and illustrations on-demand.**
+**Orchestrate image generation from Python — batch assets, automate, self-host.**
 
-Unlike Gamma, Inkline can orchestrate generative AI workflows via **n8n** to create custom visual assets that match your brand, style, and narrative context. This fills the gap where Gamma requires users to manually source or create images.
+Inkline integrates **n8n** for programmable image generation: call Gemini, Flux, or other models from Python code to auto-generate backgrounds, icons, and illustrations. Unlike UI-based tools (Gamma Imagine, Canva), you can batch-generate assets, chain them in workflows, and run entirely on your infrastructure.
 
 ### Quick start: AI-Generated Icons
 
