@@ -400,6 +400,7 @@ def export_typst_slides(
     slides: list[dict[str, Any]],
     output_path: str | Path,
     *,
+    visual_brief: Optional[Any] = None,
     brand: str = "minimal",
     template: str = "brand",
     title: str = "Untitled",
@@ -473,6 +474,14 @@ def export_typst_slides(
     # === PHASE 0: Setup ===
     brand_obj = get_brand(brand)
     theme = brand_to_typst_theme(brand_obj, template)
+
+    # Apply visual brief palette overrides if provided
+    if visual_brief:
+        if visual_brief.accent:
+            theme["accent"] = visual_brief.accent
+        if visual_brief.divider_bg:
+            theme["title_bg"] = visual_brief.divider_bg  # section_divider uses title_bg
+
     output_path = Path(output_path)
 
     # Determine root for image resolution

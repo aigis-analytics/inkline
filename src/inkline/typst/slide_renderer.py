@@ -632,6 +632,10 @@ class TypstSlideRenderer:
         title_fg = t.get("title_fg", "#FFFFFF")
         logo_path = t.get("logo_light_path", "")
 
+        # Background image support with overlay for text readability
+        background_image = d.get("background_image", "")
+        overlay_opacity = float(d.get("overlay_opacity", 0.4))
+
         # Adaptive vertical spacing: when secondary_headline or both subtitle +
         # left_footer are present, compress the upper spacer so the lower half
         # is visually filled rather than blank.
@@ -646,8 +650,23 @@ class TypstSlideRenderer:
         if left_footer:
             lower_block += f'#text(weight: "bold", size: 11pt, fill: {_rgb(title_fg)})[{_esc(left_footer)}]#v(4pt)\n  '
 
+        # Build page args: background image + overlay or solid fill
+        if background_image:
+            from pathlib import Path
+            if Path(background_image).exists():
+                transparency_pct = int((1.0 - overlay_opacity) * 100)
+                page_args = f"""fill: none,
+  background: stack(
+    image("{background_image}", width: 100%, height: 100%),
+    rect(width: 100%, height: 100%, fill: {_rgb(title_bg)}.transparentize({transparency_pct}%))
+  ),"""
+            else:
+                page_args = f"fill: {_rgb(title_bg)},"
+        else:
+            page_args = f"fill: {_rgb(title_bg)},"
+
         return f"""#page(
-  fill: {_rgb(title_bg)},
+  {page_args}
   margin: (top: 1.4cm, bottom: 1.2cm, left: 1.6cm, right: 1.6cm),
   header: none,
   footer: none,
@@ -1209,6 +1228,11 @@ class TypstSlideRenderer:
         heading_font = t.get("heading_font", "Inter")
         logo_path = t.get("logo_light_path", "")
 
+        # Background image support with overlay
+        background_image = d.get("background_image", "")
+        overlay_opacity = float(d.get("overlay_opacity", 0.4))
+        accent_color = t.get("accent", "#0A0A0A")
+
         logo_block = (
             f'#image("{logo_path}", height: 1.0cm)'
             if logo_path else
@@ -1225,8 +1249,23 @@ class TypstSlideRenderer:
             if subtitle else ""
         )
 
+        # Build page args: background image + overlay or solid fill
+        if background_image:
+            from pathlib import Path
+            if Path(background_image).exists():
+                transparency_pct = int((1.0 - overlay_opacity) * 100)
+                page_args = f"""fill: none,
+  background: stack(
+    image("{background_image}", width: 100%, height: 100%),
+    rect(width: 100%, height: 100%, fill: {_rgb(accent_color)}.transparentize({transparency_pct}%))
+  ),"""
+            else:
+                page_args = f"fill: {_rgb(accent_color)},"
+        else:
+            page_args = f"fill: {_rgb(accent_color)},"
+
         return f"""#page(
-  fill: {_rgb(t['accent'])},
+  {page_args}
   margin: (top: 1.2cm, bottom: 1.0cm, left: 1.6cm, right: 1.6cm),
   header: none,
   footer: none,
