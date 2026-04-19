@@ -652,26 +652,19 @@ def _generate_background_requests(
 
 
 def _generate_backgrounds(brief: VisualBrief, n8n_endpoint: str) -> None:
-    """Call n8n to generate background images."""
-    import requests
+    """Call n8n to generate background images via Gemini AI."""
+    from inkline.generative_assets import generate_background_image
 
     for req in brief.background_requests:
         slot = req["slot"]
         prompt = req["prompt"]
         try:
             log.info("Generating background for slot '%s' via n8n...", slot)
-            resp = requests.post(
-                n8n_endpoint,
-                json={"prompt": prompt},
-                timeout=120,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            image_path = data.get("image_path") or data.get("file_path", "")
+            image_path = generate_background_image(n8n_endpoint, prompt, timeout=180)
             if image_path:
                 brief.background_paths[slot] = image_path
                 log.info("  ✓ Background %s: %s", slot, image_path)
             else:
-                log.warning("  ✗ n8n returned no image_path for slot %s", slot)
+                log.warning("  ✗ Background generation returned empty path for slot %s", slot)
         except Exception as e:
             log.warning("  ✗ Background generation failed for slot %s: %s", slot, e)
