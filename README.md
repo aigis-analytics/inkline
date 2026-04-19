@@ -25,6 +25,8 @@ Inkline is the only code-first slide toolkit with built-in design intelligence, 
 | Programmatic (code-first) | ✓ | ✗ | ✗ | ✗ | ✓ |
 | LLM design intelligence | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Per-slide visual audit | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **AI image generation** | ✓ | ✗ | ✗ | ✓ | ✗ |
+| **Workflow automation (n8n)** | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Brand system / tokens | ✓ | limited | limited | limited | ✗ |
 | Self-learning from feedback | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Typst PDF output (not PPTX) | ✓ | ✗ | ✗ | ✗ | ✗ |
@@ -43,6 +45,7 @@ Inkline is the only code-first slide toolkit with built-in design intelligence, 
 - **Per-slide visual audit** — every exported slide is inspected by a vision model against 11 design-quality and gate checks before delivery
 - **Self-learning loop** — user feedback (explicit approvals/rejections + implicit conversation signals) updates rule confidence in a local decision matrix; ingests reference PDFs to extract new patterns
 - **Brand system** — token-based brand registry (colours, fonts, logos, confidentiality strings); drop a `.py` file in `~/.config/inkline/brands/` and your brand auto-registers
+- **AI image generation** — orchestrate Gemini API via n8n to auto-generate branded backgrounds, icons, and illustrations (see [n8n Integration](#n8n--workflow-automation))
 - **90 themes × 37 templates × 22 slide types × 31 chart types** — covers institutional finance, consulting, tech, editorial, and creative registers
 - **Typst backend** — fast, deterministic PDF compilation with no browser dependency; no PPTX export required
 - **MCP server** — native integration with Claude Desktop and Claude.ai for conversational deck generation
@@ -104,6 +107,82 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
   }
 }
 ```
+
+---
+
+## n8n + Workflow Automation
+
+**Generate branded backgrounds, icons, and illustrations on-demand.**
+
+Unlike Gamma, Inkline can orchestrate generative AI workflows via **n8n** to create custom visual assets that match your brand, style, and narrative context. This fills the gap where Gamma requires users to manually source or create images.
+
+### Quick start: AI-Generated Icons
+
+```bash
+# 1. Start n8n locally
+docker run -d -p 5678:5678 n8nio/n8n
+
+# 2. Import the inkblot icon workflow
+#    In n8n UI: Menu → Import from file
+#    Select: /mnt/d/inkline/inkblot-icon-generator-workflow.json
+#    Update the Gemini API key
+
+# 3. Test it
+curl -X POST http://localhost:5678/webhook/inkblot-icon
+# Returns: {"image_path": "/path/to/inkblot-icon-512.png"}
+```
+
+### AI-Generated Slide Backgrounds
+
+```python
+import requests
+from pathlib import Path
+
+def generate_ai_background(title, theme, aesthetic, brand_colors):
+    """Generate a branded slide background via n8n + Gemini."""
+    r = requests.post(
+        "http://localhost:5678/webhook/slide-background",
+        json={
+            "title": title,
+            "theme": theme,
+            "aesthetic": aesthetic,
+            **brand_colors,
+        },
+        timeout=120
+    )
+    return r.json()["image_path"]
+
+# Use it in a deck
+bg = generate_ai_background(
+    title="Revenue Acceleration",
+    theme="consulting",
+    aesthetic="bold abstract",
+    brand_colors={
+        "brand_primary": "#1F2937",
+        "brand_secondary": "#3B82F6",
+        "brand_accent": "#10B981",
+    }
+)
+
+slides.append({
+    "slide_type": "chart_caption",
+    "data": {
+        "title": "Revenue growing 34% YoY",
+        "background_image": bg,
+        "image_path": "charts/revenue.png",
+    }
+})
+```
+
+### What You Can Generate
+
+- ✓ **Branded icons** — custom marks in any color or style
+- ✓ **Slide backgrounds** — full-width, styled to match theme + narrative
+- ✓ **Hero illustrations** — full-page images for opening slides
+- ✓ **Infographic elements** — diagrams, flowcharts, org charts (SVG)
+- ✓ **Pattern fills** — textured backgrounds for charts
+
+**Full guide:** See [`plan_docs/n8n-integration-generative-assets.md`](plan_docs/n8n-integration-generative-assets.md)
 
 ---
 
