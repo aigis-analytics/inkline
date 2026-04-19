@@ -599,27 +599,35 @@ See `inkline.intelligence.vishwakarma` for the constants and
 
 ## Identity
 
+### Mark System (v1 & v2)
+
+**v1 — Geometric mark** (app icon, established lockups)
 <p align="center">
-  <img src="brand/logo/rendered/lockup-horizontal.png" alt="Inkline" width="320">
+  <img src="brand/logo/rendered/mark-512.png" alt="Inkline mark v1 — geometric ink drop" width="100">&nbsp;&nbsp;&nbsp;
+  <img src="brand/logo/rendered/lockup-horizontal.png" alt="Inkline lockup v1" width="240">
 </p>
 
+**v2 — Ink-blot system** (editorial, investor decks, brand-forward) — *New in April 2026*
 <p align="center">
-  <img src="brand/logo/rendered/mark-512.png" alt="Inkline mark — ink drop" width="120">&nbsp;&nbsp;&nbsp;
-  <img src="brand/logo/rendered/mark-icon-512.png" alt="Inkline app icon" width="120">
+  <img src="brand/logo/inkblot-icon-512.png" alt="Inkline mark v2 — organic ink blot" width="100">&nbsp;&nbsp;&nbsp;
+  <img src="brand/logo/inkblot-lockup-horizontal.png" alt="Inkline lockup v2 — blot with serif ink + sans line" width="280">
 </p>
 
-The mark is a stylised lowercase **i** — the tittle replaced by a teardrop ink drop as if ink has just fallen from a nib. Two variants: the standalone ink drop (left) for print and lockups; the rounded-tile app icon (right) for favicons and mobile.
+The **v2 system** splits Inkline's identity across two typefaces: **Cormorant Garamond italic** for "ink" (craft, editorial) + **Plus Jakarta Sans** for "line" (software, geometry). The mark evolves from geometric precision to an organic ink-blot that carries reversed-out white "ink" type, with "line" positioned beside.
 
-Inkline's full brand system is defined in [`brand/BRAND_GUIDELINES.md`](brand/BRAND_GUIDELINES.md).
-The `brand/` directory ships SVG sources, rendered PNGs (mark, wordmark, lockups, app icon), favicon, and colour palette.
+Both systems share **Inkline Indigo (#3D2BE8)** as the primary accent. The v1 mark remains canonical for product UI; v2 is used for high-impact editorial and investor materials (see [`brand/decks/`](brand/decks/)).
+
+**Complete brand system:** [`brand/BRAND_GUIDELINES.md`](brand/BRAND_GUIDELINES.md) — 10 sections covering mark construction, wordmark, lockups, colour rules, typography scale, motion, and tone of voice.
+
+### Colour System
 
 **Primary palette:**
 
 | Token | Hex | Usage |
 |-------|-----|-------|
 | Ink | `#0A0A0A` | Primary text, "ink" half of wordmark |
-| Indigo | `#3D2BE8` | Brand primary, "line" half, CTAs, stem |
-| Indigo Light | `#6C5FFF` | Gradient start, hover, selected |
+| Indigo | `#3D2BE8` | Brand primary, "line" half, CTAs, mark |
+| Indigo Light | `#5B4FFF` | Gradient start (mark only), hover states |
 | Vellum | `#F7F6F2` | Page background, card fills |
 | Slate | `#64748B` | Secondary text, captions, metadata |
 | Rule | `#E2E1DC` | Dividers, borders, table rules |
@@ -633,6 +641,12 @@ The `brand/` directory ships SVG sources, rendered PNGs (mark, wordmark, lockups
 | Vermilion | `#DC2626` | Errors, FAIL states |
 | Sage | `#16A34A` | Success, PASS states |
 | Amber | `#D97706` | Warnings, caution |
+
+### Assets
+
+- **Decks:** [`brand/decks/Inkline_Brand_Guidelines.pdf`](brand/decks/Inkline_Brand_Guidelines.pdf) (12 slides) + [`Inkline_Product_Pitch.pdf`](brand/decks/Inkline_Product_Pitch.pdf) (12 slides)
+- **Logo files:** SVG sources (v1 & v2), rendered PNGs, app icons, favicon in [`brand/logo/`](brand/logo/)
+- **Color palette:** [`brand/colors.svg`](brand/colors.svg)
 
 Brand assets are available under the same MIT licence as the code.
 
