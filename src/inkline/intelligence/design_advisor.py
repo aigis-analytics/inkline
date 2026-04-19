@@ -681,6 +681,7 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        design_context: Optional["DesignContext"] = None,
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
         brief: Optional[Any] = None,
@@ -811,31 +812,10 @@ class DesignAdvisor:
                     except Exception as _brief_err:
                         log.info("DesignAdvisor: design brief generation skipped (%s)", _brief_err)
 
-                # 1.6: Generate visual brief (NEW VISUAL DIRECTION LAYER)
-                visual_brief = None
-                if brief:
-                    try:
-                        from inkline.intelligence.visual_direction import generate_visual_brief
-                        # For now, pass empty n8n endpoint — caller can override
-                        # In future: read from env or config: os.environ.get("INKLINE_N8N_WEBHOOK", "")
-                        visual_brief = generate_visual_brief(
-                            deck_outline=[],  # Will be populated after Phase 1 plan
-                            design_brief=brief,
-                            brand=self.brand,
-                            n8n_endpoint="",
-                        )
-                        log.info("DesignAdvisor: generated visual brief (template=%s, register=%s)",
-                                 visual_brief.template, visual_brief.register)
-                        # Override template selection if visual brief recommends
-                        if visual_brief.template != self.template:
-                            log.info("DesignAdvisor: template override %s → %s (visual direction)",
-                                     self.template, visual_brief.template)
-                    except Exception as _vb_err:
-                        log.warning("DesignAdvisor: visual brief generation failed (%s)", _vb_err)
-
                 llm_slides = self._design_deck_llm(
                     title, llm_only, date=date, subtitle=subtitle,
                     contact=contact, audience=audience, goal=goal,
+                    design_context=design_context,
                     additional_guidance=additional_guidance,
                     reference_archetypes=reference_archetypes,
                     brief=brief,
@@ -1006,6 +986,7 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        design_context: Optional[Any] = None,
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
         brief: Optional[Any] = None,
@@ -1087,6 +1068,39 @@ class DesignAdvisor:
                      entry.get("slide_type", "?"),
                      str(entry.get("title", ""))[:55])
 
+        # === PHASE 1.5: Generate visual brief (now that outline is real) ===
+        visual_brief = None
+        if brief or design_context:
+            try:
+                from inkline.intelligence.visual_direction import generate_visual_brief
+                visual_brief = generate_visual_brief(
+                    deck_outline=plan,
+                    design_brief=brief,
+                    brand=self.brand,
+                    n8n_endpoint=getattr(self, "_n8n_endpoint", ""),
+                    design_context=design_context,
+                    bridge_url=self.bridge_url,
+                    llm_caller=self.llm_caller,
+                )
+                if visual_brief and visual_brief.template != self.template:
+                    self.template = visual_brief.template
+                    log.info("DesignAdvisor: template override %s (visual direction)", self.template)
+
+                # Inject background images into plan entries for cover + divider slides
+                if visual_brief and visual_brief.background_paths:
+                    for entry in plan:
+                        slot = "cover" if entry.get("slide_type") == "title" else (
+                               "divider" if entry.get("slide_type") == "section_divider" else None)
+                        if slot and slot in visual_brief.background_paths:
+                            entry["background_image"] = visual_brief.background_paths[slot]
+                            entry["overlay_opacity"] = visual_brief.overlay_opacity
+
+                log.info("DesignAdvisor Phase 1.5: visual brief ready (register=%s, template=%s)",
+                         visual_brief.register if visual_brief else "unknown",
+                         visual_brief.template if visual_brief else "unknown")
+            except Exception as _vb_err:
+                log.warning("DesignAdvisor Phase 1.5: visual brief generation failed (%s)", _vb_err)
+
         # === PHASE 2: Design each slide from its plan entry ===
         # Build source section lookup (1-based index, matching plan's source_index)
         section_lookup: dict[int, dict] = {i + 1: s for i, s in enumerate(sections)}
@@ -1119,6 +1133,7 @@ class DesignAdvisor:
                 title=title, date=date, subtitle=subtitle,
                 contact=contact, audience=audience, goal=goal,
                 reference_archetypes=reference_archetypes,
+                visual_brief=visual_brief,
             )
             return (idx, slide)
 
@@ -1717,6 +1732,7 @@ class DesignAdvisor:
         contact: Optional[dict] = None,
         audience: str = "",
         goal: str = "",
+        visual_brief: Optional[Any] = None,
     ) -> str:
         """Build a focused per-slide user prompt from a plan entry."""
         stype = plan_entry.get("slide_type", "content")
@@ -1779,6 +1795,19 @@ class DesignAdvisor:
                     ]
                     for _cf in _chart_files:
                         parts.append(f"  {_cf.name}")
+
+        # Inject visual direction constraints if available
+        if visual_brief:
+            parts += [
+                "",
+                "## Visual Direction Constraints",
+                f"Accent colour: {visual_brief.accent} — apply to ONE element only per slide.",
+            ]
+            slot = "cover" if plan_entry.get("slide_type") == "title" else (
+                   "divider" if plan_entry.get("slide_type") == "section_divider" else None)
+            if slot and slot in visual_brief.background_paths:
+                parts.append(f"This slide has a full-bleed background image. Keep text minimal and high-contrast.")
+            parts.append(f"Content density: {visual_brief.avg_density}")
 
         parts += [
             "",
@@ -1856,17 +1885,21 @@ class DesignAdvisor:
         audience: str = "",
         goal: str = "",
         reference_archetypes: Optional[list[str]] = None,
+        visual_brief: Optional[Any] = None,
     ) -> dict[str, Any]:
         """Phase 2: Design a single slide from its plan entry + source content.
 
         Uses the full _build_system_prompt() which is cached by the bridge
         across all per-slide calls in the same deck (same content hash).
         """
-        system_prompt = self._build_system_prompt(reference_archetypes=reference_archetypes)
+        system_prompt = self._build_system_prompt(
+            reference_archetypes=reference_archetypes, visual_brief=visual_brief
+        )
         user_prompt = self._build_slide_design_prompt(
             plan_entry, source_section,
             title=title, date=date, subtitle=subtitle,
             contact=contact, audience=audience, goal=goal,
+            visual_brief=visual_brief,
         )
 
         content = self._call_llm(system_prompt, user_prompt)
@@ -1965,6 +1998,7 @@ class DesignAdvisor:
     def _build_system_prompt(
         self,
         reference_archetypes: Optional[list[str]] = None,
+        visual_brief: Optional[Any] = None,
     ) -> str:
         """Build the system prompt with playbook context.
 
@@ -2109,6 +2143,20 @@ class DesignAdvisor:
                 parts.append(pattern_text)
         except Exception:
             pass
+
+        # Inject visual direction if available (locked global visual decisions)
+        if visual_brief:
+            parts.append("")
+            parts.append("=" * 60)
+            parts.append("VISUAL DIRECTION")
+            parts.append("=" * 60)
+            parts.append(
+                "These visual decisions are LOCKED for this deck. Apply them consistently "
+                "in every slide design. These are global constraints from the Visual Direction Agent."
+            )
+            parts.append("")
+            parts.append(visual_brief.to_json_for_prompt())
+            parts.append("")
 
         return "\n".join(parts)
 
