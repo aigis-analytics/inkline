@@ -1,72 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>Inkline — 64px ink-blot icon</title>
   <desc>
-    Organic ink-blot background with a white italic serif "i" (apostrophe-drop tittle)
-    reversed out.  Designed as a favicon / app-icon tile.
+    Spiky ink-splat blot with a white italic serif "i" reversed out.
+    Designed as a favicon / app-icon tile.
   </desc>
 
-  <!-- ============================================================
-       BLOT — scaled to fill roughly 60×55 inside the 64×64 canvas.
-       Original blot path is ~132 wide × 116 tall; scale factor 0.455.
-       Centred: offset x = (64 - 132*0.455)/2 ≈ 2, y = (64 - 116*0.455)/2 ≈ 5.6
-       ============================================================ -->
-  <g transform="translate(2,5.6) scale(0.455)" fill="#3D2BE8">
-    <path d="
-      M 62,8
-      C 82,4 108,8 118,26
-      C 128,20 134,34 126,48
-      C 136,58 130,76 118,84
-      C 124,96 110,108 94,104
-      C 86,114 68,116 56,106
-      C 42,116 24,106 20,90
-      C 8,90 2,74 10,58
-      C 0,44 6,26 22,20
-      C 28,6 46,10 62,8
-      Z
-    "/>
-    <circle cx="14"  cy="18"  r="4"/>
-    <circle cx="132" cy="42"  r="5"/>
-    <circle cx="28"  cy="110" r="3"/>
+  <!-- Blob scaled to fit inside 60x60 canvas.
+       Local blob coords: width ~139.4, height ~160.0; centre at (75,68).
+       Scale = 60/160 = 0.375. Centre maps to (28.1, 25.5) after scale.
+       Translate: tx = 32-28.1 = 3.9, ty = 32-25.5 = 6.5 -->
+  <g transform="translate(3.9,6.5) scale(0.375)" fill="#3D2BE8">
+    <path d="M 70.74,35.62 Q 75.00,-8.16 77.29,12.51 Q 79.58,33.19 87.14,13.83 Q 94.70,-5.52 91.46,15.29 Q 88.21,36.10 100.69,19.00 Q 113.16,1.90 103.60,22.55 Q 94.04,43.19 109.95,30.17 Q 125.86,17.14 111.29,34.24 Q 96.72,51.34 113.85,43.51 Q 130.98,35.68 114.66,47.01 Q 98.34,58.33 119.37,54.40 Q 140.40,50.47 120.71,57.52 Q 101.02,64.57 122.82,66.29 Q 144.61,68.00 124.54,69.94 Q 104.47,71.88 123.08,78.88 Q 141.70,85.87 123.83,83.35 Q 105.97,80.83 118.96,90.86 Q 131.96,100.88 117.47,95.18 Q 102.98,89.47 111.98,101.73 Q 120.98,113.98 108.31,104.43 Q 95.63,94.88 103.52,112.98 Q 111.42,131.08 98.99,113.50 Q 86.57,95.93 91.30,121.21 Q 96.03,146.49 87.25,120.42 Q 78.47,94.35 76.73,123.08 Q 75.00,151.80 73.35,122.40 Q 71.71,92.99 63.07,118.86 Q 54.44,144.74 59.56,118.83 Q 64.68,92.92 52.39,110.68 Q 40.11,128.43 48.19,110.43 Q 56.26,92.42 42.80,103.04 Q 29.34,113.66 38.59,101.25 Q 47.83,88.85 31.72,95.57 Q 15.60,102.29 29.03,91.89 Q 42.46,81.48 24.59,83.89 Q 6.72,86.30 24.46,79.31 Q 42.20,72.32 23.69,70.16 Q 5.19,68.00 25.63,66.10 Q 46.07,64.19 28.40,57.49 Q 10.74,50.78 30.89,54.43 Q 51.04,58.07 34.74,46.71 Q 18.45,35.35 36.66,43.95 Q 54.87,52.55 39.63,34.98 Q 24.40,17.40 41.22,31.65 Q 58.05,45.91 47.84,24.59 Q 37.63,3.27 50.23,20.94 Q 62.83,38.61 58.86,15.80 Q 54.90,-7.01 62.82,14.31 Q 70.74,35.62 72.87,13.73 Z"/>
+    <!-- A few key satellite droplets (scaled with the blob group) -->
+    <circle cx="148.42" cy="48.33" r="3.81"/>
+    <circle cx="156.29" cy="68.00" r="3.92"/>
+    <circle cx="-4.21" cy="68.00" r="3.30"/>
+    <circle cx="118.38" cy="-7.14" r="3.99"/>
+    <circle cx="115.72" cy="138.53" r="3.77"/>
   </g>
 
-  <!-- ============================================================
-       ITALIC SERIF "i" — white, centred over the blot.
-       Mark's native coordinate system is 120×200; scale factor ≈ 0.18
-       to fit inside ~22×36 at icon centre (32,32).
-       Source mark centre in its own coords: x=65, y=100.
-       After scale: offset x = 32 - 65*0.18 ≈ 20.3, y = 32 - 100*0.18 ≈ 14
-       ============================================================ -->
-  <g transform="translate(20.3,14) scale(0.18)" fill="#FFFFFF">
-    <!-- stem -->
-    <path d="
-      M 70,60
-      L 78,60
-      L 78,64
-      L 74,66
-      L 72,72
-      L 68,170
-      L 72,174
-      L 78,176
-      L 78,180
-      L 50,180
-      L 50,176
-      L 56,174
-      L 60,170
-      L 62,72
-      L 60,66
-      L 56,64
-      L 56,60
-      Z
-    "/>
-    <!-- apostrophe-drop tittle -->
-    <path d="
-      M 74,14
-      C 82,18 84,28 80,38
-      C 77,44 72,48 66,50
-      C 64,46 64,40 66,34
-      C 68,26 70,20 74,14
-      Z
-    "/>
-    <circle cx="66" cy="50" r="4.5"/>
-  </g>
+  <!-- "i" — lowercase italic serif, white, centred in the blot at icon scale -->
+  <text x="32" y="35"
+        font-family="'Cormorant Garamond','EB Garamond',Georgia,serif"
+        font-weight="600" font-style="italic" font-size="30"
+        fill="white" text-anchor="middle" dominant-baseline="central">i</text>
 </svg>
