@@ -2472,6 +2472,10 @@ class TypstSlideRenderer:
         """Two equal panels: Before (left) and After (right).
 
         data: section, title, left {label, items, colour?}, right {label, items, colour?}, footnote?
+
+        Uses v(1fr) bracket pattern (same as four_card) so the footnote footer is
+        always visible. The _body_block pattern clips at 9cm and causes height:100%
+        panels to consume all space leaving v(1fr) with zero room for the footer.
         """
         t = self.t
         section = d.get("section", "")
@@ -2493,7 +2497,6 @@ class TypstSlideRenderer:
             items = side_data.get("items", [])[:5]
             colour_key = side_data.get("colour", "accent" if is_right else "muted")
             colour = _resolve_colour(colour_key)
-            items_str = "\n    ".join(f"- {_esc(str(item))}" for item in items)
             bg_fill = t.get("card_fill", "#F8FAFC")
             stroke_side = "right" if not is_right else "left"
             return (
@@ -2513,13 +2516,16 @@ class TypstSlideRenderer:
         left_panel = _panel(d.get("left", {}), is_right=False)
         right_panel = _panel(d.get("right", {}), is_right=True)
 
-        body = f"""grid(
-  columns: (1fr, 1fr),
-  rows: (auto,),
-  gutter: 16pt,
-  {left_panel},
-  {right_panel},
-)"""
+        # Fixed panel height: BODY_H_CM(9.0) minus footer(0.69) minus two v(1fr)
+        # gaps minus grid gutter gives approx 7.5cm for the panel grid.
+        panel_h_cm = 7.5
+
+        footnote_block = (
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n  '
+            f'v(4pt)\n  text(size: 7pt, fill: {_rgb(t["muted"])})[{_esc(footnote)}]'
+            if footnote else
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})'
+        )
 
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
@@ -2530,9 +2536,20 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(10pt)
 
-  {self._body_block(body, footnote)}
+  v(1fr)
+
+  grid(
+    columns: (1fr, 1fr),
+    rows: ({panel_h_cm}cm,),
+    gutter: 16pt,
+    {left_panel},
+    {right_panel},
+  )
+
+  v(1fr)
+
+  {footnote_block}
 }}"""
 
 
