@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 128" fill="none" role="img" aria-label="Inkline mark (white)">
+  <title>Inkline</title>
+  <!-- Ink drop — white version for dark backgrounds -->
+  <path d="M 28,28 A 22,22 0 1,1 72,28 Q 72,48 50,60 Q 28,48 28,28 Z"
+        fill="#FFFFFF"/>
+  <rect x="44" y="70" width="12" height="52" rx="6" fill="#FFFFFF"/>
+</svg>

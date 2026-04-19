@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" fill="none" role="img" aria-label="Inkline brand colors">
+  <title>Inkline Brand Colors</title>
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500&amp;display=swap');
+      text { font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    </style>
+    <linearGradient id="indigo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5B4FFF"/>
+      <stop offset="100%" stop-color="#3D2BE8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="320" fill="#F7F6F2" rx="12"/>
+
+  <!-- Title -->
+  <text x="36" y="44" font-size="13" font-weight="400" letter-spacing="3" fill="#0A0A0A" opacity="0.4">COLOUR SYSTEM</text>
+
+  <!-- === PRIMARY PALETTE === -->
+
+  <!-- Ink Black -->
+  <rect x="36" y="68" width="120" height="120" rx="8" fill="#0A0A0A"/>
+  <text x="36" y="208" font-size="13" font-weight="500" fill="#0A0A0A">Ink</text>
+  <text x="36" y="224" font-size="11" font-weight="300" fill="#0A0A0A" opacity="0.6">#0A0A0A</text>
+
+  <!-- Inkline Indigo (gradient) -->
+  <rect x="176" y="68" width="120" height="120" rx="8" fill="url(#indigo-gradient)"/>
+  <text x="176" y="208" font-size="13" font-weight="500" fill="#0A0A0A">Indigo</text>
+  <text x="176" y="224" font-size="11" font-weight="300" fill="#0A0A0A" opacity="0.6">#3D2BE8</text>
+
+  <!-- Vellum -->
+  <rect x="316" y="68" width="120" height="120" rx="8" fill="#F7F6F2" stroke="#E2E1DC" stroke-width="1"/>
+  <text x="316" y="208" font-size="13" font-weight="500" fill="#0A0A0A">Vellum</text>
+  <text x="316" y="224" font-size="11" font-weight="300" fill="#0A0A0A" opacity="0.6">#F7F6F2</text>
+
+  <!-- Slate -->
+  <rect x="456" y="68" width="120" height="120" rx="8" fill="#64748B"/>
+  <text x="456" y="208" font-size="13" font-weight="500" fill="#0A0A0A">Slate</text>
+  <text x="456" y="224" font-size="11" font-weight="300" fill="#0A0A0A" opacity="0.6">#64748B</text>
+
+  <!-- Rule -->
+  <rect x="596" y="68" width="88" height="120" rx="8" fill="#E2E1DC" stroke="#CCC9C0" stroke-width="1"/>
+  <text x="596" y="208" font-size="13" font-weight="500" fill="#0A0A0A">Rule</text>
+  <text x="596" y="224" font-size="11" font-weight="300" fill="#0A0A0A" opacity="0.6">#E2E1DC</text>
+
+  <!-- Divider -->
+  <line x1="36" y1="252" x2="684" y2="252" stroke="#E2E1DC" stroke-width="1"/>
+
+  <!-- === ACCENT PALETTE === -->
+  <text x="36" y="272" font-size="11" font-weight="400" letter-spacing="2.5" fill="#0A0A0A" opacity="0.35">ACCENTS</text>
+
+  <!-- Violet -->
+  <rect x="36" y="284" width="52" height="24" rx="4" fill="#7C3AED"/>
+  <text x="96" y="300" font-size="10" font-weight="300" fill="#0A0A0A" opacity="0.6">#7C3AED  Violet</text>
+
+  <!-- Cobalt -->
+  <rect x="216" y="284" width="52" height="24" rx="4" fill="#1E40AF"/>
+  <text x="276" y="300" font-size="10" font-weight="300" fill="#0A0A0A" opacity="0.6">#1E40AF  Cobalt</text>
+
+  <!-- Vermilion -->
+  <rect x="396" y="284" width="52" height="24" rx="4" fill="#DC2626"/>
+  <text x="456" y="300" font-size="10" font-weight="300" fill="#0A0A0A" opacity="0.6">#DC2626  Vermilion</text>
+
+  <!-- Sage -->
+  <rect x="576" y="284" width="52" height="24" rx="4" fill="#16A34A"/>
+  <text x="636" y="300" font-size="10" font-weight="300" fill="#0A0A0A" opacity="0.6">#16A34A  Sage</text>
+</svg>

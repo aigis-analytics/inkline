@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 256" fill="none">
+  <defs>
+    <linearGradient id="g" x1="56" y1="12" x2="144" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6C5FFF"/>
+      <stop offset="100%" stop-color="#3D2BE8"/>
+    </linearGradient>
+  </defs>
+  <!-- Ink drop: circle centre (100,56) r=44, bottom cusp (100,120) -->
+  <path d="M 56,56 A 44,44 0 1,1 144,56 Q 144,96 100,120 Q 56,96 56,56 Z"
+        fill="url(#g)"/>
+  <!-- Stem: centred x=88..112, y=136..240, rx=12 -->
+  <rect x="88" y="140" width="24" height="104" rx="12" fill="#3D2BE8"/>
+</svg>

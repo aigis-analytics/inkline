@@ -6,13 +6,49 @@ Inkline turns structured data or Markdown into publication-quality, brand-consis
 output with **encoded taste** — the outputs it produces are always within the range
 that a designer with good judgement would approve, without user handholding.
 
-Ships with: 90 built-in themes, 37 slide templates, 21 slide layouts, 31 chart/exhibit
+Ships with: 90 built-in themes, 37 slide templates, 22 slide layouts, 31 chart/exhibit
 types (11 standard + 5 institutional + 5 derived-from-pitchbook + 16 infographic
 archetypes), a 1-brand public registry (extensible via plugins), an LLM-driven design
 advisor driven by a structured **decision framework** (not an option menu), 10 design
 playbooks, a 771-template archetype catalog, a two-layer audit (structural + Claude
 vision), and a **self-learning feedback loop** that improves chart selection quality
 over time as users accept, reject, or modify slides.
+
+---
+
+## Why Inkline
+
+Inkline is the only code-first slide toolkit with built-in design intelligence, visual auditing, and self-learning — running entirely on your infrastructure.
+
+| Feature | Inkline | Gamma | Beautiful.ai | Canva | python-pptx |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Programmatic (code-first) | ✓ | ✗ | ✗ | ✗ | ✓ |
+| LLM design intelligence | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Per-slide visual audit | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Brand system / tokens | ✓ | limited | limited | limited | ✗ |
+| Self-learning from feedback | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Typst PDF output (not PPTX) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| 22+ slide type library | ✓ | ✗ | limited | ✓ | ✗ |
+| 37 templates | ✓ | limited | limited | ✓ | ✗ |
+| 90 themes | ✓ | ✗ | ✗ | limited | ✗ |
+| Chart auto-rendering | ✓ | ✓ | limited | ✓ | ✗ |
+| Open source | ✓ | ✗ | ✗ | ✗ | ✓ |
+| Local / self-hosted | ✓ | ✗ | ✗ | ✗ | ✓ |
+
+---
+
+## Capabilities at a glance
+
+- **Code-first, LLM-amplified** — describe a deck in Python or natural language; a structured design advisor picks layouts, charts, and hierarchy for you
+- **Per-slide visual audit** — every exported slide is inspected by a vision model against 11 design-quality and gate checks before delivery
+- **Self-learning loop** — user feedback (explicit approvals/rejections + implicit conversation signals) updates rule confidence in a local decision matrix; ingests reference PDFs to extract new patterns
+- **Brand system** — token-based brand registry (colours, fonts, logos, confidentiality strings); drop a `.py` file in `~/.config/inkline/brands/` and your brand auto-registers
+- **90 themes × 37 templates × 22 slide types × 31 chart types** — covers institutional finance, consulting, tech, editorial, and creative registers
+- **Typst backend** — fast, deterministic PDF compilation with no browser dependency; no PPTX export required
+- **MCP server** — native integration with Claude Desktop and Claude.ai for conversational deck generation
+- **Fully local** — no SaaS dependency; routes LLM calls through a local Claude bridge (zero incremental API cost when Claude Max is running)
+
+---
 
 ```bash
 pip install inkline                # core: Markdown → HTML
@@ -482,12 +518,37 @@ the system prompts and routing logic:
 See `inkline.intelligence.vishwakarma` for the constants and
 `inkline.intelligence.archon.Archon` for the supervisor class.
 
+## Identity
+
+<p align="center">
+  <img src="brand/logo/rendered/lockup-horizontal.png" alt="Inkline" width="320">
+</p>
+
+Inkline's brand system is defined in [`brand/BRAND_GUIDELINES.md`](brand/BRAND_GUIDELINES.md).
+The `brand/` directory ships the full identity: SVG sources, rendered PNGs (mark, wordmark,
+horizontal and stacked lockups), favicon, and colour palette reference.
+
+**Core colours:**
+
+| Name | Hex | Usage |
+|------|-----|-------|
+| Ink | `#0A0A0A` | Primary text, mark |
+| Indigo | `#3D2BE8` | Accent, links, highlights |
+| Vellum | `#F7F6F2` | Background, light surfaces |
+
+Brand assets are available under the same MIT licence as the code.
+
 ## Documentation
 
 - [Technical specification](docs/TECHNICAL_SPEC.md) — architecture, APIs, data models
 - [Commercial pitch](docs/PITCH.md) — capabilities, competitive comparison
 - [Archon audit workflow](docs/ARCHON_AUDIT.md) — Archon supervisor + audit pipeline
 - [Closed-loop audit spec](docs/CLOSED_LOOP_AUDIT_SPEC.md) — two-loop QA architecture
+- [Brand guidelines](brand/BRAND_GUIDELINES.md) — full brand system documentation
+
+## Contributing
+
+Pull requests welcome. Please open an issue first for significant changes.
 
 ## Testing
 

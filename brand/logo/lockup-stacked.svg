@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 200" fill="none" role="img" aria-label="Inkline logo stacked">
+  <title>Inkline</title>
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300&amp;display=swap');
+    </style>
+    <linearGradient id="drop-s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5B4FFF"/>
+      <stop offset="100%" stop-color="#3D2BE8"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    Stacked lockup: mark centered above wordmark.
+    Mark viewBox 100x128, scaled to height 104px → scale = 104/128 = 0.8125
+    Mark width at that scale: 100 × 0.8125 = 81.25px
+    Mark centered in 280px wide canvas: x offset = (280 - 81.25) / 2 = 99.375
+  -->
+  <g transform="translate(99.375, 4) scale(0.8125)">
+    <path d="M 28,28 A 22,22 0 1,1 72,28 Q 72,48 50,60 Q 28,48 28,28 Z"
+          fill="url(#drop-s)"/>
+    <rect x="44" y="70" width="12" height="52" rx="6" fill="#3D2BE8"/>
+  </g>
+
+  <!--
+    Wordmark centered below mark.
+    Mark occupies y=4 to y=4+104=108. Gap 16px → wordmark baseline at y=140.
+    "inkline" at font-size 52, approximate width ~220px
+    Centered: x = (280 - 220) / 2 = 30
+  -->
+  <text
+    x="140"
+    y="156"
+    text-anchor="middle"
+    font-family="'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="52"
+    font-weight="200"
+    letter-spacing="-1"
+    dominant-baseline="auto">
+    <tspan fill="#0A0A0A">ink</tspan><tspan fill="#3D2BE8">line</tspan>
+  </text>
+</svg>

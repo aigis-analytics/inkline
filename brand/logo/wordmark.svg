@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 160" fill="none">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'PlusJakartaSans';
+        src: url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_KU7NSg.woff2') format('woff2');
+        font-weight: 200;
+      }
+    </style>
+  </defs>
+  <!-- "ink" in near-black -->
+  <text x="20" y="128"
+        font-family="'PlusJakartaSans','Helvetica Neue',Helvetica,Arial,sans-serif"
+        font-size="140" font-weight="200" letter-spacing="-4"
+        fill="#0A0A0A">ink</text>
+  <!-- "line" in Inkline Indigo — positioned after "ink" -->
+  <!-- At 140px PlusJakartaSans 200, "ink" ≈ 220px wide -->
+  <text x="232" y="128"
+        font-family="'PlusJakartaSans','Helvetica Neue',Helvetica,Arial,sans-serif"
+        font-size="140" font-weight="200" letter-spacing="-4"
+        fill="#3D2BE8">line</text>
+</svg>

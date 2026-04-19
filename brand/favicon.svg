@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Inkline favicon">
+  <title>Inkline</title>
+  <!--
+    Favicon version: mark only, simplified for 32×32 rendering.
+    Circle center: (16, 9), radius 7. Bottom cusp: (16, 20).
+    Stem: x=13.5 y=22.5 w=5 h=8 rx=2.5
+  -->
+  <defs>
+    <linearGradient id="drop-fav" x1="9" y1="2" x2="23" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5B4FFF"/>
+      <stop offset="100%" stop-color="#3D2BE8"/>
+    </linearGradient>
+  </defs>
+  <path d="M 9,9 A 7,7 0 1,1 23,9 Q 23,15.5 16,20 Q 9,15.5 9,9 Z"
+        fill="url(#drop-fav)"/>
+  <rect x="13.5" y="22.5" width="5" height="8" rx="2.5" fill="#3D2BE8"/>
+</svg>

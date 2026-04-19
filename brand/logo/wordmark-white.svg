@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 80" fill="none" role="img" aria-label="Inkline wordmark (white)">
+  <title>Inkline</title>
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300&amp;display=swap');
+    </style>
+  </defs>
+  <!-- White wordmark — for dark/indigo backgrounds -->
+  <text
+    font-family="'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="72"
+    font-weight="200"
+    letter-spacing="-1.5"
+    dominant-baseline="auto">
+    <tspan y="68" fill="#FFFFFF" opacity="0.9">ink</tspan><tspan fill="#FFFFFF">line</tspan>
+  </text>
+</svg>

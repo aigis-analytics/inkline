@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 80" fill="none" role="img" aria-label="Inkline logo (white)">
+  <title>Inkline</title>
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Mark: white version -->
+  <g transform="translate(0, 0) scale(0.625)">
+    <path d="M 28,28 A 22,22 0 1,1 72,28 Q 72,48 50,60 Q 28,48 28,28 Z"
+          fill="#FFFFFF"/>
+    <rect x="44" y="70" width="12" height="52" rx="6" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Wordmark: all white on dark background -->
+  <text
+    x="87"
+    y="62"
+    font-family="'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="56"
+    font-weight="200"
+    letter-spacing="-1"
+    dominant-baseline="auto">
+    <tspan fill="rgba(255,255,255,0.85)">ink</tspan><tspan fill="#FFFFFF">line</tspan>
+  </text>
+</svg>
