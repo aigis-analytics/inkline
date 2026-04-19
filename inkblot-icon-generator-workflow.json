@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Inkblot Icon Generator",
+  "name": "Gemini Dynamic Image Generator",
   "active": true,
   "nodes": [
     {
@@ -29,7 +29,7 @@
           "parameters": [
             {
               "name": "contents",
-              "value": "[{\"parts\":[{\"text\":\"Generate a square icon: organic ink blotch splat shape in deep indigo color #3D2BE8, with white italic serif lowercase 'i' character perfectly centered inside the blotch. White background. Flat design, no gradients or shadows. High contrast, clean edges.\"}]}]"
+              "value": "[{\"parts\":[{\"text\":\"{{ $json.body.prompt }}\"}]}]"
             },
             {
               "name": "generationConfig",
@@ -47,7 +47,7 @@
     },
     {
       "parameters": {
-        "fileName": "/mnt/d/inkline/brand/logo/inkblot-icon-512.png",
+        "fileName": "=/tmp/inkline_bg_{{ Date.now() }}.png",
         "fileContent": "={{ Buffer.from($response.body.candidates[0].content.parts[0].inline_data.data, 'base64') }}",
         "options": {}
       },
@@ -56,6 +56,19 @@
       "type": "n8n-nodes-base.writeBinaryFile",
       "typeVersion": 1,
       "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "respondWithOptions": {
+          "responseBody": "{\"image_path\":\"{{ $node['write_file'].json.file_path }}\"}"
+        },
+        "options": {}
+      },
+      "id": "http_response",
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.httpRespond",
+      "typeVersion": 1,
+      "position": [700, 300]
     }
   ],
   "connections": {
@@ -75,6 +88,17 @@
         [
           {
             "node": "write_file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "write_file": {
+      "main": [
+        [
+          {
+            "node": "http_response",
             "type": "main",
             "index": 0
           }
