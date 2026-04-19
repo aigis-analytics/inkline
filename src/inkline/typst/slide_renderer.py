@@ -739,23 +739,30 @@ class TypstSlideRenderer:
         card_markups = []
         for i, c in enumerate(cards[:3]):
             if i == highlight_idx:
-                # Accent card
+                # Accent card — height: 100% fills the grid row with accent color
                 cm = card(
                     f'{card_title(c.get("title", ""), t["title_fg"])}\n      #v(6pt)\n      #text(size: 10pt, fill: {_rgb(t["title_fg"])})[{_esc(c.get("body", ""))}]',
                     fill=t["accent"],
                     text_color=t["title_fg"],
+                    height="100%",
                 )
             else:
+                # Standard card — height: 100% fills the grid row with card fill
                 cm = card(
                     f'{card_title(c.get("title", ""), t["text"])}\n      #v(6pt)\n      #text(size: 10pt, fill: {_rgb(t["muted"])})[{_esc(c.get("body", ""))}]',
                     fill=t["card_fill"],
                     border=t["border"],
                     text_color=t["text"],
+                    height="100%",
                 )
             card_markups.append(cm)
 
         cards_str = ",\n    ".join(card_markups)
 
+        # Single-row grid of 3 cards with explicit row height so all cards fill
+        # visually to the same bottom edge.
+        # Available ≈ 11.69 − header(1.6) − footer(0.8) = 9.29cm. Use 9.0cm.
+        # Cards use height: 100% to fill the row completely.
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -767,14 +774,14 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(8pt)
 
-  v(1fr)
   grid(
     columns: (1fr, 1fr, 1fr),
+    rows: (9.0cm,),
     gutter: 14pt,
     {cards_str}
   )
-  v(1fr)
 
+  v(1fr)
   {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
@@ -797,21 +804,16 @@ class TypstSlideRenderer:
                 fill=t["card_fill"],
                 border=t["border"],
                 text_color=t["text"],
+                height="100%",
             )
             card_markups.append(cm)
 
         cards_str = ",\n    ".join(card_markups)
 
-        body = f"""v(1fr)
-
-  grid(
-    columns: (1fr, 1fr),
-    gutter: 14pt,
-    {cards_str}
-  )
-
-  v(1fr)"""
-
+        # Render directly on the page (not inside _body_block) so the grid can
+        # use v(1fr) expansion to fill all remaining height above the footer bar.
+        # The page content area after header ≈ 9.4cm — the grid fills this via
+        # a show-rule-style approach: explicit grid height anchors 1fr rows.
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -821,8 +823,20 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
+  v(6pt)
 
-  {self._body_block(body, footnote)}
+  // Use explicit fixed row heights so each card fills its cell.
+  // Available ≈ 9.0cm after badge+title+spacing. Two rows + 14pt gutter:
+  //   row_h = (9.0cm − 14pt) / 2 ≈ 4.25cm
+  grid(
+    columns: (1fr, 1fr),
+    rows: (4.25cm, 4.25cm),
+    gutter: 14pt,
+    {cards_str}
+  )
+
+  v(1fr)
+  {footer_bar(footnote, t['border'], t['muted'])}
 }}"""
 
     # -- Stat slide --------------------------------------------------------
@@ -2144,10 +2158,10 @@ class TypstSlideRenderer:
 
   grid(
     columns: (2.2fr, 1fr),
-    rows: (8.0cm,),
+    rows: (8.6cm,),
     gutter: 12pt,
     block(width: 100%, height: 100%)[
-      #align(center + horizon, {self._image_markup(image_path, height="95%", width="95%", fit='"contain"')})
+      #align(center + horizon, {self._image_markup(image_path, height="100%", width="100%", fit='"contain"')})
     ],
     block(
       fill: {_rgb(t['card_fill'])},

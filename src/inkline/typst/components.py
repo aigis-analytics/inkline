@@ -77,17 +77,22 @@ def card(
     border: str | None = None,
     text_color: str = "#111111",
     radius: int = 3,
+    height: str | None = None,
 ) -> str:
     """Content card with optional border.
 
+    height: Typst dimension string (e.g. "100%") to make the card fill its
+    grid cell vertically. Leave None for natural (auto) height.
 """
     stroke = f"stroke: 0.75pt + {_rgb(border)}," if border else ""
+    height_prop = f"height: {height}," if height else ""
     return f"""block(
       fill: {_rgb(fill)},
       {stroke}
       radius: {radius}pt,
       inset: 14pt,
       width: 100%,
+      {height_prop}
     )[
       {body}
     ]"""
