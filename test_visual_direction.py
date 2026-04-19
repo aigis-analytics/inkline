@@ -21,10 +21,11 @@ from inkline.typst import export_typst_slides
 def test_brand_guidelines():
     """Brand Guidelines: brand_editorial register, organic_ink style."""
     print("\n" + "="*60)
-    print("TEST 1: Brand Guidelines Deck")
+    print("TEST 1: Brand Guidelines Deck (with n8n background generation)")
     print("="*60)
 
     advisor = DesignAdvisor(brand="minimal", template="editorial")
+    advisor._n8n_endpoint = "http://localhost:5678/webhook/inkblot-icon"
     design_context = DesignContext(
         audience="design community",
         tone="visionary",
@@ -83,10 +84,11 @@ def test_brand_guidelines():
 def test_pitch_deck():
     """Pitch Deck: investor_pitch register, abstract_geometric style."""
     print("\n" + "="*60)
-    print("TEST 2: Pitch Deck")
+    print("TEST 2: Pitch Deck (with n8n background generation)")
     print("="*60)
 
     advisor = DesignAdvisor(brand="minimal", template="pitch")
+    advisor._n8n_endpoint = "http://localhost:5678/webhook/inkblot-icon"
     design_context = DesignContext(
         audience="seed investors",
         tone="visionary",
