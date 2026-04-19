@@ -27,6 +27,9 @@ Usage::
 """
 
 from inkline.intelligence.design_advisor import DesignAdvisor, LLMCaller
+from inkline.intelligence.visual_brief import VisualBrief
+from inkline.intelligence.visual_direction import generate_visual_brief
+from inkline.intelligence.design_brief import DesignBrief, generate_brief
 from inkline.intelligence.claude_code import (
     build_claude_code_caller,
     claude_code_available,

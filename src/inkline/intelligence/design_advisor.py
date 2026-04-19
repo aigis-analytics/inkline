@@ -811,6 +811,28 @@ class DesignAdvisor:
                     except Exception as _brief_err:
                         log.info("DesignAdvisor: design brief generation skipped (%s)", _brief_err)
 
+                # 1.6: Generate visual brief (NEW VISUAL DIRECTION LAYER)
+                visual_brief = None
+                if brief:
+                    try:
+                        from inkline.intelligence.visual_direction import generate_visual_brief
+                        # For now, pass empty n8n endpoint — caller can override
+                        # In future: read from env or config: os.environ.get("INKLINE_N8N_WEBHOOK", "")
+                        visual_brief = generate_visual_brief(
+                            deck_outline=[],  # Will be populated after Phase 1 plan
+                            design_brief=brief,
+                            brand=self.brand,
+                            n8n_endpoint="",
+                        )
+                        log.info("DesignAdvisor: generated visual brief (template=%s, register=%s)",
+                                 visual_brief.template, visual_brief.register)
+                        # Override template selection if visual brief recommends
+                        if visual_brief.template != self.template:
+                            log.info("DesignAdvisor: template override %s → %s (visual direction)",
+                                     self.template, visual_brief.template)
+                    except Exception as _vb_err:
+                        log.warning("DesignAdvisor: visual brief generation failed (%s)", _vb_err)
+
                 llm_slides = self._design_deck_llm(
                     title, llm_only, date=date, subtitle=subtitle,
                     contact=contact, audience=audience, goal=goal,
