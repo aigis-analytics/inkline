@@ -6,7 +6,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "inkblot-icon",
-        "responseMode": "onReceived",
+        "responseMode": "lastNode",
         "options": {}
       },
       "id": "webhook",
@@ -60,7 +60,7 @@
     {
       "parameters": {
         "respondWithOptions": {
-          "responseBody": "{\"image_path\":\"{{ $node['write_file'].json.file_path }}\"}"
+          "responseBody": "{\"image_path\":\"{{ $input.first().file_path }}\"}"
         },
         "options": {}
       },

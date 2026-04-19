@@ -155,7 +155,10 @@ def _format_template_list() -> str:
     """List all available templates for the LLM."""
     from inkline.intelligence.template_catalog import load_manifest
 
-    manifest = load_manifest()
+    try:
+        manifest = load_manifest("minimal")
+    except Exception:
+        manifest = None
     if not manifest:
         return "- pitch, consulting, editorial, dmd_stripe, dmd_apple, dmd_framer, banking, boardroom, investor, executive, dmd_vercel, dmd_cursor, dmd_warp, brand (default)"
 
