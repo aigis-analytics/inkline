@@ -1,0 +1,89 @@
+{
+  "name": "Gemini Dynamic Image Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inkblot-icon",
+        "options": {}
+      },
+      "id": "60dc1037-f083-4120-a086-849ddfed3dc2",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "fe43d0d0-961b-4cfb-913a-ea0f6a37423c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "body": "={{JSON.stringify({contents:[{role:'user',parts:[{text:$json.body.prompt}]}],generationConfig:{responseMimeType:'image/png'}})}}",
+        "options": {}
+      },
+      "id": "89f410b3-92fd-454d-a915-c13ae88cbc4e",
+      "name": "Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fileName": "=/tmp/inkline_bg_{{ Date.now() }}.png",
+        "fileContent": "={{ Buffer.from($node['Gemini API'].json.candidates[0].content.parts[0].inline_data.data, 'base64') }}",
+        "options": {}
+      },
+      "id": "3a63abcc-57cf-425c-a405-ce852a2b5c1d",
+      "name": "Write Binary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini API": {
+      "main": [
+        [
+          {
+            "node": "Write Binary File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "73a8f785-8c76-47de-bdde-f4dc93a1aff9",
+  "meta": {
+    "instanceId": "6701686dc6781a101aefe96a2085b2c3ce461322a1980c05b414ea319d35ff6a"
+  },
+  "id": "3giZBYkWrDsQhZKZ",
+  "tags": []
+}
