@@ -759,10 +759,16 @@ class TypstSlideRenderer:
 
         cards_str = ",\n    ".join(card_markups)
 
-        # Single-row grid of 3 cards with explicit row height so all cards fill
-        # visually to the same bottom edge.
-        # Available ≈ 11.69 − header(1.6) − footer(0.8) = 9.29cm. Use 9.0cm.
-        # Cards use height: 100% to fill the row completely.
+        # Single-row grid of 3 cards, vertically centered between header and footer.
+        # Two equal v(1fr) bracket the grid: one above, one below (before the footer).
+        # rows: (5.5cm,) is content-sized — tall enough without feeling cavernous.
+        # Footer is inlined with a fixed gap (no extra v(1fr) from footer_bar).
+        footnote_block = (
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n  '
+            f'v(4pt)\n  text(size: 7pt, fill: {_rgb(t["muted"])})[{footnote}]'
+            if footnote else
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})'
+        )
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -772,17 +778,19 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(8pt)
+
+  v(1fr)
 
   grid(
     columns: (1fr, 1fr, 1fr),
-    rows: (9.0cm,),
+    rows: (4.2cm,),
     gutter: 14pt,
     {cards_str}
   )
 
   v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+
+  {footnote_block}
 }}"""
 
     # -- Four card slide ---------------------------------------------------
@@ -810,10 +818,16 @@ class TypstSlideRenderer:
 
         cards_str = ",\n    ".join(card_markups)
 
-        # Render directly on the page (not inside _body_block) so the grid can
-        # use v(1fr) expansion to fill all remaining height above the footer bar.
-        # The page content area after header ≈ 9.4cm — the grid fills this via
-        # a show-rule-style approach: explicit grid height anchors 1fr rows.
+        # Two-row 2×2 grid, vertically centered between header and footer.
+        # Two equal v(1fr) bracket the grid: one above, one below (before the footer).
+        # rows: (4.0cm, 4.0cm) is content-sized — comfortable for 2–3 line bodies.
+        # Footer is inlined with a fixed gap (no extra v(1fr) from footer_bar).
+        footnote_block = (
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n  '
+            f'v(4pt)\n  text(size: 7pt, fill: {_rgb(t["muted"])})[{footnote}]'
+            if footnote else
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})'
+        )
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -823,20 +837,19 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(6pt)
 
-  // Use explicit fixed row heights so each card fills its cell.
-  // Available ≈ 9.0cm after badge+title+spacing. Two rows + 14pt gutter:
-  //   row_h = (9.0cm − 14pt) / 2 ≈ 4.25cm
+  v(1fr)
+
   grid(
     columns: (1fr, 1fr),
-    rows: (4.25cm, 4.25cm),
+    rows: (3.2cm, 3.2cm),
     gutter: 14pt,
     {cards_str}
   )
 
   v(1fr)
-  {footer_bar(footnote, t['border'], t['muted'])}
+
+  {footnote_block}
 }}"""
 
     # -- Stat slide --------------------------------------------------------
@@ -1796,8 +1809,16 @@ class TypstSlideRenderer:
 
         cells_str = ",\n    ".join(cells)
 
-        # Build slide without _body_block to avoid the hard 9cm clip.
-        # grid is top-aligned; v(1fr) pushes the footer to the absolute bottom.
+        # 3×2 grid, vertically centered between header and footer.
+        # Two equal v(1fr) bracket the grid: one above, one below (before the footer).
+        # rows: (4.2cm, 4.2cm) is content-sized for 6-feature grids.
+        # Footer is inlined with a fixed gap (no extra v(1fr) from footer_bar).
+        footnote_block = (
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n  '
+            f'v(4pt)\n  text(size: 7pt, fill: {_rgb(t["muted"])})[{footnote}]'
+            if footnote else
+            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})'
+        )
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
   set text(fill: {_rgb(t['text'])})
@@ -1807,17 +1828,19 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(8pt)
+
+  v(1fr)
 
   grid(
     columns: (1fr, 1fr, 1fr),
+    rows: (4.2cm, 4.2cm),
     gutter: 10pt,
     {cells_str}
   )
 
   v(1fr)
 
-  {footer_bar(footnote, t['border'], t['muted'])}
+  {footnote_block}
 }}"""
 
     # -- Dashboard slide (chart + stats + bullets) -------------------------
