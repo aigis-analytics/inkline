@@ -524,17 +524,36 @@ See `inkline.intelligence.vishwakarma` for the constants and
   <img src="brand/logo/rendered/lockup-horizontal.png" alt="Inkline" width="320">
 </p>
 
-Inkline's brand system is defined in [`brand/BRAND_GUIDELINES.md`](brand/BRAND_GUIDELINES.md).
-The `brand/` directory ships the full identity: SVG sources, rendered PNGs (mark, wordmark,
-horizontal and stacked lockups), favicon, and colour palette reference.
+<p align="center">
+  <img src="brand/logo/rendered/mark-512.png" alt="Inkline mark — ink drop" width="120">&nbsp;&nbsp;&nbsp;
+  <img src="brand/logo/rendered/mark-icon-512.png" alt="Inkline app icon" width="120">
+</p>
 
-**Core colours:**
+The mark is a stylised lowercase **i** — the tittle replaced by a teardrop ink drop as if ink has just fallen from a nib. Two variants: the standalone ink drop (left) for print and lockups; the rounded-tile app icon (right) for favicons and mobile.
 
-| Name | Hex | Usage |
-|------|-----|-------|
-| Ink | `#0A0A0A` | Primary text, mark |
-| Indigo | `#3D2BE8` | Accent, links, highlights |
-| Vellum | `#F7F6F2` | Background, light surfaces |
+Inkline's full brand system is defined in [`brand/BRAND_GUIDELINES.md`](brand/BRAND_GUIDELINES.md).
+The `brand/` directory ships SVG sources, rendered PNGs (mark, wordmark, lockups, app icon), favicon, and colour palette.
+
+**Primary palette:**
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| Ink | `#0A0A0A` | Primary text, "ink" half of wordmark |
+| Indigo | `#3D2BE8` | Brand primary, "line" half, CTAs, stem |
+| Indigo Light | `#6C5FFF` | Gradient start, hover, selected |
+| Vellum | `#F7F6F2` | Page background, card fills |
+| Slate | `#64748B` | Secondary text, captions, metadata |
+| Rule | `#E2E1DC` | Dividers, borders, table rules |
+
+**Accent palette (data & status):**
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| Violet | `#7C3AED` | Extended brand, chart complement |
+| Cobalt | `#1E40AF` | Links, informational states |
+| Vermilion | `#DC2626` | Errors, FAIL states |
+| Sage | `#16A34A` | Success, PASS states |
+| Amber | `#D97706` | Warnings, caution |
 
 Brand assets are available under the same MIT licence as the code.
 
