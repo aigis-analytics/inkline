@@ -1,0 +1,85 @@
+{
+  "name": "Gemini Inkblot Icon Generator",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inkblot-icon",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCAz-xuvLIkhrMMVOITPjIOG8-2ERQd0AE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "bodyParametersUiExpression": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "[{\"parts\":[{\"text\":\"Generate a square icon: organic ink blotch splat shape in deep indigo color #3D2BE8, with white italic serif lowercase 'i' character perfectly centered inside the blotch. White background. Flat design, no gradients or shadows. High contrast, clean edges.\"}]}]"
+            },
+            {
+              "name": "generationConfig",
+              "value": "{\"responseMimeType\":\"image/png\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "gemini_api",
+      "name": "Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "/mnt/d/inkline/brand/logo/inkblot-icon-512.png",
+        "fileContent": "={{ Buffer.from($response.body.candidates[0].content.parts[0].inline_data.data, 'base64') }}",
+        "options": {}
+      },
+      "id": "write_file",
+      "name": "Write Binary File",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [500, 300]
+    }
+  ],
+  "connections": {
+    "webhook": {
+      "main": [
+        [
+          {
+            "node": "gemini_api",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gemini_api": {
+      "main": [
+        [
+          {
+            "node": "write_file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
