@@ -1,7 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 128" fill="none" role="img" aria-label="Inkline mark (white)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 256" fill="none" role="img" aria-label="Inkline mark (white)">
   <title>Inkline</title>
   <!-- Ink drop — white version for dark backgrounds -->
-  <path d="M 28,28 A 22,22 0 1,1 72,28 Q 72,48 50,60 Q 28,48 28,28 Z"
+  <!-- Same paths as mark.svg but all fills white -->
+  <path d="M 56,56 A 44,44 0 1,1 144,56 Q 144,96 100,120 Q 56,96 56,56 Z"
         fill="#FFFFFF"/>
-  <rect x="44" y="70" width="12" height="52" rx="6" fill="#FFFFFF"/>
+  <rect x="88" y="140" width="24" height="104" rx="12" fill="#FFFFFF"/>
 </svg>

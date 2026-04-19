@@ -30,6 +30,9 @@ class DocumentSpec:
     author: str = ""
     sections: list[dict[str, Any]] = field(default_factory=list)
     paper: str = "a4"  # "a4" or "us-letter"
+    cover_panel: dict[str, str] | None = None  # key/value pairs for cover metrics (up to 6)
+    toc_panel: dict[str, Any] | None = None  # keys: title, cards, how_to_read, confidentiality_notice
+    section_dividers: bool = False  # insert full-bleed divider pages before level-1 sections (3+ required)
 
 
 # ---------------------------------------------------------------------------
@@ -49,10 +52,20 @@ class TypstDocumentRenderer:
             self._heading_styles(),
             self._component_defs(),
             self._cover_page(spec),
-            self._toc_page(),
+            self._toc_page(spec),
         ]
 
+        # Count level-1 sections to determine if dividers are appropriate
+        l1_sections = [s for s in spec.sections if s.get("level", 1) == 1]
+        use_dividers = spec.section_dividers and len(l1_sections) >= 3
+
+        l1_counter = 0
         for section in spec.sections:
+            if use_dividers and section.get("level", 1) == 1:
+                l1_counter += 1
+                parts.append(
+                    self._section_divider_page(l1_counter, section.get("heading", ""))
+                )
             parts.append(self._render_section(section))
 
         return "\n\n".join(parts)
@@ -68,9 +81,32 @@ class TypstDocumentRenderer:
             self._heading_styles(),
             self._component_defs(),
             self._cover_page(spec),
-            self._toc_page(),
-            self._markdown_to_typst(markdown),
+            self._toc_page(spec),
         ]
+
+        # Count # headings to determine if dividers are appropriate
+        l1_headings = [ln for ln in markdown.split("\n") if re.match(r"^# ", ln)]
+        use_dividers = spec.section_dividers and len(l1_headings) >= 3
+
+        if use_dividers:
+            # Interleave section divider pages before each level-1 heading
+            md_lines = markdown.split("\n")
+            l1_counter = 0
+            current_chunk: list[str] = []
+            for line in md_lines:
+                if re.match(r"^# ", line):
+                    if current_chunk:
+                        parts.append(self._markdown_to_typst("\n".join(current_chunk)))
+                        current_chunk = []
+                    l1_counter += 1
+                    heading_text = line.lstrip("# ").strip()
+                    parts.append(self._section_divider_page(l1_counter, heading_text))
+                current_chunk.append(line)
+            if current_chunk:
+                parts.append(self._markdown_to_typst("\n".join(current_chunk)))
+        else:
+            parts.append(self._markdown_to_typst(markdown))
+
         return "\n\n".join(parts)
 
     # -- Preamble ----------------------------------------------------------
@@ -100,11 +136,32 @@ class TypstDocumentRenderer:
   fill: white,
   margin: (top: 3cm, bottom: 2.5cm, left: 2.5cm, right: 2.5cm),
   header: context {{
-    if counter(page).get().first() > 1 {{
+    let pg = counter(page).get().first()
+    if pg > 2 {{
+      // Suppress on cover (pg 0 has no header), TOC (pg 1), and first content page
+      let headings = query(heading.where(level: 1).before(here()))
+      let section-name = if headings.len() > 0 {{
+        upper(headings.last().body)
+      }} else {{
+        ""
+      }}
+      let page-display = [
+        #counter(page).display() of #context counter(page).final().first()
+      ]
       grid(
         columns: (1fr, auto),
-        text(font: "{heading_font}", weight: "bold", size: 9pt, fill: {_rgb(accent)})[{doc_title}],
-        {header_right},
+        align: (left + horizon, right + horizon),
+        text(
+          font: "{heading_font}",
+          size: 8pt,
+          fill: {_rgb(muted)},
+          tracking: 0.05em,
+        )[#section-name],
+        text(
+          font: "{heading_font}",
+          size: 8pt,
+          fill: {_rgb(muted)},
+        )[#section-name #sym.dot.c Page #page-display],
       )
       v(4pt)
       line(length: 100%, stroke: 0.5pt + {_rgb(border)})
@@ -122,8 +179,17 @@ class TypstDocumentRenderer:
 )
 
 #set text(font: "{body_font}", size: {body_size}pt, fill: {_rgb(t.get('text', '#1A1A1A'))})
-#set par(leading: 0.8em, justify: true)
-#set table(stroke: 0.5pt + {_rgb(border)}, inset: 6pt)"""
+#set par(leading: 1.5em, justify: true, spacing: 0.65em)
+#set table(stroke: 0.5pt + {_rgb(border)}, inset: 6pt)
+
+// OpenType figure variants — applied at style level
+// Tabular figures in all table cells (fixed-width, columns align)
+#show table.cell: set text(features: ("tnum": 1))
+
+// Old-style figures in body paragraphs (proportional, typographically correct)
+// Applied only to par content, not headings or table cells.
+// Headings use lining figures (OpenType default) — no override needed.
+#show par: set text(features: ("onum": 1))"""
 
     # -- Heading styles ----------------------------------------------------
 
@@ -138,6 +204,7 @@ class TypstDocumentRenderer:
 #set heading(numbering: none)
 
 #show heading.where(level: 1): it => {{
+  set par(leading: 1.15em)
   v(16pt)
   text(font: "{heading_font}", weight: "bold", size: 18pt, fill: {_rgb(accent)})[#it]
   v(4pt)
@@ -146,12 +213,14 @@ class TypstDocumentRenderer:
 }}
 
 #show heading.where(level: 2): it => {{
+  set par(leading: 1.15em)
   v(12pt)
   text(font: "{heading_font}", weight: "bold", size: 14pt, fill: {_rgb(accent)})[#it]
   v(6pt)
 }}
 
 #show heading.where(level: 3): it => {{
+  set par(leading: 1.15em)
   v(8pt)
   text(font: "{heading_font}", weight: "bold", size: 12pt, fill: {_rgb(text_color)})[#it]
   v(4pt)
@@ -168,10 +237,51 @@ class TypstDocumentRenderer:
         light_bg = t.get("surface", "#F4F6F8")
         border = t.get("border", "#D1D5DB")
 
+        slate = t.get("slate", "#64748B")
         return f"""// Reusable components
+
+// Uppercase label with standard tracking
+#let label-text(content, size: 8pt, color: rgb("#6B7280")) = {{
+  text(size: size, tracking: 0.08em, fill: color)[#upper(content)]
+}}
+
+// Exhibit counters and wrappers
+#let figure-counter = counter("figures")
+#let table-counter = counter("tables")
+
+// Figure: caption BELOW, incrementing Figure counter
+#let fig(image-content, caption: none, source: none) = {{
+  figure-counter.step()
+  block(width: 100%)[
+    #image-content
+    #v(4pt)
+    #text(size: 9pt, weight: "bold")[Figure #figure-counter.display()]
+    #if caption != none [ --- #text(size: 9pt)[#caption]]
+    #if source != none [
+      #v(2pt)
+      #text(size: 8pt, fill: {_rgb(slate)}, style: "italic")[Source: #source]
+    ]
+  ]
+}}
+
+// Table: caption ABOVE, incrementing Table counter
+#let tbl(table-content, caption: none, source: none) = {{
+  table-counter.step()
+  block(width: 100%)[
+    #text(size: 9pt, weight: "bold")[Table #table-counter.display()]
+    #if caption != none [ --- #text(size: 9pt)[#caption]]
+    #v(4pt)
+    #table-content
+    #if source != none [
+      #v(2pt)
+      #text(size: 8pt, fill: {_rgb(slate)}, style: "italic")[Source: #source]
+    ]
+  ]
+}}
+
 #let rag-badge(status) = {{
   let color = if status == "RED" {{ rgb("#dc2626") }} else if status == "AMBER" {{ rgb("#f59e0b") }} else if status == "GREEN" {{ rgb("#10b981") }} else {{ rgb("#6b7280") }}
-  box(fill: color, radius: 2pt, inset: (x: 6pt, y: 2pt), text(size: 8pt, weight: "bold", fill: white)[#upper(status)])
+  box(fill: color, radius: 2pt, inset: (x: 6pt, y: 2pt), text(size: 8pt, weight: "bold", tracking: 0.08em, fill: white)[#upper(status)])
 }}
 
 #let callout(title, body, color: {_rgb(accent)}) = {{
@@ -196,7 +306,7 @@ class TypstDocumentRenderer:
   align(center)[
     #text(weight: "bold", size: 24pt, fill: {_rgb(accent)})[#value]
     #v(2pt)
-    #text(size: 9pt, fill: {_rgb(muted)})[#upper(label)]
+    #text(size: 9pt, tracking: 0.08em, fill: {_rgb(muted)})[#upper(label)]
   ]
 }}"""
 
@@ -244,7 +354,39 @@ class TypstDocumentRenderer:
             )
 
         secondary = t.get("secondary", "#B8960C")
-        return f"""// Cover page — top-logo / title / deal-metrics card / bottom-metadata
+
+        # Build cover panel block — parameterised or empty spacer
+        if spec.cover_panel:
+            panel_cells = "\n    ".join(
+                f"""[
+      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[{_esc(v)}]
+      #v(3pt)
+      #text(fill: rgb("#c0d0c0"), size: 8pt, tracking: 0.08em)[{_esc(k)}]
+    ]"""
+                for k, v in list(spec.cover_panel.items())[:6]
+            )
+            n_cols = min(len(spec.cover_panel), 4)
+            col_spec = "(1fr, " * n_cols + ")"
+            cover_panel_block = f"""#block(
+  width: 100%,
+  inset: (x: 22pt, y: 18pt),
+  fill: {_rgb(accent)},
+  radius: 4pt,
+)[
+  #text(fill: white, weight: "bold", size: 7.5pt, tracking: 2pt)[HIGHLIGHTS]
+  #v(14pt)
+  #grid(
+    columns: {col_spec},
+    gutter: 6pt,
+    {panel_cells}
+  )
+]
+
+#v(1.2cm)"""
+        else:
+            cover_panel_block = "#v(1.2cm)"
+
+        return f"""// Cover page — top-logo / title / highlights panel / bottom-metadata
 #set page(header: none, footer: none, margin: (top: 2.5cm, bottom: 2.0cm, left: 2.5cm, right: 2.5cm))
 
 #v(0.2cm)
@@ -263,40 +405,7 @@ class TypstDocumentRenderer:
 
 #v(1.2cm)
 
-// Deal-at-a-glance panel — fills the visual gap between title block and metadata
-#block(
-  width: 100%,
-  inset: (x: 22pt, y: 18pt),
-  fill: {_rgb(accent)},
-  radius: 4pt,
-)[
-  #text(fill: white, weight: "bold", size: 7.5pt, tracking: 2pt)[DEAL AT A GLANCE]
-  #v(14pt)
-  #grid(
-    columns: (1fr, 1fr, 1fr, 1fr),
-    gutter: 6pt,
-    [
-      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[£80m]
-      #v(3pt)
-      #text(fill: rgb("#c0d0c0"), size: 8pt)[Total debt target]
-    ],
-    [
-      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[~9.5%]
-      #v(3pt)
-      #text(fill: rgb("#c0d0c0"), size: 8pt)[Blended cost]
-    ],
-    [
-      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[£14–15m]
-      #v(3pt)
-      #text(fill: rgb("#c0d0c0"), size: 8pt)[Bullet saving vs offer]
-    ],
-    [
-      #text(fill: {_rgb(secondary)}, weight: "bold", size: 22pt)[3]
-      #v(3pt)
-      #text(fill: rgb("#c0d0c0"), size: 8pt)[Markets: UK, KSA, UAE]
-    ],
-  )
-]
+{cover_panel_block}
 
 #v(1fr)
 
@@ -311,16 +420,19 @@ class TypstDocumentRenderer:
 
     # -- TOC ---------------------------------------------------------------
 
-    def _toc_page(self) -> str:
+    def _toc_page(self, spec: DocumentSpec | None = None) -> str:
         t = self.t
         accent = t.get("accent", "#1a3a5c")
         heading_font = t.get("heading_font", "Inter")
         muted = t.get("muted", "#6B7280")
         border = t.get("border", "#D1D5DB")
+        conf = t.get("confidentiality", "")
 
-        secondary = t.get("secondary", "#B8960C")
+        toc_panel = spec.toc_panel if spec is not None else None
         light_bg2 = t.get("light_bg", "#f0f4f8")
-        return f"""// Table of Contents
+        secondary = t.get("secondary", "#B8960C")
+
+        toc_base = f"""// Table of Contents
 #set page(header: auto, footer: auto)
 #counter(page).update(1)
 
@@ -331,62 +443,48 @@ class TypstDocumentRenderer:
   #outline(title: none, indent: 1.5em, depth: 2)
 ]
 
-#v(22pt)
+#v(22pt)"""
 
-// Capital structure overview — fills blank space below outline
-#block(
+        if toc_panel:
+            # Parameterised TOC panel
+            panel_title = _esc(toc_panel.get("title", ""))
+            cards = toc_panel.get("cards", [])
+            how_to_read = toc_panel.get("how_to_read")
+            conf_notice = toc_panel.get("confidentiality_notice")
+
+            n_cols = max(1, len(cards))
+            col_spec = ", ".join(["1fr"] * n_cols)
+            card_blocks = "\n    ".join(
+                f"""block(
+      stroke: (left: 3pt + {_rgb(accent)}),
+      inset: (left: 12pt, rest: 10pt),
+      fill: {_rgb(light_bg2)},
+      radius: (right: 4pt),
+      width: 100%,
+    )[
+      #text(weight: "bold", size: 9pt, fill: {_rgb(accent)})[{_esc(card.get("heading", ""))}]
+      #v(4pt)
+      #text(size: 8pt, fill: {_rgb(muted)})[{_esc(card.get("body", ""))}]
+    ]"""
+                for card in cards
+            )
+
+            panel_block = f"""#block(
   width: 100%,
   inset: (x: 0pt, y: 0pt),
 )[
-  #text(weight: "bold", size: 7.5pt, tracking: 2pt, fill: {_rgb(muted)})[RECOMMENDED CAPITAL STRUCTURE]
+  #text(weight: "bold", size: 7.5pt, tracking: 2pt, fill: {_rgb(muted)})[{panel_title}]
   #v(10pt)
   #grid(
-    columns: (1fr, 1fr, 1fr),
+    columns: ({col_spec}),
     gutter: 10pt,
-    block(
-      stroke: (left: 3pt + {_rgb(accent)}),
-      inset: (left: 12pt, rest: 10pt),
-      fill: {_rgb(light_bg2)},
-      radius: (right: 4pt),
-      width: 100%,
-    )[
-      #text(weight: "bold", size: 15pt, fill: {_rgb(accent)})[£40m]
-      #v(3pt)
-      #text(weight: "bold", size: 8pt)[Tranche 1 — Senior Secured]
-      #v(4pt)
-      #text(size: 8pt, fill: {_rgb(muted)})[Lease-backed facility. Target ~8–8.75%. OakNorth, Cheyne, M&G, Abrdn. 5–7 year term.]
-    ],
-    block(
-      stroke: (left: 3pt + {_rgb(accent)}),
-      inset: (left: 12pt, rest: 10pt),
-      fill: {_rgb(light_bg2)},
-      radius: (right: 4pt),
-      width: 100%,
-    )[
-      #text(weight: "bold", size: 15pt, fill: {_rgb(accent)})[£35–40m]
-      #v(3pt)
-      #text(weight: "bold", size: 8pt)[Tranche 2 — Junior Growth Debt]
-      #v(4pt)
-      #text(size: 8pt, fill: {_rgb(muted)})[Key-money facility. Target 11–13%. Blackstone BREDS, Ares, ICG, Bridges. 6–7 year term.]
-    ],
-    block(
-      stroke: (left: 2pt + {_rgb(secondary)}, rest: 0.5pt + {_rgb(secondary)}),
-      inset: (left: 12pt, rest: 10pt),
-      fill: {_rgb(light_bg2)},
-      radius: (right: 4pt),
-      width: 100%,
-    )[
-      #text(weight: "bold", size: 8pt, fill: {_rgb(secondary)})[CARVE-OUT WITHIN TRANCHE 2]
-      #v(3pt)
-      #text(weight: "bold", size: 15pt, fill: {_rgb(secondary)})[£15–20m]
-      #v(3pt)
-      #text(weight: "bold", size: 8pt)[Shariah-Compliant Sub-Tranche]
-      #v(4pt)
-      #text(size: 8pt, fill: {_rgb(muted)})[MENA key-money assets only. Murabaha/Ijara via ADGM SPV. ADIB, ADCB. Target 6.5–8.5%. Not additive to T2 quantum.]
-    ],
+    {card_blocks}
   )
-]
+]"""
 
+            how_block = ""
+            if how_to_read:
+                how_block = f"""
 #v(18pt)
 #block(
   width: 100%,
@@ -395,13 +493,38 @@ class TypstDocumentRenderer:
   fill: {_rgb(light_bg2)},
   radius: (right: 4pt),
 )[
-  #text(weight: "bold", size: 9pt, fill: {_rgb(accent)})[HOW TO READ THIS NOTE]
+  #text(weight: "bold", size: 9pt, fill: {_rgb(accent)})[HOW TO READ THIS DOCUMENT]
   #v(6pt)
-  #text(size: 9.5pt)[
-    This briefing note supports a decision on Acme Co.'s debt capital raise. The #strong[Executive Abstract] and #strong[Situation Summary] frame the problem. The #strong[Recommended Capital Structure] sections detail each tranche with indicative terms and named target lenders. The #strong[Blended Cost Comparison] quantifies the saving versus the current offer. #strong[Key Risks] and #strong[Negotiating Position] are written for direct use in lender discussions.
-  ]
-]
+  #text(size: 9.5pt)[{_esc(how_to_read)}]
+]"""
 
+            conf_text = conf_notice if conf_notice else conf
+            conf_block = f"""#v(1fr)
+
+#block(
+  width: 100%,
+  inset: (x: 16pt, y: 12pt),
+  fill: {_rgb(accent)},
+  radius: 4pt,
+)[
+  #text(weight: "bold", size: 9pt, fill: white)[CONFIDENTIALITY NOTICE]
+  #v(5pt)
+  #text(size: 8.5pt, fill: rgb("#d8e0d8"))[{_esc(conf_text)}]
+]"""
+
+            return f"""{toc_base}
+
+{panel_block}{how_block}
+
+{conf_block}
+
+#pagebreak()"""
+
+        else:
+            # Minimal TOC page — just outline + confidentiality notice from theme
+            conf_block = ""
+            if conf:
+                conf_block = f"""
 #v(1fr)
 
 #block(
@@ -412,14 +535,47 @@ class TypstDocumentRenderer:
 )[
   #text(weight: "bold", size: 9pt, fill: white)[CONFIDENTIALITY NOTICE]
   #v(5pt)
-  #text(size: 8.5pt, fill: rgb("#d8e0d8"))[This document is strictly private and confidential. It has been prepared solely for the named recipient and must not be reproduced, distributed, or disclosed to any third party without the prior written consent of TVF Advisory.]
-  #v(8pt)
-  #align(right)[
-    #text(weight: "bold", size: 8.5pt, fill: {_rgb(t.get("secondary", "#B8960C"))})[TVF Advisory — t-v.foundation]
-  ]
-]
+  #text(size: 8.5pt, fill: rgb("#d8e0d8"))[{_esc(conf)}]
+]"""
+
+            return f"""{toc_base}
+{conf_block}
 
 #pagebreak()"""
+
+    # -- Section divider page ----------------------------------------------
+
+    def _section_divider_page(self, section_number: int, heading: str) -> str:
+        """Render a full-bleed accent-coloured section divider page."""
+        t = self.t
+        accent = t.get("accent", "#1a3a5c")
+        heading_font = t.get("heading_font", "Inter")
+        return f"""// Section divider — {heading}
+#page(
+  fill: {_rgb(accent)},
+  margin: (top: 0pt, bottom: 0pt, left: 0pt, right: 0pt),
+  header: none,
+  footer: none,
+)[
+  #align(center + horizon)[
+    #v(1fr)
+    #text(
+      font: "{heading_font}",
+      size: 11pt,
+      weight: "bold",
+      fill: white,
+      tracking: 0.15em,
+    )[#upper("Section {section_number}")]
+    #v(0.6cm)
+    #text(
+      font: "{heading_font}",
+      size: 36pt,
+      weight: "bold",
+      fill: white,
+    )[{_esc(heading)}]
+    #v(1fr)
+  ]
+]"""
 
     # -- Section rendering -------------------------------------------------
 
@@ -430,17 +586,38 @@ class TypstDocumentRenderer:
         - heading: str — section heading text
         - level: int — heading level (1, 2, 3)
         - content: str — body text (Typst markup)
+        - exhibits: list[dict] — optional exhibits; each dict has:
+            type: "figure" | "table"
+            content: str — Typst content expression
+            caption: str (optional)
+            source: str (optional)
         - pagebreak: bool — add pagebreak after section
         """
         level = section.get("level", 1)
         heading = section.get("heading", "")
         content = section.get("content", "")
+        exhibits = section.get("exhibits", [])
         pb = section.get("pagebreak", False)
 
         heading_prefix = "=" * level
         parts = [f"{heading_prefix} {heading}"]
         if content:
             parts.append(content)
+
+        for exhibit in exhibits:
+            ex_type = exhibit.get("type", "figure")
+            ex_content = exhibit.get("content", "")
+            caption = exhibit.get("caption")
+            source = exhibit.get("source")
+
+            caption_arg = f', caption: "{_esc(caption)}"' if caption else ""
+            source_arg = f', source: "{_esc(source)}"' if source else ""
+
+            if ex_type == "table":
+                parts.append(f"#tbl({ex_content}{caption_arg}{source_arg})")
+            else:
+                parts.append(f"#fig({ex_content}{caption_arg}{source_arg})")
+
         if pb:
             parts.append("#pagebreak()")
 
