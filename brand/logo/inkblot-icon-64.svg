@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Inkline — 64px ink-blot icon</title>
+  <desc>
+    Organic ink-blot background with a white italic serif "i" (apostrophe-drop tittle)
+    reversed out.  Designed as a favicon / app-icon tile.
+  </desc>
+
+  <!-- ============================================================
+       BLOT — scaled to fill roughly 60×55 inside the 64×64 canvas.
+       Original blot path is ~132 wide × 116 tall; scale factor 0.455.
+       Centred: offset x = (64 - 132*0.455)/2 ≈ 2, y = (64 - 116*0.455)/2 ≈ 5.6
+       ============================================================ -->
+  <g transform="translate(2,5.6) scale(0.455)" fill="#3D2BE8">
+    <path d="
+      M 62,8
+      C 82,4 108,8 118,26
+      C 128,20 134,34 126,48
+      C 136,58 130,76 118,84
+      C 124,96 110,108 94,104
+      C 86,114 68,116 56,106
+      C 42,116 24,106 20,90
+      C 8,90 2,74 10,58
+      C 0,44 6,26 22,20
+      C 28,6 46,10 62,8
+      Z
+    "/>
+    <circle cx="14"  cy="18"  r="4"/>
+    <circle cx="132" cy="42"  r="5"/>
+    <circle cx="28"  cy="110" r="3"/>
+  </g>
+
+  <!-- ============================================================
+       ITALIC SERIF "i" — white, centred over the blot.
+       Mark's native coordinate system is 120×200; scale factor ≈ 0.18
+       to fit inside ~22×36 at icon centre (32,32).
+       Source mark centre in its own coords: x=65, y=100.
+       After scale: offset x = 32 - 65*0.18 ≈ 20.3, y = 32 - 100*0.18 ≈ 14
+       ============================================================ -->
+  <g transform="translate(20.3,14) scale(0.18)" fill="#FFFFFF">
+    <!-- stem -->
+    <path d="
+      M 70,60
+      L 78,60
+      L 78,64
+      L 74,66
+      L 72,72
+      L 68,170
+      L 72,174
+      L 78,176
+      L 78,180
+      L 50,180
+      L 50,176
+      L 56,174
+      L 60,170
+      L 62,72
+      L 60,66
+      L 56,64
+      L 56,60
+      Z
+    "/>
+    <!-- apostrophe-drop tittle -->
+    <path d="
+      M 74,14
+      C 82,18 84,28 80,38
+      C 77,44 72,48 66,50
+      C 64,46 64,40 66,34
+      C 68,26 70,20 74,14
+      Z
+    "/>
+    <circle cx="66" cy="50" r="4.5"/>
+  </g>
+</svg>

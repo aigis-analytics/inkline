@@ -42,7 +42,71 @@ mark/icon only.
 
 ---
 
-## 2. The Wordmark
+## 2. The Ink-Blot Mark System (v2)
+
+The v2 mark system evolves the original geometric mark into a typographic identity that
+makes the "ink" half of the brand visible, not just implied. It introduces a second
+typeface family alongside Plus Jakarta Sans and a new organic blot form used as the
+standalone mark carrier.
+
+### 2.1 Concept
+
+Inkline joins two ideas: the craft of ink (literature, editorial, handwriting) and the
+precision of a line (software, geometry, the slide canvas). The v1 mark leaned fully
+geometric. The v2 system splits the identity across **two typefaces** so the compound
+meaning is rendered in the type itself:
+
+| Word half | Typeface              | Weight / style   | Reference         |
+|-----------|-----------------------|------------------|-------------------|
+| **ink**   | Cormorant Garamond    | 600, italic      | traditional print |
+| **line**  | Plus Jakarta Sans     | 200, roman       | software, grid    |
+
+EB Garamond is an approved alternative serif (both families are on Google Fonts).
+
+### 2.2 The apostrophe-drop tittle
+
+In the v2 standalone mark, the lowercase italic "i" has its tittle replaced by a
+stylised **apostrophe-form ink-drop**: a tapered teardrop that curls slightly like a
+Garamond apostrophe and terminates in a small ball foot. This references serif
+punctuation rather than inventing a new symbol — the ink drop is literally "caught the
+character of the typeface".
+
+Compared with the v1 symmetric teardrop, the apostrophe-drop is asymmetric, italic, and
+typographic; it reads as a glyph, not a pictogram.
+
+### 2.3 The blot
+
+The lockup wraps "ink" inside an **organic ink-blot** — a 12-anchor cubic-bezier form
+with three satellite spatter dots. The blot is deliberately asymmetric (heavier at
+bottom-left, protrusion at upper-right) so it never reads as a circle or ellipse. It
+carries "ink" as reversed-out serif italic white type; "line" sits to the right in the
+existing Plus Jakarta Sans 200.
+
+### 2.4 v2 files
+
+```
+brand/logo/
+├── inkblot-mark.svg                      # italic serif "i" + apostrophe-drop tittle
+├── inkblot-lockup-horizontal.svg         # blot + "ink" (serif) + "line" (sans)
+├── inkblot-lockup-horizontal-white.svg   # dark-background variant
+└── inkblot-icon-64.svg                   # 64×64 favicon / app-icon tile
+```
+
+All shapes are pure SVG paths so the mark renders identically on every system
+regardless of available web fonts. The wordmark text uses embedded Google Fonts
+`@import` with a safe fallback stack for environments that do render live SVG text.
+
+### 2.5 v1 / v2 coexistence
+
+The v1 mark (`mark.svg`, `wordmark.svg`, `lockup-*.svg`) remains the canonical
+identity for product UI and existing collateral. The v2 ink-blot system is a
+**parallel** identity for editorial, investor, and brand-forward surfaces where the
+serif-italic character is wanted. The two systems share the same colour palette
+(Inkline Indigo `#3D2BE8`) and must not be mixed inside a single composition.
+
+---
+
+## 3. The Wordmark
 
 The wordmark is **inkline** set entirely in lowercase. It uses a two-colour split:
 
@@ -72,7 +136,7 @@ in digital contexts; 25mm wide in print.
 
 ---
 
-## 3. Lockups
+## 4. Lockups
 
 Three approved lockup configurations:
 
@@ -90,7 +154,7 @@ In the horizontal lockup, this equals approximately 1× the cap-height of the wo
 
 ---
 
-## 4. Colour System
+## 5. Colour System
 
 ### Primary palette
 
@@ -132,7 +196,7 @@ In the horizontal lockup, this equals approximately 1× the cap-height of the wo
 
 ---
 
-## 5. Typography
+## 6. Typography
 
 ### Type scale
 
@@ -161,7 +225,7 @@ In the horizontal lockup, this equals approximately 1× the cap-height of the wo
 
 ---
 
-## 6. Motion (if animated)
+## 7. Motion (if animated)
 
 When the logo animates (e.g. app loading screen):
 
@@ -174,7 +238,7 @@ Suggested CSS easing: `cubic-bezier(0.16, 1, 0.3, 1)` (expo-out feel).
 
 ---
 
-## 7. Tone of Voice
+## 8. Tone of Voice
 
 Inkline's brand language mirrors the product: precise, confident, minimal.
 
@@ -195,7 +259,7 @@ Inkline's brand language mirrors the product: precise, confident, minimal.
 
 ---
 
-## 8. Don'ts
+## 9. Don'ts
 
 | Rule | Why |
 |---|---|
@@ -209,21 +273,25 @@ Inkline's brand language mirrors the product: precise, confident, minimal.
 
 ---
 
-## 9. Files
+## 10. Files
 
 ```
 brand/
 ├── logo/
-│   ├── mark.svg                   # Icon only — gradient, on light
-│   ├── mark-white.svg             # Icon only — white, on dark
-│   ├── wordmark.svg               # Text only — ink+indigo split
-│   ├── wordmark-white.svg         # Text only — white
-│   ├── lockup-horizontal.svg      # Mark + text, side by side
-│   ├── lockup-horizontal-white.svg
-│   └── lockup-stacked.svg         # Mark above text
-├── colors.svg                     # Colour palette reference
-├── favicon.svg                    # 32×32 optimised mark
-└── BRAND_GUIDELINES.md            # This file
+│   ├── mark.svg                            # v1 — Icon only, gradient, on light
+│   ├── mark-white.svg                      # v1 — Icon only, white, on dark
+│   ├── wordmark.svg                        # v1 — Text only, ink+indigo split
+│   ├── wordmark-white.svg                  # v1 — Text only, white
+│   ├── lockup-horizontal.svg               # v1 — Mark + text, side by side
+│   ├── lockup-horizontal-white.svg         # v1 — White variant
+│   ├── lockup-stacked.svg                  # v1 — Mark above text
+│   ├── inkblot-mark.svg                    # v2 — Italic serif "i" + apostrophe-drop
+│   ├── inkblot-lockup-horizontal.svg       # v2 — Blot + "ink" (serif) + "line" (sans)
+│   ├── inkblot-lockup-horizontal-white.svg # v2 — Dark-background variant
+│   └── inkblot-icon-64.svg                 # v2 — 64×64 favicon / app-icon tile
+├── colors.svg                              # Colour palette reference
+├── favicon.svg                             # 32×32 optimised mark
+└── BRAND_GUIDELINES.md                     # This file
 ```
 
 ---

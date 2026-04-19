@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 130" fill="none">
+  <title>Inkline — ink-blot horizontal lockup</title>
+  <desc>
+    Organic ink blot with italic serif "ink" reversed out, followed by geometric
+    sans "line" in Inkline Indigo.
+  </desc>
+
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,600&amp;family=EB+Garamond:ital,wght@1,600&amp;family=Plus+Jakarta+Sans:wght@200&amp;display=swap');
+      .serif-ink {
+        font-family: 'Cormorant Garamond', 'EB Garamond', Georgia, 'Times New Roman', serif;
+        font-weight: 600;
+        font-style: italic;
+      }
+      .sans-line {
+        font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 200;
+        letter-spacing: -2px;
+      }
+    </style>
+  </defs>
+
+  <!-- ============================================================
+       BLOT GROUP — organic ink-on-paper blob, translated into the
+       canvas at (5,10).  The blob's local coordinate system spans
+       0..132 horizontally, 0..116 vertically.
+       ============================================================ -->
+  <g transform="translate(5,10)" fill="#3D2BE8">
+
+    <!-- Main organic blob — 12 anchor points with cubic bezier handles.
+         Asymmetric: heavier at bottom-left, protrusion at upper-right,
+         smaller lobe at lower-left. -->
+    <path d="
+      M 62,8
+      C 82,4 108,8 118,26
+      C 128,20 134,34 126,48
+      C 136,58 130,76 118,84
+      C 124,96 110,108 94,104
+      C 86,114 68,116 56,106
+      C 42,116 24,106 20,90
+      C 8,90 2,74 10,58
+      C 0,44 6,26 22,20
+      C 28,6 46,10 62,8
+      Z
+    "/>
+
+    <!-- Satellite ink-spatter dots at organic offsets from the main blob. -->
+    <circle cx="14"  cy="18"  r="4"/>
+    <circle cx="132" cy="42"  r="5"/>
+    <circle cx="28"  cy="110" r="3"/>
+
+  </g>
+
+  <!-- "ink" — italic serif, reversed out (white) inside the blot.
+       Blot centre after translate(5,10) is approximately (71,68) in the
+       outer coordinate system. -->
+  <text x="71" y="68"
+        class="serif-ink"
+        font-size="50"
+        fill="#FFFFFF"
+        text-anchor="middle"
+        dominant-baseline="central"
+        letter-spacing="-1">ink</text>
+
+  <!-- "line" — geometric sans, Inkline Indigo, vertically centred with the blot.
+       Blot vertical centre is y=68; baseline for 74px text sits ~y=93. -->
+  <text x="150" y="93"
+        class="sans-line"
+        font-size="74"
+        fill="#3D2BE8">line</text>
+</svg>
