@@ -139,7 +139,7 @@ but truncated text looks bad. Write within these limits the first time.
 TITLES — 45 chars max (ALL slide types)
   22pt bold Source Sans 3 at 22.6cm → 48 chars theoretical; 45 with safety.
   Count your title. "Strong 2P NPV10 of $231mm at 1,354 boepd" = 42 ✓
-  BAD: "Corsair offers proven GoA cash flow with material 2P upside" = 59 → TRUNCATED ✗
+  BAD: "Acme offers proven upside from operations with material 2P NPV" = 61 → TRUNCATED ✗
 
 PER-FIELD CHAR LIMITS (renderer enforces these exactly):
   content   items:           70 chars each  (14pt full-width = 84/line; tighter for readability)
@@ -731,6 +731,24 @@ class DesignAdvisor:
         list[dict]
             List of slide specs ready for ``export_typst_slides()``.
         """
+        # Phase 0.5: open learning session (fail-safe — never affects generation)
+        _learning_cm = None   # the context manager object
+        _learning_ctx = None  # the SessionContext yielded by __enter__
+        try:
+            from inkline.learning.session_context import generation_session as _gen_session
+            _learning_cm = _gen_session(
+                brand=self.brand,
+                template=self.template,
+                audience=audience,
+                goal=goal,
+                mode=self.mode,
+            )
+            _learning_ctx = _learning_cm.__enter__()
+        except Exception as _learn_err:
+            log.debug("DesignAdvisor: learning session skipped: %s", _learn_err)
+            _learning_cm = None
+            _learning_ctx = None
+
         # Partition sections by slide_mode
         exact_slides = []   # (original_index, slide_spec)
         llm_sections = []   # (original_index, section) — for auto + guided
@@ -762,7 +780,7 @@ class DesignAdvisor:
                 }})
             if contact and (not slides or slides[-1]["slide_type"] != "closing"):
                 slides.append({"slide_type": "closing", "data": contact})
-            return slides
+            return self._close_learning_session(_learning_cm, _learning_ctx, slides)
 
         # LLM mode: send auto + guided sections to LLM
         # Auto-suggest a template when the caller left it at the brand default
@@ -839,7 +857,7 @@ class DesignAdvisor:
                     if best_text:
                         slide.setdefault("data", {})["source_section"] = best_text[:2000]
 
-                return llm_slides
+                return self._close_learning_session(_learning_cm, _learning_ctx, llm_slides)
             except Exception as e:
                 log.warning("LLM mode failed, falling back to rules: %s", e)
 
@@ -852,7 +870,27 @@ class DesignAdvisor:
             rules_slides = self._merge_exact_slides(
                 rules_slides, exact_slides, llm_sections,
             )
-        return rules_slides
+        return self._close_learning_session(_learning_cm, _learning_ctx, rules_slides)
+
+    @staticmethod
+    def _close_learning_session(cm, ctx, slides: list[dict]) -> list[dict]:
+        """Record slides into the SessionContext, then close the context manager. Fail-safe.
+
+        Parameters
+        ----------
+        cm : context manager object (from generation_session(...))
+        ctx : SessionContext yielded by cm.__enter__()
+        slides : list of slide spec dicts to record
+        """
+        if cm is None or ctx is None:
+            return slides
+        try:
+            # Record slides so _persist_session can capture them on __exit__
+            ctx.record_slides(slides)
+            cm.__exit__(None, None, None)
+        except Exception as _err:
+            log.debug("DesignAdvisor: learning session close error: %s", _err)
+        return slides
 
     @staticmethod
     def _merge_exact_slides(
@@ -1745,7 +1783,7 @@ class DesignAdvisor:
     _VAR_NAME_RE = re.compile(
         r"\bv[A-Z][A-Z0-9_]{2,}_[A-Z]+\b"   # e.g. vMGMT_CASE, vCPR_CASE
         r"|_v[A-Z][A-Z0-9_]*\b"              # e.g. _vF, _vP2
-        r"|\b[A-Z][A-Za-z0-9_]+_FM_v\d\b"   # e.g. ProjectCorsair_FM_v3
+        r"|\b[A-Z][A-Za-z0-9_]+_FM_v\d\b"   # e.g. ProjectAlpha_FM_v3
         r"|\w+\.xlsm\b|\w+\.xlsx\b",         # spreadsheet filenames
         re.ASCII,
     )
@@ -1962,7 +2000,7 @@ class DesignAdvisor:
             "",
             "NAMING RULE: Never copy internal variable, file, or model names from",
             "the source material into slide text (e.g. vMGMT_CASE, vCPR_CASE, _vF,",
-            "ProjectCorsair_FM_v3.xlsm). Use plain descriptive language instead",
+            "ProjectAlpha_FM_v3.xlsm). Use plain descriptive language instead",
             "(e.g. 'Management Case', 'CPR Case', 'Financial Model').",
             "",
             "",

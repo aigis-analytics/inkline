@@ -1073,12 +1073,19 @@ _ALL_CHECKS = [
 _INVESTOR_TEMPLATES = frozenset({"investor", "pitch", "boardroom"})
 
 
-def check_anti_patterns(slides: list[dict], template: str = "") -> list[AntiPatternResult]:
+def check_anti_patterns(
+    slides: list[dict],
+    template: str = "",
+    brand_anti_patterns: list[dict] | None = None,
+) -> list[AntiPatternResult]:
     """Run all anti-pattern checks against a slide deck.
 
     Args:
         slides: List of slide spec dicts, each with "slide_type" and "data" keys.
         template: Optional template name — used to upgrade DP-03 severity for investor/pitch/boardroom.
+        brand_anti_patterns: Optional list of learned anti-pattern dicts from the learning store.
+            Each dict may contain: ``rule``, ``slide_type``, ``section_type``, ``confidence``.
+            Results from learned patterns are tagged with ``source="learned"``.
 
     Returns:
         List of AntiPatternResult for every detected issue, sorted by slide index.
@@ -1093,6 +1100,36 @@ def check_anti_patterns(slides: list[dict], template: str = "") -> list[AntiPatt
             if r.rule_id == "DP-03":
                 r.severity = "error"
                 r.message = r.message.replace("warning", "error")
+
+    # Evaluate learned anti-patterns from the learning store
+    if brand_anti_patterns:
+        for ap in brand_anti_patterns:
+            slide_type = ap.get("slide_type", "")
+            section_type = ap.get("section_type", "")
+            rule_text = ap.get("rule", "")
+            confidence = ap.get("confidence", 0.5)
+            if not rule_text:
+                continue
+            # Check which slides match this anti-pattern
+            matched_indices: list[int] = []
+            for i, slide in enumerate(slides):
+                st = slide.get("slide_type", "")
+                sec = slide.get("data", {}).get("section", "")
+                if slide_type and st != slide_type:
+                    continue
+                if section_type and sec != section_type:
+                    continue
+                if slide_type or section_type:
+                    matched_indices.append(i)
+            if matched_indices:
+                results.append(AntiPatternResult(
+                    rule_id=f"L-{abs(hash(rule_text)) % 9000 + 1000:04d}",
+                    category="learned",
+                    severity="warning" if confidence < 0.75 else "error",
+                    message=rule_text,
+                    slide_indices=matched_indices,
+                    suggestion=f"Learned anti-pattern (confidence {confidence:.0%}): {rule_text}",
+                ))
 
     # Sort by first slide index, then by rule_id
     results.sort(key=lambda r: (r.slide_indices[0] if r.slide_indices else 0, r.rule_id))

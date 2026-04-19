@@ -62,15 +62,85 @@ def cmd_mcp(_args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_learn(_args: argparse.Namespace) -> None:
-    """Run the feedback aggregator to update the decision matrix."""
+def cmd_learn(args: argparse.Namespace) -> None:
+    """Run the feedback aggregator and pattern extractor to update learned patterns."""
+    nightly = getattr(args, "nightly", False)
+    brand = getattr(args, "brand", None) or None
+
+    # Always run the existing feedback aggregator
     try:
         from inkline.intelligence.aggregator import Aggregator
         agg = Aggregator()
         report = agg.run_full_pass()
         print(report)
     except Exception as exc:
+        print(f"WARNING: Aggregator failed: {exc}", file=sys.stderr)
+
+    # Run the new pattern extractor
+    try:
+        from inkline.learning.extractor import run_nightly_extraction
+        ext_report = run_nightly_extraction(brand=brand)
+        if nightly:
+            print(f"Nightly extraction: {ext_report.summary}")
+        else:
+            print(f"Pattern extraction: {ext_report.summary}")
+    except Exception as exc:
+        print(f"WARNING: Pattern extractor failed: {exc}", file=sys.stderr)
+
+
+def cmd_privacy(args: argparse.Namespace) -> None:
+    """Show stored learning data summary and federation status, or toggle federation."""
+    try:
+        from inkline.learning.federation import (
+            get_privacy_summary,
+            set_federation_enabled,
+        )
+        if args.disable:
+            set_federation_enabled(False)
+            print("Federation disabled. No data will be exported to the community.")
+        elif args.enable:
+            set_federation_enabled(True)
+            print("Federation enabled. Safe structural signals will be shared with the community.")
+        else:
+            brand = getattr(args, "brand", "") or ""
+            print(get_privacy_summary(brand=brand))
+    except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_export_patterns(args: argparse.Namespace) -> None:
+    """Export anonymised pattern delta for community sharing."""
+    try:
+        import datetime
+        import json as _json
+        from inkline.learning.federation import export_pattern_delta, FederationDisabledError
+
+        since_str = getattr(args, "since", None) or ""
+        dry_run = getattr(args, "dry_run", False)
+
+        if since_str:
+            since = datetime.datetime.fromisoformat(since_str).replace(
+                tzinfo=datetime.timezone.utc
+            )
+        else:
+            # Default: last 30 days
+            since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+
+        delta = export_pattern_delta(
+            since=since,
+            include_dm_rules=True,
+            include_anti_patterns=True,
+            dry_run=dry_run,
+        )
+        print(_json.dumps(delta, indent=2))
+        if dry_run:
+            print("\n(dry-run: nothing was posted)", file=sys.stderr)
+
+    except Exception as exc:
+        # FederationDisabledError is a subclass of RuntimeError
+        name = type(exc).__name__
+        print(f"ERROR [{name}]: {exc}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -165,9 +235,37 @@ def main(argv: list[str] | None = None) -> None:
     # inkline learn
     learn_p = sub.add_parser(
         "learn",
-        help="Process feedback log and update the decision matrix",
+        help="Process feedback log, update decision matrix, and extract patterns",
     )
+    learn_p.add_argument("--nightly", action="store_true",
+                         help="Run full nightly extraction pass (suitable for cron)")
+    learn_p.add_argument("--brand", default="", metavar="BRAND",
+                         help="Limit extraction to a single brand")
     learn_p.set_defaults(func=cmd_learn)
+
+    # inkline privacy
+    privacy_p = sub.add_parser(
+        "privacy",
+        help="Show learning data summary and federation status",
+    )
+    privacy_p.add_argument("--disable", action="store_true",
+                            help="Disable community federation (no data exported)")
+    privacy_p.add_argument("--enable", action="store_true",
+                            help="Re-enable community federation")
+    privacy_p.add_argument("--brand", default="", metavar="BRAND",
+                            help="Show stats for a specific brand")
+    privacy_p.set_defaults(func=cmd_privacy)
+
+    # inkline export-patterns
+    export_p = sub.add_parser(
+        "export-patterns",
+        help="Export anonymised pattern delta for community sharing",
+    )
+    export_p.add_argument("--since", default="", metavar="YYYY-MM-DD",
+                           help="Only include data since this date (default: last 30 days)")
+    export_p.add_argument("--dry-run", action="store_true",
+                           help="Preview the export without posting to any endpoint")
+    export_p.set_defaults(func=cmd_export_patterns)
 
     # inkline ingest
     ingest_p = sub.add_parser(

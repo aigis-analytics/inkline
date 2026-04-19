@@ -290,6 +290,10 @@ def record_pattern(
 def get_preferred_types(brand: str, section_type: str) -> list[str]:
     """Return slide types ordered by approval rate for brand + section_type.
 
+    Tries the SQLite learning store first (richer, includes DM rule dimension).
+    Falls back to the YAML-backed implementation if the store is unavailable
+    or returns fewer than 2 results.
+
     Only includes slide types with at least 2 observations. Returns an empty
     list if no data is available.
 
@@ -300,6 +304,17 @@ def get_preferred_types(brand: str, section_type: str) -> list[str]:
     Returns:
         List of slide type strings, highest approval rate first.
     """
+    # Try SQLite store first
+    try:
+        import inkline.learning.store as _learning_store_mod
+        store = _learning_store_mod.get_store()
+        sqlite_prefs = store.get_section_type_preferences(brand, section_type)
+        if sqlite_prefs:
+            return sqlite_prefs
+    except Exception:
+        pass
+
+    # Fallback: YAML-backed implementation
     path = _get_patterns_dir() / f"{brand}.yaml"
     data = _load_yaml(path)
     patterns = data.get("patterns", [])

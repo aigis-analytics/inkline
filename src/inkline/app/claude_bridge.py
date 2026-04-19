@@ -1,6 +1,6 @@
 """Inkline Claude Bridge — HTTP server that routes messages to the claude CLI.
 
-Adapted from the Aria project (u3126117/aria). Exposes:
+Exposes:
   POST /prompt       — send a message to Claude (agentic mode, full tool access)
   POST /vision       — visual audit: base64 PNG + prompt → Claude reads image and responds
   POST /upload       — save an uploaded file, returns its absolute path
@@ -343,6 +343,12 @@ _IMPLICIT_PATTERNS = [
     (re.compile(r"too many slides", re.I), "too_many_slides"),
     (re.compile(r"change (?:the )?template", re.I), "template_change"),
     (re.compile(r"(?:the title is wrong|fix (?:the )?title)", re.I), "bad_title"),
+    # Title rewrite detection (new — self-learning signals)
+    (re.compile(r"(?:change|rename|update|rewrite|fix)\s+(?:the\s+)?title\s+(?:of\s+slide\s+\d+\s+)?(?:to|as)\s+[\"']?(.+?)[\"']?$", re.I), "title_rewrite"),
+    (re.compile(r"title\s+should\s+(?:be|say|read)\s+[\"']?(.+?)[\"']?$", re.I), "title_rewrite"),
+    # Slide type change (implicit regen signal)
+    (re.compile(r"change\s+(?:slide\s+\d+\s+)?to\s+(?:a\s+)?(\w+(?:_\w+)*)\s+(?:slide|layout)", re.I), "slide_type_change"),
+    (re.compile(r"use\s+(?:a\s+)?(\w+(?:_\w+)*)\s+(?:slide|layout)\s+(?:instead|for\s+(?:this|that))", re.I), "slide_type_change"),
 ]
 
 _CHART_TYPE_ALIASES = {
@@ -366,7 +372,10 @@ _CHART_TYPE_ALIASES = {
 
 
 def _record_implicit_feedback(prompt: str, deck_id: str, slide_index: int) -> None:
-    """Scan a user message for chart correction patterns and file feedback events."""
+    """Scan a user message for chart correction patterns and file feedback events.
+
+    Also detects title rewrites and slide type changes for the self-learning store.
+    """
     if not prompt:
         return
     try:
@@ -404,6 +413,23 @@ def _record_implicit_feedback(prompt: str, deck_id: str, slide_index: int) -> No
             elif feedback_type == "accent_change":
                 event["enforce_overrides"] = {"accent_target": m.group(1).strip()}
                 event["comment"] = f"Accent request: {m.group(0)}"
+            elif feedback_type == "title_rewrite":
+                new_title = m.group(1).strip().strip('"\'') if m.lastindex and m.lastindex >= 1 else ""
+                event["comment"] = f"Title rewrite: {m.group(0)}"
+                # Record to learning store
+                _record_title_rewrite_to_store(
+                    session_id="", position=slide_index,
+                    original="", rewritten=new_title,
+                    brand=deck_id or "",
+                )
+            elif feedback_type == "slide_type_change":
+                new_type = m.group(1).lower().strip() if m.lastindex and m.lastindex >= 1 else ""
+                event["comment"] = f"Slide type change: {m.group(0)}"
+                # Record implicit regen to learning store
+                _record_regen_to_store(
+                    session_id="", position=slide_index,
+                    section_type="", brand=deck_id or "",
+                )
             else:
                 event["comment"] = f"Density feedback: {m.group(0)}"
 
@@ -413,6 +439,50 @@ def _record_implicit_feedback(prompt: str, deck_id: str, slide_index: int) -> No
 
     except Exception as e:
         log.debug("Implicit feedback detection skipped: %s", e)
+
+
+def _record_title_rewrite_to_store(
+    session_id: str,
+    position: int,
+    original: str,
+    rewritten: str,
+    brand: str = "",
+    section_type: str = "",
+) -> None:
+    """Record a title rewrite event to the learning store. Fail-safe."""
+    if not rewritten:
+        return
+    try:
+        from inkline.learning import record_title_rewrite
+        record_title_rewrite(
+            session_id=session_id,
+            position=position,
+            original=original,
+            rewritten=rewritten,
+            section_type=section_type,
+            brand=brand,
+        )
+    except Exception as exc:
+        log.debug("_record_title_rewrite_to_store: %s", exc)
+
+
+def _record_regen_to_store(
+    session_id: str,
+    position: int,
+    section_type: str,
+    brand: str = "",
+) -> None:
+    """Record an implicit slide regen event to the learning store. Fail-safe."""
+    try:
+        from inkline.learning import record_regen
+        record_regen(
+            session_id=session_id,
+            position=position,
+            section_type=section_type,
+            brand=brand,
+        )
+    except Exception as exc:
+        log.debug("_record_regen_to_store: %s", exc)
 
 
 # ---------------------------------------------------------------------------

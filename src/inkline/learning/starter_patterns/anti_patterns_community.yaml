@@ -1,0 +1,51 @@
+# Community anti-pattern frequency seeds
+# Source: opt-out community contributions, reviewed by project maintainers
+# Privacy: contains only rule IDs and hit counts — no brand names, no content
+# Community confidence is capped at 0.70 — local observations always override
+schema_version: "1.0"
+confidence_cap: 0.70
+
+# Anti-pattern rule IDs map to the static anti_patterns.py library
+# LP = Layout Pattern, TP = Title Pattern, CP = Colour Pattern, DP = Data Pattern
+anti_patterns:
+  - rule_id: "LP-01"
+    description: "3+ consecutive text-heavy slides"
+    community_hits: 312
+    community_sessions: 1204
+    hit_rate: 0.259
+    severity: "warning"
+
+  - rule_id: "TP-01"
+    description: "Weak slide title (topic label instead of insight)"
+    community_hits: 287
+    community_sessions: 1204
+    hit_rate: 0.238
+    severity: "warning"
+
+  - rule_id: "TP-02"
+    description: "Title exceeds character limit"
+    community_hits: 198
+    community_sessions: 1204
+    hit_rate: 0.164
+    severity: "error"
+
+  - rule_id: "DP-01"
+    description: "Table with fewer than 4 rows (use icon_stat)"
+    community_hits: 156
+    community_sessions: 1204
+    hit_rate: 0.130
+    severity: "info"
+
+  - rule_id: "LP-02"
+    description: "Low visual ratio (<40% visual slides)"
+    community_hits: 143
+    community_sessions: 1204
+    hit_rate: 0.119
+    severity: "warning"
+
+  - rule_id: "CP-01"
+    description: "Bar chart missing accent_index"
+    community_hits: 134
+    community_sessions: 1204
+    hit_rate: 0.111
+    severity: "warning"

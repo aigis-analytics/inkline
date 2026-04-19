@@ -1,0 +1,88 @@
+# Community decision matrix rule seeds
+# Source: opt-out community contributions, reviewed by project maintainers
+# Privacy: contains only (data_structure, message_type, slide_type, confidence)
+# No brand names, no titles, no user content
+# Community confidence is capped at 0.70 — local observations always override
+schema_version: "1.0"
+confidence_cap: 0.70
+
+rules:
+  - id: "CM-001"
+    data_structure: "single_number"
+    message_type: "status_at_a_glance"
+    slide_type: "kpi_strip"
+    confidence: 0.68
+    uses: 142
+    acceptance_rate: 0.82
+
+  - id: "CM-002"
+    data_structure: "n_categories_one_value"
+    message_type: "ranking_or_comparison"
+    slide_type: "icon_stat"
+    confidence: 0.65
+    uses: 98
+    acceptance_rate: 0.79
+
+  - id: "CM-003"
+    data_structure: "two_values_comparison"
+    message_type: "change_over_time"
+    slide_type: "stat"
+    confidence: 0.62
+    uses: 87
+    acceptance_rate: 0.76
+
+  - id: "CM-004"
+    data_structure: "sequential_steps"
+    message_type: "process_or_sequence"
+    slide_type: "process_flow"
+    confidence: 0.70
+    uses: 203
+    acceptance_rate: 0.88
+
+  - id: "CM-005"
+    data_structure: "timeline_events"
+    message_type: "process_or_sequence"
+    slide_type: "timeline"
+    confidence: 0.68
+    uses: 156
+    acceptance_rate: 0.85
+
+  - id: "CM-006"
+    data_structure: "part_of_whole"
+    message_type: "part_of_whole_breakdown"
+    slide_type: "chart_caption"
+    confidence: 0.63
+    uses: 74
+    acceptance_rate: 0.77
+
+  - id: "CM-007"
+    data_structure: "three_concepts"
+    message_type: "feature_enumeration"
+    slide_type: "three_card"
+    confidence: 0.70
+    uses: 189
+    acceptance_rate: 0.86
+
+  - id: "CM-008"
+    data_structure: "six_concepts"
+    message_type: "feature_enumeration"
+    slide_type: "feature_grid"
+    confidence: 0.67
+    uses: 112
+    acceptance_rate: 0.81
+
+  - id: "CM-009"
+    data_structure: "hierarchical_levels"
+    message_type: "hierarchical_structure"
+    slide_type: "pyramid"
+    confidence: 0.61
+    uses: 63
+    acceptance_rate: 0.74
+
+  - id: "CM-010"
+    data_structure: "n_kpis"
+    message_type: "status_at_a_glance"
+    slide_type: "kpi_strip"
+    confidence: 0.70
+    uses: 178
+    acceptance_rate: 0.87
