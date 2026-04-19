@@ -1118,8 +1118,10 @@ class TypstSlideRenderer:
             )
             contact_section = f"{cta_block}{name_block}{role_block}{email_block}{website_block}"
         else:
-            # Minimal closing: no contact — just brand + tagline + decorative accent line
-            cta_text = cta or tagline
+            # Minimal closing: no contact — brand + tagline (above) + decorative accent line.
+            # Only render cta_text if an explicit cta override is provided; tagline is
+            # already rendered in the main template body above so must not appear twice.
+            cta_text = cta  # do NOT fall back to tagline — it is already rendered above
             contact_section = (
                 f'#v(0.8cm)\n    '
                 f'#line(length: 6cm, stroke: 2pt + {_rgb(t["accent"])})\n    '
@@ -2467,7 +2469,7 @@ class TypstSlideRenderer:
                 f")[\n"
                 f"  #text(weight: \"bold\", size: 13pt, fill: {_rgb(colour)})[{label}]\n"
                 f"  #v(8pt)\n"
-                f"  #list(indent: 6pt, {', '.join(__import__('json').dumps(_esc(str(it))) for it in items)})\n"
+                f"  #list(indent: 6pt, {', '.join('[' + _esc(str(it)) + ']' for it in items)})\n"
                 f"]"
             )
 
