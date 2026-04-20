@@ -6,6 +6,12 @@ Tests:
 1. Brand Guidelines deck with brand_editorial register
 2. Pitch deck with investor_pitch register
 3. Launchpad deck (backward compat, no DesignContext)
+
+Section specs use structured exhibit types (kpi_dashboard, process_flow,
+feature_grid, three_card, icon_stat, before_after) instead of plain
+``type: content`` narrative blobs — this forces DesignAdvisor to pick
+exhibit-driven slide types (metrics, diagrams, cards) rather than defaulting
+to bullet-wall content slides.
 """
 
 import sys
@@ -18,14 +24,22 @@ from inkline.intelligence import DesignAdvisor, DesignContext
 from inkline.typst import export_typst_slides
 
 
+N8N_ENDPOINT = "http://localhost:5678/webhook/inkblot-icon"
+
+
 def test_brand_guidelines():
-    """Brand Guidelines: brand_editorial register, organic_ink style."""
+    """Brand Guidelines: brand_editorial register, organic_ink style.
+
+    Audience: design community. Focus: inspire.
+    Uses structured section types so DesignAdvisor produces a feature grid,
+    three-card philosophy, icon-stat palette, process-flow typography scale,
+    and a before/after do-vs-don't — not prose bullets.
+    """
     print("\n" + "="*60)
     print("TEST 1: Brand Guidelines Deck (with n8n background generation)")
     print("="*60)
 
     advisor = DesignAdvisor(brand="minimal", template="editorial")
-    advisor._n8n_endpoint = "http://localhost:5678/webhook/inkblot-icon"
     design_context = DesignContext(
         audience="design community",
         tone="visionary",
@@ -35,20 +49,91 @@ def test_brand_guidelines():
     )
 
     sections = [
+        # Cover — DesignAdvisor always synthesises a title slide
         {
-            "type": "content",
+            "type": "executive_summary",
+            "title": "Inkline Brand Guidelines",
+            "narrative": (
+                "Inkline is a presentation design framework that produces "
+                "visually coherent decks through systematic visual direction. "
+                "These guidelines define what 'Inkline' looks and feels like."
+            ),
+        },
+        # What is Inkline — 6-up feature grid
+        {
+            "type": "feature_grid",
             "title": "What is Inkline?",
-            "narrative": "Inkline is a presentation design framework that makes decks visually compelling through systematic visual direction. Every slide follows the same palette, typography, and accent rules, creating cohesion.",
+            "features": [
+                {"title": "Visual Direction", "body": "One brief drives palette, type, accents across every slide."},
+                {"title": "Template System", "body": "11 slide templates × 7 brand identities."},
+                {"title": "Archon Audit", "body": "LLM vision reviews every slide before ship."},
+                {"title": "AI Backgrounds", "body": "Gemini-generated covers and dividers via n8n."},
+                {"title": "Multi-brand", "body": "Private brand plugin system keeps IP out of the public repo."},
+                {"title": "API-first", "body": "One Python call renders a full deck from structured data."},
+            ],
         },
+        # Visual Philosophy — three cards
         {
-            "type": "content",
+            "type": "comparison",
             "title": "Visual Philosophy",
-            "narrative": "Visual coherence comes from consistent decisions: one accent color per slide, one template, one image treatment style. This creates the sense that every slide was designed together.",
+            "cards": [
+                {"title": "One brief, not 100 decisions",
+                 "body": "Palette, type, and accent are decided once at deck level — every slide inherits."},
+                {"title": "Exhibit over prose",
+                 "body": "A chart, diagram, or card beats a bullet list. Prose is a fallback, not a default."},
+                {"title": "Audit before ship",
+                 "body": "Nothing leaves the pipeline until Archon signs off on every slide."},
+            ],
         },
+        # Palette System — icon stats with the 5 palette roles
         {
-            "type": "content",
+            "type": "kpi_dashboard",
             "title": "Palette System",
-            "narrative": "The color palette includes dominant background, secondary structural color, accent for emphasis, and text colors. All other colors are derived from these 5 hex values.",
+            "metrics": {
+                "Primary (brand identity)": "#0F2A44",
+                "Secondary (structural)": "#3D5A80",
+                "Accent (emphasis only)": "#EE6C4D",
+                "Text (body + heads)": "#1A1A1A",
+                "Surface (page + cards)": "#F7F5F0",
+            },
+        },
+        # Typography — process flow showing the scale hierarchy
+        {
+            "type": "process_flow",
+            "title": "Typography Scale",
+            "steps": [
+                {"number": "1", "title": "Display 48pt",
+                 "desc": "Cover and section dividers only. Used sparingly."},
+                {"number": "2", "title": "Heading 28pt",
+                 "desc": "Slide titles. Sentence case, action-oriented."},
+                {"number": "3", "title": "Body 14pt",
+                 "desc": "Card body, narrative, captions. 1.4 line height."},
+                {"number": "4", "title": "Caption 10pt",
+                 "desc": "Footnotes, sources, axis labels. Never for content."},
+            ],
+        },
+        # Do / Don't — before/after
+        {
+            "type": "before_after",
+            "title": "Do / Don't",
+            "left": {
+                "label": "DO",
+                "items": [
+                    "One accent colour per slide",
+                    "Action titles (e.g., 'Revenue grew 34% YoY')",
+                    "Exhibits first, prose second",
+                    "Audit every slide before shipping",
+                ],
+            },
+            "right": {
+                "label": "DON'T",
+                "items": [
+                    "Rainbow palettes across slides",
+                    "Topic-only titles (e.g., 'Revenue')",
+                    "Walls of bullet points",
+                    "Ship without visual review",
+                ],
+            },
         },
     ]
 
@@ -58,6 +143,7 @@ def test_brand_guidelines():
             sections=sections,
             design_context=design_context,
             date="April 2026",
+            n8n_endpoint=N8N_ENDPOINT,
         )
 
         output = Path("./brand_guidelines_v2.pdf")
@@ -71,24 +157,28 @@ def test_brand_guidelines():
             audit=True,
         )
 
-        print(f"✓ Generated: {output}")
+        print(f"PASS Generated: {output}")
         print(f"  Slides: {len(slides)}")
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"FAIL: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 
 def test_pitch_deck():
-    """Pitch Deck: investor_pitch register, abstract_geometric style."""
+    """Pitch Deck: investor_pitch register, abstract_geometric style.
+
+    Audience: seed investors. Focus: persuade.
+    Sections are KPI-first: every non-cover slide carries a concrete metric,
+    process, or positioning diagram — no prose narrative stand-alones.
+    """
     print("\n" + "="*60)
     print("TEST 2: Pitch Deck (with n8n background generation)")
     print("="*60)
 
     advisor = DesignAdvisor(brand="minimal", template="pitch")
-    advisor._n8n_endpoint = "http://localhost:5678/webhook/inkblot-icon"
     design_context = DesignContext(
         audience="seed investors",
         tone="visionary",
@@ -98,25 +188,69 @@ def test_pitch_deck():
     )
 
     sections = [
+        # Cover
         {
-            "type": "content",
+            "type": "executive_summary",
+            "title": "Inkline: AI Design Automation",
+            "narrative": (
+                "Inkline turns structured content into investor-grade decks "
+                "in minutes. Visual direction, exhibit-first layouts, and a "
+                "closed-loop visual auditor — all in one Python call."
+            ),
+        },
+        # Problem — kpi dashboard with the pain metrics
+        {
+            "type": "kpi_dashboard",
             "title": "The Problem",
-            "narrative": "Teams spend 40% of presentation time fighting design tools instead of focusing on the message. Design consistency is hard. Visual direction is a solved problem in print but broken in digital.",
+            "metrics": {
+                "Time wasted on formatting": "40%",
+                "Design tools: unchanged since": "2003",
+                "Teams with consistent brand decks": "12%",
+            },
         },
+        # Solution — process flow showing the 3-step pipeline
         {
-            "type": "content",
+            "type": "process_flow",
             "title": "Our Solution",
-            "narrative": "Inkline generates visually coherent decks automatically. Users describe the content; Inkline picks layouts, colors, and typography. One decision per deck (visual direction), not one per slide.",
+            "steps": [
+                {"number": "1", "title": "Describe content",
+                 "desc": "Pass structured sections — metrics, steps, cards."},
+                {"number": "2", "title": "Inkline designs every slide",
+                 "desc": "Visual direction picks palette, type, layouts."},
+                {"number": "3", "title": "Archon audits and delivers",
+                 "desc": "LLM vision reviews each slide; ships a clean PDF."},
+            ],
         },
+        # Market — kpi dashboard with the market sizing numbers
         {
-            "type": "content",
+            "type": "kpi_dashboard",
             "title": "Market",
-            "narrative": "5M knowledge workers create presentations annually. Current tools (PowerPoint, Google Slides) are 20+ years old, commodity pricing. Design-first tools (Canva, Gamma) lack automation.",
+            "metrics": {
+                "Market size": "$10B+",
+                "Knowledge workers": "500M",
+                "AI design penetration": "0%",
+            },
         },
+        # Traction — kpi dashboard with growth metrics
         {
-            "type": "content",
+            "type": "kpi_dashboard",
             "title": "Traction",
-            "narrative": "100 beta users across venture studios and management consulting. NPS 67. Churn 0. Monthly active: growing 15% MoM.",
+            "metrics": {
+                "Beta users": "100",
+                "NPS": "67",
+                "Churn": "0%",
+                "MoM growth": "+15%",
+            },
+        },
+        # Close / ask — closing slide synthesised by DesignAdvisor
+        {
+            "type": "executive_summary",
+            "title": "The Ask",
+            "narrative": (
+                "Raising $2M seed to scale the Inkline platform: hire three "
+                "engineers, expand the brand plugin ecosystem, ship the "
+                "self-serve web app. Join us."
+            ),
         },
     ]
 
@@ -126,6 +260,7 @@ def test_pitch_deck():
             sections=sections,
             design_context=design_context,
             date="April 2026",
+            n8n_endpoint=N8N_ENDPOINT,
         )
 
         output = Path("./pitch_deck_v2.pdf")
@@ -139,11 +274,11 @@ def test_pitch_deck():
             audit=True,
         )
 
-        print(f"✓ Generated: {output}")
+        print(f"PASS Generated: {output}")
         print(f"  Slides: {len(slides)}")
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"FAIL: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -190,12 +325,12 @@ def test_backward_compat():
             audit=True,
         )
 
-        print(f"✓ Generated: {output}")
+        print(f"PASS Generated: {output}")
         print(f"  Slides: {len(slides)}")
         print("  (No DesignContext — system inferred from audience/goal)")
         return True
     except Exception as e:
-        print(f"✗ Failed: {e}")
+        print(f"FAIL: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -212,7 +347,7 @@ if __name__ == "__main__":
     print("SUMMARY")
     print("="*60)
     for test_name, passed in results.items():
-        status = "✓ PASS" if passed else "✗ FAIL"
+        status = "PASS" if passed else "FAIL"
         print(f"{status}: {test_name}")
 
     all_passed = all(results.values())

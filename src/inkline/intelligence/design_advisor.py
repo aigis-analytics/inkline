@@ -685,6 +685,7 @@ class DesignAdvisor:
         additional_guidance: str = "",
         reference_archetypes: Optional[list[str]] = None,
         brief: Optional[Any] = None,
+        n8n_endpoint: str = "",
     ) -> list[dict[str, Any]]:
         """Design a slide deck from structured content sections.
 
@@ -732,6 +733,13 @@ class DesignAdvisor:
         list[dict]
             List of slide specs ready for ``export_typst_slides()``.
         """
+        # Wire the n8n endpoint onto self so generate_visual_brief() can pick
+        # it up via getattr(self, "_n8n_endpoint", "") during Phase 1.5.
+        # Only overwrite when the caller passed a non-empty value — this keeps
+        # legacy callers that set ``advisor._n8n_endpoint`` directly working.
+        if n8n_endpoint:
+            self._n8n_endpoint = n8n_endpoint
+
         # Phase 0.5: open learning session (fail-safe — never affects generation)
         _learning_cm = None   # the context manager object
         _learning_ctx = None  # the SessionContext yielded by __enter__
