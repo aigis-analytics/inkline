@@ -3,9 +3,16 @@ Helper module for Gemini AI image generation via n8n.
 
 Handles:
 - Calling n8n workflows for background/icon generation
-- Decoding base64 image responses
+- Reading image_path responses (primary format from inkblot-icon-generator-workflow.json)
+- Decoding base64 image responses (fallback for future workflows)
 - Saving to disk
 - Path management for generated assets
+
+Primary n8n response format (inkblot-icon-generator-workflow.json):
+    {"image_path": "/tmp/generated_bg_<uuid>.png"}
+
+Fallback n8n response format (future workflows):
+    {"imageBase64": "<base64-encoded-png>", "filename": "...", "mimeType": "image/png"}
 """
 
 import base64
@@ -35,7 +42,10 @@ def generate_background_image(
         timeout: Request timeout in seconds (Gemini can take 30-60s)
 
     Returns:
-        Path to saved PNG file (relative to output_dir)
+        Path to the generated PNG file.  When the workflow returns ``image_path``
+        the value is returned directly (file already exists on the n8n host).
+        When the workflow returns ``imageBase64`` the image is decoded, saved to
+        ``output_dir``, and the saved path is returned.
 
     Raises:
         ValueError: If n8n response is malformed or image decode fails
@@ -59,21 +69,26 @@ def generate_background_image(
     data = resp.json()
     log.debug("n8n response: %s", json.dumps(data, indent=2)[:500])
 
-    # Extract image data - support both workflow formats
-    # Format 1: {"imageBase64": "...", "filename": "...", "mimeType": "image/png"}
-    # Format 2: {"image_path": "..."} or {"file_path": "..."}
-    image_base64 = data.get("imageBase64")
-    filename = data.get("filename", "generated_bg.png")
+    # Extract image data - support both workflow formats.
+    # Primary format (inkblot-icon-generator-workflow.json):
+    #   {"image_path": "/tmp/generated_bg_<uuid>.png"}
+    # Fallback format (future workflows that return inline base64):
+    #   {"imageBase64": "...", "filename": "...", "mimeType": "image/png"}
 
+    # --- Primary: file path returned by the workflow ---
+    file_path = data.get("image_path") or data.get("file_path")
+    if file_path:
+        log.info("n8n returned file path: %s", file_path)
+        return file_path
+
+    # --- Fallback: base64-encoded image ---
+    image_base64 = data.get("imageBase64")
     if not image_base64:
-        # Try alternative response formats (file path instead of base64)
-        file_path = data.get("image_path") or data.get("file_path")
-        if file_path:
-            log.info("n8n returned file path directly: %s", file_path)
-            return file_path
         raise ValueError(
-            f"n8n response missing imageBase64 or image_path. Got: {list(data.keys())}"
+            f"n8n response missing image_path and imageBase64. Got: {list(data.keys())}"
         )
+
+    filename = data.get("filename", "generated_bg.png")
 
     # Decode base64 to binary
     try:
