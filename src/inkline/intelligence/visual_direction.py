@@ -20,6 +20,120 @@ log = logging.getLogger(__name__)
 LLMCaller = Callable[[str, str], str]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# DesignBrief Synthesis Helpers (Issues A–E)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Issue C: Focus → story arc mapping
+_FOCUS_STORY_ARCS: dict[str, str] = {
+    "persuade": "Pain point -> Solution & differentiation -> Call to action",
+    "inform": "Context & highlights -> Detailed content -> Conclusion & next steps",
+    "decide": "Decision framing -> Options & trade-offs -> Recommendation & ask",
+    "inspire": "Vision -> Proof of possibility -> Invitation to act",
+    "report": "Context & highlights -> Detailed progress -> Next steps & decisions",
+}
+
+
+def _story_arc_for_focus(focus: Optional[str]) -> str:
+    """Return story arc string for a given focus keyword (Issue C)."""
+    if not focus:
+        return "Context & highlights -> Detailed content -> Conclusion & next steps"
+    return _FOCUS_STORY_ARCS.get(focus.lower(), "Three-act structure: setup, evidence, ask")
+
+
+# Issue E: Context tone → brief tone mapping
+_CONTEXT_TO_BRIEF_TONE: dict[str, str] = {
+    "authoritative": "formal",
+    "visionary": "conversational",
+    "approachable": "conversational",
+    "data_first": "formal",
+    "urgent": "urgent",
+}
+
+
+def _map_context_tone_to_brief_tone(ctx_tone: Optional[str]) -> str:
+    """Map DesignContext tone vocabulary to DesignBrief tone vocabulary (Issue E)."""
+    if not ctx_tone:
+        return "formal"
+    return _CONTEXT_TO_BRIEF_TONE.get(ctx_tone.lower(), ctx_tone)
+
+
+def _default_anti_goals_for_audience(audience: Optional[str]) -> list[str]:
+    """Populate anti_goals list based on audience keywords (Issue B)."""
+    if not audience:
+        return []
+    audience_lower = audience.lower()
+    anti_goals: list[str] = []
+    if any(k in audience_lower for k in ("investor", "vc", "venture", "fund")):
+        anti_goals.extend(["avoid overly technical jargon", "avoid dense data tables without narrative"])
+    if any(k in audience_lower for k in ("executive", "board", "c-suite")):
+        anti_goals.extend(["avoid operational minutiae", "avoid slides without clear so-what"])
+    if any(k in audience_lower for k in ("technical", "engineering", "developer")):
+        anti_goals.extend(["avoid vague hand-waving", "avoid hiding complexity behind buzzwords"])
+    if any(k in audience_lower for k in ("general", "public", "consumer")):
+        anti_goals.extend(["avoid industry jargon", "avoid data-heavy slides without context"])
+    return anti_goals
+
+
+def _visual_strategy_for(ctx: "DesignContext") -> str:
+    """Compose visual strategy string from tone, focus, and industry (Issue D).
+
+    Includes pacing keywords (sparse/narrative/data-heavy) so that
+    _determine_pacing() can pick them up from brief.visual_strategy.
+    """
+    parts: list[str] = []
+
+    if ctx.industry:
+        parts.append(f"Design for {ctx.industry}")
+
+    tone = (ctx.tone or "").lower()
+    if tone in ("approachable", "visionary", "inspiring"):
+        parts.append("narrative pacing")
+    elif tone in ("data_first", "authoritative"):
+        parts.append("data-heavy layout")
+    elif tone in ("urgent",):
+        parts.append("sparse high-impact layout")
+
+    focus = (ctx.focus or "").lower()
+    if focus in ("inform", "report"):
+        parts.append("data-heavy structure")
+    elif focus in ("inspire", "persuade"):
+        parts.append("narrative arc with visual impact")
+    elif focus in ("decide",):
+        parts.append("clear options comparison")
+
+    if not parts:
+        return "Professional presentation"
+
+    return "; ".join(parts)
+
+
+def _default_design_brief() -> "DesignBrief":
+    """Return a neutral default DesignBrief when both inputs are None (Issue A)."""
+    return DesignBrief(
+        deck_purpose="Presentation deck",
+        audience_profile="General audience",
+        story_arc=_story_arc_for_focus(None),
+        key_message="Inform and persuade",
+        visual_strategy="Professional presentation",
+        tone="formal",
+    )
+
+
+def _synthesize_brief_from_context(ctx: "DesignContext") -> "DesignBrief":
+    """Build a DesignBrief from an explicit DesignContext (Issue A)."""
+    audience = ctx.audience or "General audience"
+    return DesignBrief(
+        deck_purpose=ctx.deck_purpose or "Presentation deck",
+        audience_profile=audience,
+        story_arc=_story_arc_for_focus(ctx.focus),
+        key_message=ctx.focus or "Inform and persuade",
+        visual_strategy=_visual_strategy_for(ctx),
+        tone=_map_context_tone_to_brief_tone(ctx.tone),
+        anti_goals=_default_anti_goals_for_audience(audience),
+    )
+
+
 def generate_visual_brief(
     deck_outline: list[dict[str, Any]],
     design_brief: Optional[DesignBrief],
@@ -43,18 +157,15 @@ def generate_visual_brief(
     Returns:
         VisualBrief with all visual decisions locked in
     """
-    # Synthesize DesignBrief from DesignContext if brief is None
-    if design_brief is None and design_context:
-        design_brief = DesignBrief(
-            deck_purpose=design_context.deck_purpose or "Presentation deck",
-            audience_profile=design_context.audience or "General audience",
-            story_arc="Three-act structure: setup, evidence, ask",
-            key_message=design_context.focus or "Inform and persuade",
-            visual_strategy=f"Design for {design_context.industry}" if design_context.industry else "Professional presentation",
-            tone=design_context.tone or "formal",
-        )
+    # Synthesize DesignBrief from DesignContext if brief is None (Issue A dispatch)
+    if design_brief is None:
+        if design_context:
+            design_brief = _synthesize_brief_from_context(design_context)
+        else:
+            design_brief = _default_design_brief()
 
-    purpose_str = design_brief.deck_purpose[:40] if design_brief else "unknown"
+    # Issue F: guard against None deck_purpose before slicing
+    purpose_str = (design_brief.deck_purpose[:40] if design_brief.deck_purpose else "unknown")
     log.info(
         "Visual Direction Agent: LLM reasoning for %s (outline=%d slides, context=%s)",
         purpose_str,
