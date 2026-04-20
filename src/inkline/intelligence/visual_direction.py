@@ -22,7 +22,7 @@ LLMCaller = Callable[[str, str], str]
 
 def generate_visual_brief(
     deck_outline: list[dict[str, Any]],
-    design_brief: DesignBrief,
+    design_brief: Optional[DesignBrief],
     brand: str,
     n8n_endpoint: str = "",
     design_context: Optional[DesignContext] = None,
@@ -33,7 +33,7 @@ def generate_visual_brief(
 
     Args:
         deck_outline: Slide plan from DesignAdvisor Phase 1 (list of {slide_type, title, notes})
-        design_brief: DesignBrief (audience, tone, purpose)
+        design_brief: DesignBrief (audience, tone, purpose) — will be synthesized from design_context if None
         brand: Brand name ("minimal", etc.)
         n8n_endpoint: Optional n8n webhook URL for background generation
         design_context: Explicit user intent (audience, tone, focus, industry)
@@ -43,9 +43,21 @@ def generate_visual_brief(
     Returns:
         VisualBrief with all visual decisions locked in
     """
+    # Synthesize DesignBrief from DesignContext if brief is None
+    if design_brief is None and design_context:
+        design_brief = DesignBrief(
+            deck_purpose=design_context.deck_purpose or "Presentation deck",
+            audience_profile=design_context.audience or "General audience",
+            story_arc="Three-act structure: setup, evidence, ask",
+            key_message=design_context.focus or "Inform and persuade",
+            visual_strategy=f"Design for {design_context.industry}" if design_context.industry else "Professional presentation",
+            tone=design_context.tone or "formal",
+        )
+
+    purpose_str = design_brief.deck_purpose[:40] if design_brief else "unknown"
     log.info(
         "Visual Direction Agent: LLM reasoning for %s (outline=%d slides, context=%s)",
-        design_brief.deck_purpose[:40],
+        purpose_str,
         len(deck_outline),
         "explicit" if design_context else "inferred",
     )
