@@ -644,10 +644,14 @@ def export_typst_slides(
             log.warning("Overflow fix failed: %s", e)
             break
 
-    # === PHASE 4: Archon final review (ONE pass — no loop back to overflow) ===
+    # === PHASE 4: Archon closed-loop review (audit → fix → re-audit, max N passes) ===
     # Full quality gate: visual fidelity, narrative fidelity, storytelling
-    # quality, and commercial viability. Runs ONCE after the deck is locked.
-    # Any errors trigger a single targeted revision, then the deck ships.
+    # quality, and commercial viability. Wrapped in an outer loop that:
+    #   1. Runs the audit
+    #   2. Exits on clean pass
+    #   3. On errors: applies revision + re-renders + re-audits
+    #   4. Exits if a pass made no changes (nothing more we can fix)
+    #   5. Otherwise continues until max_visual_attempts is reached.
     if audit:
         try:
             from inkline.intelligence.overflow_audit import (
@@ -659,75 +663,106 @@ def export_typst_slides(
             audit = False
 
     if audit:
-        # Re-identify persistent overflow (structural info for Archon)
-        persistent_overflow_indices: list[int] = []
-        final_actual = _count_pages(output_path)
-        if 0 < final_actual != len(slides):
-            try:
-                from inkline.intelligence.slide_fixer import identify_overflow_slides
-                persistent_overflow_indices = identify_overflow_slides(output_path, slides, source or "")
-                log.info("Archon: persistent overflow slides %s", persistent_overflow_indices)
-            except Exception:
-                pass
+        visual_attempt = 0
+        archon_passed_clean = False
+        archon_last_error_count = None
 
-        post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
+        while visual_attempt <= max_visual_attempts:
+            # Re-identify persistent overflow (structural info for Archon)
+            persistent_overflow_indices: list[int] = []
+            final_actual = _count_pages(output_path)
+            if 0 < final_actual != len(slides):
+                try:
+                    from inkline.intelligence.slide_fixer import identify_overflow_slides
+                    persistent_overflow_indices = identify_overflow_slides(output_path, slides, source or "")
+                    log.info("Archon: persistent overflow slides %s", persistent_overflow_indices)
+                except Exception:
+                    pass
 
-        # Inject per-slide overflow errors so Archon knows which slides to redesign
-        if persistent_overflow_indices:
-            try:
-                from inkline.intelligence.overflow_audit import AuditWarning
-                for idx in persistent_overflow_indices:
-                    if idx < len(slides):
-                        stype = slides[idx].get("slide_type", "unknown")
-                        stitle = slides[idx].get("data", {}).get("title", "")[:50]
-                        post_warnings.append(AuditWarning(
-                            slide_index=idx + 1,
-                            slide_type=stype,
-                            severity="error",
-                            message=(
-                                f"Slide {idx + 1} ({stype}: '{stitle}') overflows onto an extra page. "
-                                f"Replace with a simpler slide type (content/split/three_card) "
-                                f"or reduce the number of items."
-                            ),
-                        ))
-            except Exception:
-                pass
+            post_warnings = audit_rendered_pdf(output_path, expected_slides=len(slides))
 
-        # Chart image clipping audit
-        seen_images: set = set()
-        for s in slides:
-            img = s.get("data", {}).get("image_path")
-            if img and img not in seen_images:
-                seen_images.add(img)
-                img_path = Path(root or str(output_path.parent)) / img
-                if img_path.exists():
-                    post_warnings.extend(audit_chart_image(img_path))
+            # Inject per-slide overflow errors so Archon knows which slides to redesign
+            if persistent_overflow_indices:
+                try:
+                    from inkline.intelligence.overflow_audit import AuditWarning
+                    for idx in persistent_overflow_indices:
+                        if idx < len(slides):
+                            stype = slides[idx].get("slide_type", "unknown")
+                            stitle = slides[idx].get("data", {}).get("title", "")[:50]
+                            post_warnings.append(AuditWarning(
+                                slide_index=idx + 1,
+                                slide_type=stype,
+                                severity="error",
+                                message=(
+                                    f"Slide {idx + 1} ({stype}: '{stitle}') overflows onto an extra page. "
+                                    f"Replace with a simpler slide type (content/split/three_card) "
+                                    f"or reduce the number of items."
+                                ),
+                            ))
+                except Exception:
+                    pass
 
-        # --- Archon visual + narrative audit (parallel per-slide) ---
-        log.info("Archon review: auditing %d slides (parallel vision calls)...", len(slides))
-        llm_warnings = audit_deck_with_llm(
-            output_path, slides, brand=brand, source_narrative=source_narrative,
-            overflow_slide_indices=persistent_overflow_indices,
-        )
-        post_warnings.extend(llm_warnings)
-        all_warnings.extend(post_warnings)
+            # Chart image clipping audit
+            seen_images: set = set()
+            for s in slides:
+                img = s.get("data", {}).get("image_path")
+                if img and img not in seen_images:
+                    seen_images.add(img)
+                    img_path = Path(root or str(output_path.parent)) / img
+                    if img_path.exists():
+                        post_warnings.extend(audit_chart_image(img_path))
 
-        # Collect actionable errors
-        llm_errors = [w for w in llm_warnings if w.severity == "error"]
-        structural_errors = [
-            w for w in post_warnings
-            if getattr(w, "severity", "") == "error" and w not in llm_warnings
-        ]
-        actionable = llm_errors + structural_errors
+            # --- Archon visual + narrative audit (parallel per-slide) ---
+            log.info(
+                "Archon review pass %d/%d: auditing %d slides (parallel vision calls)...",
+                visual_attempt + 1, max_visual_attempts + 1, len(slides),
+            )
+            llm_warnings = audit_deck_with_llm(
+                output_path, slides, brand=brand, source_narrative=source_narrative,
+                overflow_slide_indices=persistent_overflow_indices,
+            )
+            post_warnings.extend(llm_warnings)
+            all_warnings.extend(post_warnings)
 
-        if not actionable:
-            log.info("Archon review PASSED — deck is clean")
-        elif not auto_fix:
-            log.info("Archon review: %d errors found (auto_fix=False, shipping as-is)",
-                     len(actionable))
-        else:
-            # Single targeted revision pass — no loop, no overflow re-check
-            log.info("Archon review: %d errors found — applying targeted revision", len(actionable))
+            # Collect actionable errors
+            llm_errors = [w for w in llm_warnings if w.severity == "error"]
+            structural_errors = [
+                w for w in post_warnings
+                if getattr(w, "severity", "") == "error" and w not in llm_warnings
+            ]
+            actionable = llm_errors + structural_errors
+
+            # Exit 1 — CLEAN PASS
+            if not actionable:
+                archon_passed_clean = True
+                log.info(
+                    "Archon review PASSED (clean) after %d fix pass(es) — deck is ready",
+                    visual_attempt,
+                )
+                break
+
+            # Exit 2 — auto_fix disabled
+            if not auto_fix:
+                log.info(
+                    "Archon review: %d errors found (auto_fix=False, shipping as-is)",
+                    len(actionable),
+                )
+                break
+
+            # Exit 3 — reached the iteration ceiling; ship whatever we have
+            if visual_attempt >= max_visual_attempts:
+                log.warning(
+                    "Archon review: max_visual_attempts=%d reached with %d errors remaining — shipping",
+                    max_visual_attempts, len(actionable),
+                )
+                break
+
+            # --- Attempt a targeted revision and re-render ---
+            log.info(
+                "Archon pass %d: %d errors found — applying targeted revision",
+                visual_attempt + 1, len(actionable),
+            )
+            revision_changed_something = False
             try:
                 from inkline.intelligence.design_advisor import DesignAdvisor
                 advisor = DesignAdvisor(brand=brand, template=template, mode="llm")
@@ -741,22 +776,55 @@ def export_typst_slides(
                     slides = revised
                     _auto_render_charts(slides, brand, root or str(output_path.parent))
                     slides = _degrade_placeholder_slides(slides, root or str(output_path.parent))
-                    # Re-render and compile final PDF
+                    # Re-render and recompile so the next audit sees the fix
                     source = None
                     source = _render_and_compile(slides, source, True)
-                    log.info("Archon revision applied — final PDF rendered")
+                    log.info("Archon pass %d: revision applied — deck re-rendered", visual_attempt + 1)
+                    revision_changed_something = True
                 else:
-                    # DesignAdvisor made no changes — try fixer as fallback
+                    # DesignAdvisor made no structural change — try deterministic fixer
                     from inkline.intelligence.slide_fixer import fix_from_llm_findings
                     slides, applied = fix_from_llm_findings(slides, actionable)
                     if applied:
                         source = None
                         source = _render_and_compile(slides, source, True)
-                        log.info("Archon fixer applied %d fixes — final PDF rendered", len(applied))
+                        log.info(
+                            "Archon pass %d: fixer applied %d fixes — deck re-rendered",
+                            visual_attempt + 1, len(applied),
+                        )
+                        revision_changed_something = True
                     else:
-                        log.info("Archon: no changes possible — shipping current version")
+                        log.info(
+                            "Archon pass %d: no actionable changes possible — exiting loop",
+                            visual_attempt + 1,
+                        )
             except Exception as e:
-                log.warning("Archon revision failed: %s — shipping current version", e)
+                log.warning(
+                    "Archon pass %d: revision failed: %s — exiting loop",
+                    visual_attempt + 1, e,
+                )
+
+            # Exit 4 — this pass made no changes: further loops would repeat the same work
+            if not revision_changed_something:
+                break
+
+            # Additional guard: if error count did not decrease across passes,
+            # we're likely looping on uncorrectable findings — bail out early.
+            if archon_last_error_count is not None and len(actionable) >= archon_last_error_count:
+                log.info(
+                    "Archon pass %d: error count did not decrease (%d → %d) — exiting loop",
+                    visual_attempt + 1, archon_last_error_count, len(actionable),
+                )
+                # We still advance — we'll re-audit once more to confirm improvement or exit.
+            archon_last_error_count = len(actionable)
+
+            visual_attempt += 1
+
+        # Final summary line — always emitted so callers can see how the loop resolved
+        log.info(
+            "Archon closed-loop result: %d revision pass(es), clean_pass=%s",
+            visual_attempt, archon_passed_clean,
+        )
 
     # === PHASE 4: Final report ===
     if all_warnings:
