@@ -6,13 +6,13 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "inkblot-icon",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [100, 300]
     },
     {
@@ -47,26 +47,23 @@
     },
     {
       "parameters": {
-        "fileName": "=/tmp/inkline_bg_{{ Date.now() }}.png",
-        "fileContent": "={{ Buffer.from($response.body.candidates[0].content.parts[0].inline_data.data, 'base64') }}",
-        "options": {}
+        "jsCode": "const item = $input.first();\nconst base64Data = item.json.candidates[0].content.parts[0].inlineData.data;\nconst filePath = `/tmp/inkline_bg_${Date.now()}.png`;\nconst fs = require('fs');\nconst buf = Buffer.from(base64Data, 'base64');\nfs.writeFileSync(filePath, buf);\nreturn [{ json: { file_path: filePath, bytes: buf.length } }];"
       },
       "id": "write_file",
-      "name": "Write Binary File",
-      "type": "n8n-nodes-base.writeBinaryFile",
-      "typeVersion": 1,
+      "name": "Write File & Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [500, 300]
     },
     {
       "parameters": {
-        "respondWithOptions": {
-          "responseBody": "{\"image_path\":\"{{ $input.first().file_path }}\"}"
-        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ image_path: $input.first().json.file_path }) }}",
         "options": {}
       },
       "id": "http_response",
-      "name": "HTTP Response",
-      "type": "n8n-nodes-base.httpRespond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [700, 300]
     }
