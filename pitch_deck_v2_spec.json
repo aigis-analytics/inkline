@@ -1,0 +1,198 @@
+[
+  {
+    "slide_type": "title",
+    "data": {
+      "company": "Inkline",
+      "tagline": "AI Design Automation",
+      "subtitle": "Series A \u2014 April 2026",
+      "date": "April 2026"
+    }
+  },
+  {
+    "slide_type": "chart_caption",
+    "data": {
+      "section": "Problem",
+      "title": "40% of deck time wasted on formatting",
+      "image_path": "problem_bars.png",
+      "chart_request": {
+        "chart_type": "horizontal_stacked_bar",
+        "chart_data": {
+          "categories": [
+            "Fighting layout & templates",
+            "Content & storytelling",
+            "Charts & data visualisation",
+            "Review & logistics"
+          ],
+          "series": [
+            {
+              "name": "% of deck creation time",
+              "values": [
+                40,
+                35,
+                15,
+                10
+              ]
+            }
+          ],
+          "x_max": 50,
+          "x_label": "% of total deck creation time",
+          "title": "Where presentation time actually goes"
+        }
+      },
+      "caption": "40% on formatting \u2014 not a single tool automates this today",
+      "bullets": [
+        "PowerPoint design intelligence: unchanged since 2003",
+        "Visual consistency breaks across large teams and brands",
+        "Every slide demands its own manual formatting call",
+        "Zero tools make design-direction decisions automatically"
+      ]
+    }
+  },
+  {
+    "slide_type": "chart_caption",
+    "data": {
+      "section": "Solution",
+      "title": "One brief replaces 100 per-slide decisions",
+      "image_path": "solution_capability.png",
+      "chart_request": {
+        "chart_type": "grouped_bar",
+        "chart_data": {
+          "categories": [
+            "Layout AI",
+            "Colour AI",
+            "Type AI",
+            "Brand QA",
+            "API"
+          ],
+          "series": [
+            {
+              "name": "Inkline",
+              "values": [
+                100,
+                100,
+                100,
+                100,
+                100
+              ]
+            },
+            {
+              "name": "Best competitor",
+              "values": [
+                20,
+                5,
+                5,
+                80,
+                5
+              ]
+            }
+          ],
+          "y_label": "Automation coverage (%)",
+          "title": "Design automation: Inkline vs. best-in-class competitor",
+          "accent_index": 0
+        }
+      },
+      "caption": "Inkline automates every design dimension \u2014 competitors top out at 80%",
+      "bullets": [
+        "Describe content: Inkline picks layout, colour, and type",
+        "Per-slide AI audit runs before any deck is delivered",
+        "Brand colour, spacing, and scale enforced globally",
+        "API-first: embed in any workflow or document pipeline"
+      ]
+    }
+  },
+  {
+    "slide_type": "chart_caption",
+    "data": {
+      "section": "Market",
+      "title": "Inkline alone automates a $10B market",
+      "image_path": "market_automation.png",
+      "chart_request": {
+        "chart_type": "horizontal_stacked_bar",
+        "chart_data": {
+          "categories": [
+            "PowerPoint (300M users)",
+            "Google Slides (200M users)",
+            "Canva (60M users)",
+            "Gamma (5M users)",
+            "Inkline"
+          ],
+          "series": [
+            {
+              "name": "AI design automation score (%)",
+              "values": [
+                1,
+                1,
+                5,
+                20,
+                100
+              ]
+            }
+          ],
+          "x_max": 110,
+          "x_label": "AI design automation score",
+          "title": "Design automation score by tool (0 = manual, 100 = fully automated)"
+        }
+      },
+      "caption": "500M users on tools scoring \u22645% \u2014 Inkline scores 100%",
+      "bullets": [
+        "5M+ knowledge workers create slide decks annually",
+        "$10B+ combined presentation + design software market",
+        "PowerPoint & Slides: 500M users, effectively 0% automation",
+        "Canva/Gamma add templates \u2014 none make design decisions"
+      ]
+    }
+  },
+  {
+    "slide_type": "chart_caption",
+    "data": {
+      "section": "Traction",
+      "title": "Zero churn \u2014 every beta user still active",
+      "image_path": "traction_growth.png",
+      "chart_request": {
+        "chart_type": "area_chart",
+        "chart_data": {
+          "x": [
+            "Oct",
+            "Nov",
+            "Dec",
+            "Jan",
+            "Feb",
+            "Mar"
+          ],
+          "series": [
+            {
+              "name": "Active beta users",
+              "values": [
+                12,
+                25,
+                40,
+                60,
+                80,
+                100
+              ]
+            }
+          ],
+          "y_label": "Active users",
+          "title": "Beta cohort growth \u2014 0% churn, Oct 2025 \u2192 Mar 2026"
+        }
+      },
+      "caption": "100 users, NPS 67, 0% churn \u2014 early product-market fit signal",
+      "bullets": [
+        "NPS 67 \u2014 world-class B2B SaaS benchmark (excellent: 60+)",
+        "+15% month-on-month user growth, zero paid acquisition",
+        "Beta cohort: venture studios + management consulting",
+        "Every user who started the beta is still active today"
+      ]
+    }
+  },
+  {
+    "slide_type": "closing",
+    "data": {
+      "company": "Inkline",
+      "tagline": "AI that designs so you don't have to.",
+      "name": "Aaditya Chintalapati",
+      "role": "Founder & CEO",
+      "email": "aaditya.chintalapati@gmail.com"
+    }
+  }
+]
