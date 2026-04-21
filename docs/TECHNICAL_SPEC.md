@@ -645,7 +645,7 @@ MyCorp = BaseBrand(
     logo_dark_path="mycorp_logo_white.png",   # resolved from asset dirs
     logo_light_path="mycorp_logo_dark.png",
     confidentiality="Private & Confidential",
-    footer_text="My Corporation Pty Ltd",
+    footer_text="My Corporation Limited",
 )
 ```
 
