@@ -115,7 +115,7 @@ class TypstDocumentRenderer:
         t = self.t
         heading_font = t.get("heading_font", "Inter")
         body_font = t.get("body_font", "Inter")
-        body_size = t.get("body_size", 11)
+        body_size = t.get("body_size", 10.5)
         accent = t.get("accent", "#1a3a5c")
         muted = t.get("muted", "#6B7280")
         border = t.get("border", "#D1D5DB")
@@ -179,7 +179,7 @@ class TypstDocumentRenderer:
 )
 
 #set text(font: "{body_font}", size: {body_size}pt, fill: {_rgb(t.get('text', '#1A1A1A'))})
-#set par(leading: 1.5em, justify: true, spacing: 0.65em)
+#set par(leading: 0.65em, justify: true, spacing: 0.8em)
 #set table(stroke: 0.5pt + {_rgb(border)}, inset: 6pt)
 
 // OpenType figure variants — applied at style level
@@ -204,26 +204,26 @@ class TypstDocumentRenderer:
 #set heading(numbering: none)
 
 #show heading.where(level: 1): it => {{
-  set par(leading: 1.15em)
-  v(16pt)
-  text(font: "{heading_font}", weight: "bold", size: 18pt, fill: {_rgb(accent)})[#it]
-  v(4pt)
-  line(length: 100%, stroke: 1pt + {_rgb(accent2)})
-  v(8pt)
-}}
-
-#show heading.where(level: 2): it => {{
-  set par(leading: 1.15em)
-  v(12pt)
-  text(font: "{heading_font}", weight: "bold", size: 14pt, fill: {_rgb(accent)})[#it]
+  set par(leading: 0.4em)
+  v(14pt)
+  text(font: "{heading_font}", weight: "bold", size: 16pt, fill: {_rgb(accent)})[#it]
+  v(3pt)
+  line(length: 100%, stroke: 0.75pt + {_rgb(accent2)})
   v(6pt)
 }}
 
-#show heading.where(level: 3): it => {{
-  set par(leading: 1.15em)
-  v(8pt)
-  text(font: "{heading_font}", weight: "bold", size: 12pt, fill: {_rgb(text_color)})[#it]
+#show heading.where(level: 2): it => {{
+  set par(leading: 0.4em)
+  v(10pt)
+  text(font: "{heading_font}", weight: "bold", size: 13pt, fill: {_rgb(accent)})[#it]
   v(4pt)
+}}
+
+#show heading.where(level: 3): it => {{
+  set par(leading: 0.4em)
+  v(8pt)
+  text(font: "{heading_font}", weight: "semibold", size: 11pt, fill: {_rgb(text_color)})[#it]
+  v(3pt)
 }}"""
 
     # -- Component definitions ---------------------------------------------
