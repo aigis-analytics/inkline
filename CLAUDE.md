@@ -78,6 +78,58 @@ without any `[ARCHON] Phase:` markers in the output stream, the response include
 
 ---
 
+## ⚠️ n8n / Gemini Image-Generation Prerequisite
+
+Image generation (Gemini multimodal — used by `chart_renderer`, generative-asset slides,
+brand-image regeneration) routes through **n8n on port 5678**. n8n is **NOT** installed
+on the main Windows PC. It runs **only on K1Mini** (`k1mini@192.168.1.116`).
+
+**When running Inkline from the main PC, you MUST tunnel K1Mini's n8n port to localhost
+BEFORE starting any image-generating pipeline.** Without the tunnel, Gemini calls
+silently fall back to PIL-constructed placeholder images that won't match the requested
+visual style — and the failure mode is *quiet* (no error, just degraded output).
+
+### Open the tunnel (run once per session, leave it running)
+
+```bash
+ssh -N -f -L 5678:localhost:5678 \
+  -o StrictHostKeyChecking=no \
+  -i ~/.ssh/id_ed25519 \
+  k1mini@192.168.1.116
+```
+
+Flags: `-N` no remote command, `-f` background, `-L 5678:localhost:5678` forward local
+port 5678 to K1Mini's localhost:5678.
+
+### Verify the tunnel is up
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5678/
+# Expect: 200 (or any HTTP response code — anything but 000 means the tunnel is open)
+```
+
+If you get `000` / connection refused, the tunnel is down. Re-run the `ssh` command above.
+
+### Tear down (when finished, optional)
+
+```bash
+pkill -f "ssh -N -f -L 5678:localhost:5678"
+```
+
+### Symptoms that the tunnel is missing
+
+If you see any of these in your run, the tunnel is the likely cause:
+
+- `n8n is not running on this machine` warnings in the build log
+- Gemini-prompted slides ship with PIL fallback diagrams (system-font placeholders)
+- `connection refused` errors against `http://localhost:5678/webhook/...`
+- The build completes but image style doesn't match the requested multimodal anchor
+
+**This is a known operational gotcha — bake it into your pre-flight check on every
+Inkline session run from the main PC.**
+
+---
+
 ## Pipeline Reference — Archon-Wrapped Patterns
 
 These are the ONLY correct ways to generate Inkline output. Both use the same 4-phase
