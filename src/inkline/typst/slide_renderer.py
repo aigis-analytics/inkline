@@ -610,6 +610,8 @@ class TypstSlideRenderer:
             # New slide types (P6) — orbital / halo
             "orbital": self._orbital_slide,
             "halo": self._halo_slide,
+            # Execution engine — freeform positioned-shapes manifest
+            "freeform": self._freeform_slide,
         }.get(slide.slide_type)
         if not renderer:
             return f'// Unknown slide type: {slide.slide_type}'
@@ -2851,6 +2853,176 @@ class TypstSlideRenderer:
     def _halo_slide(self, d: dict) -> str:
         """Halo slide: orbital + thin leader lines from each overlay toward exhibit centre."""
         return self._orbital_slide(d, leader_lines=True)
+
+    def _freeform_slide(self, d: dict) -> str:
+        """Freeform slide: render positioned shapes from a shapes manifest.
+
+        Accepts a ``shapes`` list in the data dict (already resolved from the
+        ``_shapes_file`` directive by the preprocessor / bridge layer).
+        Each shape has a ``type`` field (image | rounded_rect | rect | text |
+        line | arrow | circle | polygon) and position/style fields in pct units.
+
+        Slide canvas: 100% = full slide width/height.
+        Typst coordinate system origin is top-left.
+        """
+        t = self.t
+        title = _esc(d.get("title", ""))
+        section = _esc(d.get("section", ""))
+        shapes = d.get("shapes", [])
+        heading_font = t.get("heading_font", "Inter")
+        heading_color = t.get("heading", "#1A2B4A")
+        body_font = t.get("body_font", "Inter")
+
+        # Slide canvas size (25.4cm × 14.29cm = standard 16:9)
+        canvas_w_cm = 25.4
+        canvas_h_cm = 14.29
+
+        shape_blocks = []
+        for shape in shapes:
+            s_type = shape.get("type", "rect")
+            units = shape.get("units", "pct")
+            opacity = float(shape.get("opacity", 1.0))
+            opacity_cmd = f"#set-opacity({opacity:.2f})" if opacity < 1.0 else ""
+
+            def to_cm_x(v):
+                v = float(v)
+                return v / 100.0 * canvas_w_cm if units == "pct" else v / 96.0 * 2.54
+
+            def to_cm_y(v):
+                v = float(v)
+                return v / 100.0 * canvas_h_cm if units == "pct" else v / 96.0 * 2.54
+
+            if s_type == "image":
+                path = shape.get("path", "")
+                x_cm = to_cm_x(shape.get("x", 0))
+                y_cm = to_cm_y(shape.get("y", 0))
+                w_cm = to_cm_x(shape.get("w", 100))
+                h_cm = to_cm_y(shape.get("h", 100))
+                fit = shape.get("fit", "cover")
+                typst_fit = "cover" if fit == "cover" else ("contain" if fit == "contain" else "stretch")
+                if path:
+                    shape_blocks.append(
+                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f' box(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
+                        f' clip: true, image("{path}", width: {w_cm:.3f}cm, height: {h_cm:.3f}cm, fit: "{typst_fit}")))'
+                    )
+                else:
+                    shape_blocks.append(
+                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm, fill: rgb("#CCCCCC")))'
+                    )
+
+            elif s_type in ("rect", "rounded_rect"):
+                fill = shape.get("fill", "#FFFFFF")
+                x_cm = to_cm_x(shape.get("x", 0))
+                y_cm = to_cm_y(shape.get("y", 0))
+                w_cm = to_cm_x(shape.get("w", 10))
+                h_cm = to_cm_y(shape.get("h", 10))
+                radius_raw = float(shape.get("radius", 0))
+                radius_cm = radius_raw * min(w_cm, h_cm) if s_type == "rounded_rect" else 0
+                radius_str = f", radius: {radius_cm:.3f}cm" if radius_cm > 0 else ""
+                shape_blocks.append(
+                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
+                    f' fill: rgb("{fill}"){radius_str}))'
+                )
+
+            elif s_type == "text":
+                text_val = _esc(shape.get("text", ""))
+                fill = shape.get("color", "#000000")
+                x_cm = to_cm_x(shape.get("x", 0))
+                y_cm = to_cm_y(shape.get("y", 0))
+                w_cm = to_cm_x(shape.get("w", 20))
+                h_cm = to_cm_y(shape.get("h", 5))
+                font = shape.get("font", body_font)
+                size_pt = float(shape.get("size", 14))
+                anchor = shape.get("anchor", "ml")
+                # Map anchor to Typst alignment
+                align_map = {
+                    "ml": "left", "mc": "center", "mr": "right",
+                    "tl": "left", "tc": "center", "tr": "right",
+                    "bl": "left", "bc": "center", "br": "right",
+                }
+                h_align = align_map.get(anchor, "left")
+                shape_blocks.append(
+                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f' box(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
+                    f' text(font: "{font}", size: {size_pt}pt, fill: rgb("{fill}"), align({h_align}, [{text_val}])))'
+                    f')'
+                )
+
+            elif s_type in ("line", "arrow"):
+                x1_cm = to_cm_x(shape.get("x1", 0))
+                y1_cm = to_cm_y(shape.get("y1", 0))
+                x2_cm = to_cm_x(shape.get("x2", 100))
+                y2_cm = to_cm_y(shape.get("y2", 0))
+                color = shape.get("color", "#000000")
+                thickness_pt = float(shape.get("thickness", 1))
+                dx = x2_cm - x1_cm
+                dy = y2_cm - y1_cm
+                mark = ", mark: (end: \">\")" if s_type == "arrow" else ""
+                shape_blocks.append(
+                    f'  #place(top + left, dx: {x1_cm:.3f}cm, dy: {y1_cm:.3f}cm,'
+                    f' line(start: (0cm, 0cm), end: ({dx:.3f}cm, {dy:.3f}cm),'
+                    f' stroke: rgb("{color}") + {thickness_pt}pt{mark}))'
+                )
+
+            elif s_type == "circle":
+                fill = shape.get("fill", "#FFFFFF")
+                cx_cm = to_cm_x(shape.get("cx", 50))
+                cy_cm = to_cm_y(shape.get("cy", 50))
+                r_val = shape.get("r", 10)
+                r_cm = to_cm_x(r_val)  # horizontal radius
+                x_cm = cx_cm - r_cm
+                y_cm = cy_cm - r_cm
+                d_cm = r_cm * 2
+                shape_blocks.append(
+                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f' circle(width: {d_cm:.3f}cm, height: {d_cm:.3f}cm, fill: rgb("{fill}")))'
+                )
+
+            elif s_type == "polygon":
+                # Approximate polygon with an outlined rect bounding box + note
+                points = shape.get("points", [])
+                if points:
+                    xs = [to_cm_x(p[0]) for p in points]
+                    ys = [to_cm_y(p[1]) for p in points]
+                    x_cm = min(xs)
+                    y_cm = min(ys)
+                    w_cm = max(xs) - x_cm
+                    h_cm = max(ys) - y_cm
+                    fill = shape.get("fill", "#AAAAAA")
+                    shape_blocks.append(
+                        f'  // polygon (approximated as bounding rect)\n'
+                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
+                        f' fill: rgb("{fill}"), stroke: none))'
+                    )
+
+        shapes_str = "\n".join(shape_blocks) if shape_blocks else "  // (no shapes)"
+
+        # Header bar (optional — only if title is present)
+        header_block = ""
+        if title:
+            header_block = f"""  #place(top + left, dx: 1.4cm, dy: 0.4cm,
+    box(width: 22.6cm, height: 1.2cm, [
+      #if "{section}" != "" {{
+        #text(font: "{heading_font}", size: 9pt, fill: rgb("{t.get('accent', '#1A7FA0')}"), weight: "bold")[\
+{section}]
+        #h(0.5em)
+        #text(fill: gray)[|]
+        #h(0.5em)
+      }}
+      #text(font: "{heading_font}", size: 16pt, fill: rgb("{heading_color}"), weight: "bold")[{title}]
+    ])
+  )"""
+
+        return f"""
+  // ── freeform slide ──────────────────────────────────────────────────────
+  #block(width: 100%, height: 100%, clip: true, {{
+{header_block}
+{shapes_str}
+  }})"""
 
 
 def _esc(text) -> str:
