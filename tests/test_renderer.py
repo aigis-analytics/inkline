@@ -1,16 +1,17 @@
-"""Typst slide renderer tests — content limits + render smoke tests.
+"""Typst slide renderer tests — overflow safety + render smoke tests.
 
 These tests exist to prevent regressions in overflow behaviour. Every time
 slide_renderer.py is changed, these tests must pass.
 
-Two failure modes we've hit in production:
-1. Missing `set par(spacing:0em)` on a slide type → blank overflow page in PDF
-2. Field limit not defined or too loose → LLM content causes Typst overflow
+The historical failure mode this guards against:
+- Missing `set par(spacing:0em)` on a slide type → blank overflow page in PDF
 
-The smoke tests (test_all_types_render_*) catch both by:
-- Populating every field with maximum-length content
-- Verifying the renderer produces non-empty Typst markup without crashing
-- Verifying _apply_field_limits truncates exactly to the limit
+Note on field limits: `_clamp` is intentionally a passthrough — text truncation
+was deliberately removed because adaptive font sizing in Typst handles overflow
+correctly, and silent truncation created an audit feedback loop where the
+visual auditor saw "…" characters and re-flagged slides indefinitely.
+FIELD_LIMITS remains as advisory metadata for the design layer; these tests
+verify the passthrough contract, not truncation.
 """
 from __future__ import annotations
 
@@ -236,16 +237,21 @@ def _max_data(slide_type: str) -> dict:
 # ---------------------------------------------------------------------------
 
 class TestClamp:
+    """`_clamp` is a passthrough — Typst handles overflow via adaptive sizing.
+
+    See module docstring for why truncation was removed.
+    """
+
     def test_within_limit(self):
         assert _clamp("hello", 10) == "hello"
 
     def test_at_limit(self):
         assert _clamp("A" * 45, 45) == "A" * 45
 
-    def test_over_limit(self):
+    def test_over_limit_passthrough(self):
         result = _clamp("A" * 50, 45)
-        assert len(result) == 45
-        assert result.endswith("…")
+        assert result == "A" * 50
+        assert "…" not in result
 
     def test_empty(self):
         assert _clamp("", 45) == ""
@@ -253,13 +259,11 @@ class TestClamp:
     def test_none(self):
         assert _clamp(None, 45) == ""
 
-    def test_clamp_list(self):
+    def test_clamp_list_passthrough(self):
         items = ["A" * 10, "B" * 90, "C" * 3]
         result = _clamp_list(items, 80)
-        assert len(result[0]) == 10   # not changed
-        assert len(result[1]) == 80   # truncated
-        assert result[1].endswith("…")
-        assert len(result[2]) == 3    # not changed
+        assert result == items
+        assert all("…" not in s for s in result)
 
 
 # ---------------------------------------------------------------------------
@@ -267,11 +271,17 @@ class TestClamp:
 # ---------------------------------------------------------------------------
 
 class TestApplyFieldLimits:
-    def test_title_clamped(self):
+    """`_apply_field_limits` walks the dispatch but does not truncate.
+
+    See module docstring for why truncation was removed. These tests verify
+    the passthrough contract and the no-mutation guarantee.
+    """
+
+    def test_title_passthrough(self):
         d = {"title": "A" * 60, "items": ["hello"]}
         result = TypstSlideRenderer._apply_field_limits("content", d)
-        assert len(result["title"]) == 45
-        assert result["title"].endswith("…")
+        assert result["title"] == "A" * 60
+        assert "…" not in result["title"]
 
     def test_title_at_limit_unchanged(self):
         t = "A" * 45
@@ -279,32 +289,32 @@ class TestApplyFieldLimits:
         result = TypstSlideRenderer._apply_field_limits("content", d)
         assert result["title"] == t
 
-    def test_stat_value_4stats_clamped_to_8(self):
+    def test_stat_value_passthrough_4stats(self):
         d = {"title": "T", "stats": [
             {"value": "X" * 15, "label": "L", "desc": "D"} for _ in range(4)
         ]}
         result = TypstSlideRenderer._apply_field_limits("stat", d)
         for s in result["stats"]:
-            assert len(s["value"]) == 8
+            assert s["value"] == "X" * 15
 
-    def test_stat_value_3stats_clamped_to_12(self):
+    def test_stat_value_passthrough_3stats(self):
         d = {"title": "T", "stats": [
             {"value": "X" * 15, "label": "L", "desc": "D"} for _ in range(3)
         ]}
         result = TypstSlideRenderer._apply_field_limits("stat", d)
         for s in result["stats"]:
-            assert len(s["value"]) == 12
+            assert s["value"] == "X" * 15
 
-    def test_stat_value_2stats_clamped_to_16(self):
+    def test_stat_value_passthrough_2stats(self):
         d = {"title": "T", "stats": [
             {"value": "X" * 20, "label": "L", "desc": "D"} for _ in range(2)
         ]}
         result = TypstSlideRenderer._apply_field_limits("stat", d)
         for s in result["stats"]:
-            assert len(s["value"]) == 16
+            assert s["value"] == "X" * 20
 
-    def test_stat_dollar_value_real_world(self):
-        """'$18.33/boe' (10 chars) must be clamped to 8 in a 4-stat layout."""
+    def test_stat_dollar_value_passthrough(self):
+        """Real-world dollar values pass through unchanged regardless of layout."""
         d = {"title": "T", "stats": [
             {"value": "$18.33/boe", "label": "LOE/boe", "desc": ""},
             {"value": "$27.9mm", "label": "Revenue", "desc": ""},
@@ -312,10 +322,10 @@ class TestApplyFieldLimits:
             {"value": "Nil", "label": "Debt", "desc": ""},
         ]}
         result = TypstSlideRenderer._apply_field_limits("stat", d)
-        # $18.33/boe → $18.33/… (8 chars, clamped)
-        assert len(result["stats"][0]["value"]) == 8
-        # $27.9mm (7 chars) → unchanged
+        assert result["stats"][0]["value"] == "$18.33/boe"
         assert result["stats"][1]["value"] == "$27.9mm"
+        assert result["stats"][2]["value"] == "$231mm"
+        assert result["stats"][3]["value"] == "Nil"
 
     def test_split_items_clamped(self):
         long_item = "W" * 80
@@ -335,25 +345,23 @@ class TestApplyFieldLimits:
         # This just checks that the field limits pass doesn't crash.
         assert "left" in result
 
-    def test_four_card_body_clamped(self):
+    def test_four_card_body_passthrough(self):
         long_body = "B" * 200
         d = {"title": "T", "cards": [
             {"title": "Card", "body": long_body} for _ in range(4)
         ]}
         result = TypstSlideRenderer._apply_field_limits("four_card", d)
-        lim = FIELD_LIMITS["four_card"]["cards.body"]
         for card in result["cards"]:
-            assert len(card["body"]) == lim
+            assert card["body"] == long_body
 
-    def test_comparison_rows_clamped(self):
+    def test_comparison_rows_passthrough(self):
         long_val = "V" * 60
         d = {"title": "T", "left_title": "L", "right_title": "R",
              "rows": [{"metric": "M", "left": long_val, "right": long_val} for _ in range(4)]}
         result = TypstSlideRenderer._apply_field_limits("comparison", d)
-        lim = FIELD_LIMITS["comparison"]["rows.left"]
         for row in result["rows"]:
-            assert len(row["left"]) == lim
-            assert len(row["right"]) == lim
+            assert row["left"] == long_val
+            assert row["right"] == long_val
 
     def test_original_data_not_mutated(self):
         """_apply_field_limits must not mutate the input dict."""
@@ -451,14 +459,19 @@ class TestRenderSmoke:
         )
 
     @pytest.mark.parametrize("slide_type", _ALL_CONTENT_TYPES)
-    def test_field_limits_applied(self, slide_type):
-        """Content rendered after _apply_field_limits must not exceed char limits."""
+    def test_renders_with_over_limit_content(self, slide_type):
+        """Renderer must not crash when fed content exceeding FIELD_LIMITS.
+
+        Truncation was deliberately removed (see module docstring); the
+        renderer's contract is that adaptive Typst sizing handles overflow.
+        This test verifies the contract — no Python exception when content
+        is over-limit, not that content is truncated.
+        """
         from inkline.typst.slide_renderer import SlideSpec
         limits = FIELD_LIMITS.get(slide_type, {})
         if not limits:
             pytest.skip(f"{slide_type}: no field limits defined")
 
-        # Build over-limit data (double every char limit)
         data_over = {}
         max_data = _max_data(slide_type)
         for k, v in max_data.items():
@@ -468,13 +481,6 @@ class TestRenderSmoke:
             else:
                 data_over[k] = v
 
-        result = TypstSlideRenderer._apply_field_limits(slide_type, data_over)
-
-        # Check top-level string fields
-        for field, limit in limits.items():
-            if "." not in field and field in result:
-                val = result[field]
-                if isinstance(val, str):
-                    assert len(val) <= limit, (
-                        f"{slide_type}.{field}: {len(val)} chars exceeds limit {limit}"
-                    )
+        spec = SlideSpec(slide_type=slide_type, data=data_over)
+        markup = _RENDERER._render_slide(spec)
+        assert markup, f"{slide_type}: renderer returned empty string for over-limit content"
