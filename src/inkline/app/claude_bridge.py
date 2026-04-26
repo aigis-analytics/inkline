@@ -1031,9 +1031,40 @@ async def handle_prompt(request: web.Request) -> web.Response:
             })
         else:
             err = stderr_raw.decode("utf-8").strip()
+            stdout_text_fail = stdout_raw.decode("utf-8", errors="replace")
+            elapsed_fail = time.monotonic() - start_time
             log.error("CLI error (rc=%d): %s", proc.returncode, err[:200])
             _mark_error(f"CLI error rc={proc.returncode}")
-            return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
+
+            # Write verbose failure dump so the user can diagnose what happened
+            dump_path: str | None = None
+            try:
+                _failures_dir = _BASE / "output" / "cli_failures"
+                _failures_dir.mkdir(parents=True, exist_ok=True)
+                ts = time.strftime("%Y%m%dT%H%M%S")
+                dump_file = _failures_dir / f"{ts}_rc{proc.returncode}.log"
+                deck_id = data.get("deck_id", "") if isinstance(data, dict) else ""
+                dump_lines = [
+                    f"timestamp: {ts}",
+                    f"exit_code: {proc.returncode}",
+                    f"mode: {mode}",
+                    f"deck_id: {deck_id}",
+                    f"elapsed_s: {elapsed_fail:.1f}",
+                    f"system_prompt_len: {len(system)}",
+                    f"prompt:\n{prompt}",
+                    f"--- stdout ---\n{stdout_text_fail}",
+                    f"--- stderr ---\n{err}",
+                ]
+                dump_file.write_text("\n\n".join(dump_lines), encoding="utf-8")
+                dump_path = str(dump_file)
+                log.info("Verbose failure log: %s", dump_path)
+            except Exception as _dump_exc:
+                log.error("Failed to write CLI failure dump: %s", _dump_exc)
+
+            resp_body: dict = {"error": f"CLI error: {err[:200]}"}
+            if dump_path:
+                resp_body["dump_path"] = dump_path
+            return web.json_response(resp_body, status=502)
 
     except FileNotFoundError:
         log.error("claude CLI not found on PATH")
@@ -1302,12 +1333,42 @@ def create_app() -> web.Application:
     return app
 
 
+def _cleanup_old_failure_dumps(max_age_days: int = 7) -> None:
+    """Delete CLI failure dump files older than *max_age_days* days.
+
+    Called once at bridge startup.  Failures directory:
+    ``~/.local/share/inkline/output/cli_failures/``
+
+    Each file is named ``<timestamp>_rc<code>.log``.  Files older than
+    *max_age_days* are silently removed.  Any error during cleanup is
+    logged but does not prevent startup.
+    """
+    failures_dir = _BASE / "output" / "cli_failures"
+    if not failures_dir.exists():
+        return
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    try:
+        for p in failures_dir.iterdir():
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                try:
+                    p.unlink()
+                    removed += 1
+                except Exception as e:
+                    log.warning("Could not remove old failure dump %s: %s", p, e)
+        if removed:
+            log.info("Cleaned up %d CLI failure dump(s) older than %d days", removed, max_age_days)
+    except Exception as e:
+        log.warning("Failure dump cleanup error: %s", e)
+
+
 def main(port: int = 8082) -> None:
     if not shutil.which("claude"):
         log.warning(
             "WARNING: 'claude' CLI not found on PATH. "
             "Install Claude Code: npm install -g @anthropic-ai/claude-code && claude /login"
         )
+    _cleanup_old_failure_dumps()
     log.info("Inkline Bridge starting on http://localhost:%d", port)
     log.info("Output directory: %s", OUTPUT_DIR)
     log.info("WebUI: http://localhost:%d/", port)
