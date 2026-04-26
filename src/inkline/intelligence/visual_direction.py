@@ -142,6 +142,7 @@ def generate_visual_brief(
     design_context: Optional[DesignContext] = None,
     llm_caller: Optional[LLMCaller] = None,
     bridge_url: Optional[str] = None,
+    reference_image_path: Optional[str] = None,
 ) -> VisualBrief:
     """Generate visual direction for a deck using LLM reasoning.
 
@@ -153,6 +154,10 @@ def generate_visual_brief(
         design_context: Explicit user intent (audience, tone, focus, industry)
         llm_caller: Optional injected LLM callable for testing
         bridge_url: Optional Claude Code bridge URL
+        reference_image_path: Optional filesystem path to a reference image that acts as a
+            style anchor for multimodal Gemini background generation.  When set, calls to
+            ``generate_background_image`` automatically route to the multimodal endpoint
+            (``gemini-multimodal-icon``) instead of the text-only endpoint.
 
     Returns:
         VisualBrief with all visual decisions locked in
@@ -187,7 +192,7 @@ def generate_visual_brief(
         if brief:
             # Generate background images if requested
             if n8n_endpoint and brief.background_requests:
-                _generate_backgrounds(brief, n8n_endpoint)
+                _generate_backgrounds(brief, n8n_endpoint, reference_image_path=reference_image_path)
 
             log.info(
                 "Visual Brief ready (LLM): %s + %d backgrounds",
@@ -199,7 +204,10 @@ def generate_visual_brief(
         log.warning("LLM visual direction failed: %s — falling back to rules", e)
 
     # Fall back to rules-based engine
-    return _generate_via_rules(deck_outline, design_brief, brand, n8n_endpoint)
+    return _generate_via_rules(
+        deck_outline, design_brief, brand, n8n_endpoint,
+        reference_image_path=reference_image_path,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -490,6 +498,7 @@ def _generate_via_rules(
     design_brief: DesignBrief,
     brand: str,
     n8n_endpoint: str = "",
+    reference_image_path: Optional[str] = None,
 ) -> VisualBrief:
     """Fallback rules-based visual brief generation."""
 
@@ -536,7 +545,7 @@ def _generate_via_rules(
 
     # Generate backgrounds if n8n available
     if n8n_endpoint and background_reqs:
-        _generate_backgrounds(brief, n8n_endpoint)
+        _generate_backgrounds(brief, n8n_endpoint, reference_image_path=reference_image_path)
 
     log.info("Visual Brief ready (rules): %s + %d backgrounds", brief.template, len(brief.background_paths))
     return brief
@@ -774,8 +783,18 @@ def _generate_background_requests(
     return reqs
 
 
-def _generate_backgrounds(brief: VisualBrief, n8n_endpoint: str) -> None:
-    """Call n8n to generate background images via Gemini AI."""
+def _generate_backgrounds(
+    brief: VisualBrief,
+    n8n_endpoint: str,
+    reference_image_path: Optional[str] = None,
+) -> None:
+    """Call n8n to generate background images via Gemini AI.
+
+    When ``reference_image_path`` is supplied, passes it through to
+    ``generate_background_image`` which will auto-route to the multimodal
+    endpoint (``gemini-multimodal-icon``) when the base endpoint ends in
+    ``inkblot-icon``.
+    """
     from inkline.generative_assets import generate_background_image
 
     for req in brief.background_requests:
@@ -783,11 +802,16 @@ def _generate_backgrounds(brief: VisualBrief, n8n_endpoint: str) -> None:
         prompt = req["prompt"]
         try:
             log.info("Generating background for slot '%s' via n8n...", slot)
-            image_path = generate_background_image(n8n_endpoint, prompt, timeout=180)
+            image_path = generate_background_image(
+                n8n_endpoint,
+                prompt,
+                timeout=180,
+                reference_image_path=reference_image_path,
+            )
             if image_path:
                 brief.background_paths[slot] = image_path
-                log.info("  ✓ Background %s: %s", slot, image_path)
+                log.info("  Background %s: %s", slot, image_path)
             else:
-                log.warning("  ✗ Background generation returned empty path for slot %s", slot)
+                log.warning("  Background generation returned empty path for slot %s", slot)
         except Exception as e:
-            log.warning("  ✗ Background generation failed for slot %s: %s", slot, e)
+            log.warning("  Background generation failed for slot %s: %s", slot, e)
