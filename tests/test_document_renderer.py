@@ -86,13 +86,23 @@ def test_section_figure_exhibit():
     assert "Source: Internal" in result or "source: " in result
 
 
-# Test 5: par leading is 1.5em not 0.8em
-def test_par_leading_not_tight():
+# Test 5: body par leading is the deliberate professional-report value
+def test_par_leading_matches_report_standard():
+    """Body paragraph leading must be 0.65em.
+
+    Originally this test asserted 1.5em (screen/web-style spacing).
+    Commit c223c1a aligned typography with professional report standards
+    by tightening body leading to Typst's default 0.65em — looser leading
+    pushes printed reports past their page budget and reads as web-styled
+    rather than publication-grade.
+    """
     spec = DocumentSpec(title="Test")
     renderer = make_renderer()
     result = renderer.render_document(spec)
-    assert "leading: 0.8em" not in result
-    assert "leading: 1.5em" in result
+    assert "set par(leading: 0.65em" in result, (
+        "Body par leading must be 0.65em (professional report standard). "
+        "If you intend to change this value, update this test alongside the change."
+    )
 
 
 # Test 6: cover_panel truncates at 6 entries
