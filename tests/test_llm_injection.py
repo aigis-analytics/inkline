@@ -30,7 +30,14 @@ def test_design_advisor_accepts_llm_caller():
 
 
 def test_design_advisor_uses_injected_caller_in_llm_mode(monkeypatch):
-    """LLM mode must route through the injected caller (3-call 2-phase flow)."""
+    """LLM mode must route through the injected caller (3-call 2-phase flow).
+
+    The plan returned by the stub uses ``kpi_strip`` (a visual layout) rather
+    than ``content`` (T5 text layout) so the VFEP audit in
+    ``DesignAdvisor._design_deck_llm`` passes on first attempt — otherwise it
+    would retry planning up to 2 more times, breaking the 3-call assertion
+    this test exists to verify.
+    """
     calls: list[dict] = []
 
     def stub(system: str, user: str) -> str:
@@ -40,10 +47,10 @@ def test_design_advisor_uses_injected_caller_in_llm_mode(monkeypatch):
                        "phase": "plan" if is_plan else "review" if is_review else "slide"})
 
         if is_plan:
-            # Phase 1: return a deck plan
+            # Phase 1: return a VFEP-passing deck plan (non-T5 layout)
             return ('```json\n'
                     '[{"slide_type": "title", "title": "Test", "source_index": 0, "key_points": [], "notes": ""},'
-                    ' {"slide_type": "content", "title": "Key Points", "source_index": 1, "key_points": ["Hello"], "notes": ""}]\n'
+                    ' {"slide_type": "kpi_strip", "title": "Key Points", "source_index": 1, "key_points": ["Hello"], "notes": ""}]\n'
                     '```')
         elif is_review:
             # Phase 1b: approve the plan as-is
@@ -52,14 +59,15 @@ def test_design_advisor_uses_injected_caller_in_llm_mode(monkeypatch):
                     '```')
         else:
             # Phase 2: return a single slide spec
-            return '```json\n{"slide_type": "content", "data": {"title": "Key Points", "items": ["Hello"]}}\n```'
+            return ('```json\n{"slide_type": "kpi_strip", "data": '
+                    '{"title": "Key Points", "kpis": [{"value": "1", "label": "Hello"}]}}\n```')
 
     advisor = DesignAdvisor(brand="minimal", mode="llm", llm_caller=stub)
     slides = advisor.design_deck(
         title="Test",
         sections=[{"type": "executive_summary", "narrative": "Hello"}],
     )
-    # The injected caller was used for all 3 phases
+    # The injected caller was used for all 3 phases (no VFEP retries — plan passes)
     assert len(calls) == 3, f"Expected 3 calls (plan/review/slide), got {len(calls)}"
     assert calls[0]["phase"] == "plan"
     assert calls[1]["phase"] == "review"
