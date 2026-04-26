@@ -1,5 +1,11 @@
 """Visual Direction Agent — LLM-driven visual direction for decks.
 
+**Used in Draft Mode only.** The execute-mode path (inkline render) does not
+invoke this agent. In execute-mode, Claude Code reads visual direction knowledge
+directly from the MCP resources (inkline://playbooks/*, inkline://brands/*,
+inkline://themes/*) and writes explicit _layout + _image directives in the spec.
+This module runs when Draft Mode is active (/prompt endpoint, agentic pipeline).
+
 Uses Claude (via bridge or API) to reason about visual design choices using
 playbooks and templates. Falls back to rules-based engine if LLM unavailable.
 """

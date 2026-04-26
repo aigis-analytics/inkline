@@ -1,5 +1,12 @@
 """Design Advisor — the intelligent orchestrator for Inkline.
 
+**Used in Draft Mode (opt-in agentic path) when mode='llm'.**
+The default execute-mode path (inkline render / /render endpoint) bypasses
+the LLM design-decision loop in this module. In execute-mode, Claude Code
+reads the knowledge base (inkline://playbooks/*, inkline://layouts, etc.)
+and writes a spec with explicit _layout directives; DesignAdvisor in mode='rules'
+then applies rules-based defaults.
+
 Takes structured content (WHAT to present) and decides HOW:
 layout, chart type, visual hierarchy, and emphasis.
 

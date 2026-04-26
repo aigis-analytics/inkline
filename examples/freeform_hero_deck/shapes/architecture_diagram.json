@@ -1,0 +1,24 @@
+{
+  "shapes": [
+    {"type": "rect", "x": 0, "y": 0, "w": 100, "h": 100, "fill": "#F8F9FA", "units": "pct"},
+    {"type": "rounded_rect", "x": 5, "y": 15, "w": 18, "h": 12, "fill": "#1A2B4A", "radius": 0.2, "units": "pct"},
+    {"type": "text", "x": 6, "y": 17, "w": 16, "h": 8, "text": "Credit Bureau", "font": "Inter", "size": 11, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "rounded_rect", "x": 5, "y": 35, "w": 18, "h": 12, "fill": "#1A2B4A", "radius": 0.2, "units": "pct"},
+    {"type": "text", "x": 6, "y": 37, "w": 16, "h": 8, "text": "Transactions", "font": "Inter", "size": 11, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "rounded_rect", "x": 5, "y": 55, "w": 18, "h": 12, "fill": "#1A2B4A", "radius": 0.2, "units": "pct"},
+    {"type": "text", "x": 6, "y": 57, "w": 16, "h": 8, "text": "Macro Data", "font": "Inter", "size": 11, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "arrow", "x1": 23, "y1": 21, "x2": 38, "y2": 30, "color": "#4A6FA5", "thickness": 1.5, "units": "pct"},
+    {"type": "arrow", "x1": 23, "y1": 41, "x2": 38, "y2": 35, "color": "#4A6FA5", "thickness": 1.5, "units": "pct"},
+    {"type": "arrow", "x1": 23, "y1": 61, "x2": 38, "y2": 40, "color": "#4A6FA5", "thickness": 1.5, "units": "pct"},
+    {"type": "rounded_rect", "x": 38, "y": 20, "w": 20, "h": 25, "fill": "#2C5F8A", "radius": 0.15, "units": "pct"},
+    {"type": "text", "x": 39, "y": 28, "w": 18, "h": 10, "text": "Feature Pipeline", "font": "Inter", "size": 12, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "arrow", "x1": 58, "y1": 32, "x2": 65, "y2": 32, "color": "#4A6FA5", "thickness": 2, "units": "pct"},
+    {"type": "rounded_rect", "x": 65, "y": 18, "w": 22, "h": 28, "fill": "#1A7FA0", "radius": 0.15, "units": "pct"},
+    {"type": "text", "x": 66, "y": 26, "w": 20, "h": 12, "text": "CNN+BiLSTM Model", "font": "Inter", "size": 12, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "arrow", "x1": 87, "y1": 32, "x2": 90, "y2": 32, "color": "#4A6FA5", "thickness": 2, "units": "pct"},
+    {"type": "rounded_rect", "x": 82, "y": 22, "w": 14, "h": 20, "fill": "#28A745", "radius": 0.15, "units": "pct"},
+    {"type": "text", "x": 83, "y": 28, "w": 12, "h": 8, "text": "Risk Score API", "font": "Inter", "size": 10, "color": "#FFFFFF", "anchor": "mc", "units": "pct"},
+    {"type": "rect", "x": 5, "y": 80, "w": 90, "h": 8, "fill": "#1A2B4A", "units": "pct"},
+    {"type": "text", "x": 50, "y": 83, "w": 90, "h": 4, "text": "50ms P99 latency  |  99.9% uptime SLA  |  SOC 2 Type II certified", "font": "Inter", "size": 11, "color": "#FFFFFF", "anchor": "mc", "units": "pct"}
+  ]
+}

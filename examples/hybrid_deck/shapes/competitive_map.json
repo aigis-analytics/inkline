@@ -1,0 +1,19 @@
+{
+  "shapes": [
+    {"type": "rect", "x": 0, "y": 0, "w": 100, "h": 100, "fill": "#FAFAFA", "units": "pct"},
+    {"type": "line", "x1": 10, "y1": 50, "x2": 90, "y2": 50, "color": "#CCCCCC", "thickness": 1, "units": "pct"},
+    {"type": "line", "x1": 50, "y1": 10, "x2": 50, "y2": 90, "color": "#CCCCCC", "thickness": 1, "units": "pct"},
+    {"type": "text", "x": 50, "y": 7, "w": 30, "h": 5, "text": "Enterprise", "font": "Inter", "size": 9, "color": "#666666", "anchor": "mc", "units": "pct"},
+    {"type": "text", "x": 50, "y": 88, "w": 30, "h": 5, "text": "SME", "font": "Inter", "size": 9, "color": "#666666", "anchor": "mc", "units": "pct"},
+    {"type": "text", "x": 5, "y": 50, "w": 15, "h": 5, "text": "Legacy", "font": "Inter", "size": 9, "color": "#666666", "anchor": "mc", "units": "pct"},
+    {"type": "text", "x": 85, "y": 50, "w": 15, "h": 5, "text": "Modern", "font": "Inter", "size": 9, "color": "#666666", "anchor": "mc", "units": "pct"},
+    {"type": "circle", "cx": 25, "cy": 25, "r": 7, "fill": "#E74C3C", "units": "pct"},
+    {"type": "text", "x": 25, "y": 35, "w": 20, "h": 5, "text": "Vendor A", "font": "Inter", "size": 9, "color": "#333333", "anchor": "mc", "units": "pct"},
+    {"type": "circle", "cx": 70, "cy": 30, "r": 8, "fill": "#3498DB", "units": "pct"},
+    {"type": "text", "x": 70, "y": 40, "w": 20, "h": 5, "text": "Vendor B", "font": "Inter", "size": 9, "color": "#333333", "anchor": "mc", "units": "pct"},
+    {"type": "circle", "cx": 30, "cy": 70, "r": 5, "fill": "#95A5A6", "units": "pct"},
+    {"type": "text", "x": 30, "y": 78, "w": 20, "h": 5, "text": "Vendor C", "font": "Inter", "size": 9, "color": "#333333", "anchor": "mc", "units": "pct"},
+    {"type": "circle", "cx": 75, "cy": 65, "r": 6, "fill": "#27AE60", "units": "pct"},
+    {"type": "text", "x": 75, "y": 73, "w": 20, "h": 5, "text": "Us", "font": "Inter", "size": 11, "color": "#27AE60", "anchor": "mc", "units": "pct"}
+  ]
+}
