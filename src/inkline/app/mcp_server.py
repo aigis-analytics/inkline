@@ -54,12 +54,195 @@ mcp = FastMCP(
     "Inkline",
     instructions=(
         "Inkline generates branded, publication-quality PDF slide decks and documents. "
-        "Use inkline_generate_deck to turn content into a deck, "
-        "inkline_render_slides to render a specific slide spec, "
-        "inkline_list_templates to see available templates, and "
-        "inkline_list_themes to browse themes."
+        "PRIMARY PATH (execute mode): use inkline_render_spec to render a markdown spec "
+        "deterministically — no LLM needed. Read design knowledge via MCP resources "
+        "(inkline://layouts, inkline://playbooks/*, inkline://anti-patterns) before "
+        "writing the spec. "
+        "OPT-IN DRAFT MODE: use inkline_generate_deck for agentic deck generation when "
+        "you want Inkline to take design decisions. "
+        "POST-RENDER AUDIT: use inkline_critique_pdf to run Vishwakarma vision audit "
+        "after rendering."
     ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Execute-mode tools (Phase 3 — new primary path)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def inkline_render_spec(
+    spec_path: str,
+    outputs: list[str] | None = None,
+    brand: str = "minimal",
+    template: str = "consulting",
+    output_filename: str = "deck",
+) -> dict:
+    """Render a markdown spec file to PDF and/or PPTX (execute-mode, no LLM).
+
+    This is the primary tool in execute mode. The spec must have explicit
+    ``_layout:`` directives; sections without a layout use rules-mode.
+
+    Args:
+        spec_path: Absolute path to the .md spec file.
+        outputs: List of output formats: ["pdf"], ["pptx"], or ["pdf", "pptx"].
+        brand: Brand name. Default "minimal".
+        template: Template name. Default "consulting".
+        output_filename: Base filename for output (without extension).
+    """
+    if outputs is None:
+        outputs = ["pdf"]
+
+    try:
+        from pathlib import Path as _Path
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.intelligence import DesignAdvisor
+        from inkline.typst import export_typst_slides
+
+        md_path = _Path(spec_path)
+        if not md_path.exists():
+            return {"success": False, "error": f"File not found: {spec_path}"}
+
+        md_text = md_path.read_text(encoding="utf-8")
+        deck_meta, sections = preprocess(md_text, source_path=str(md_path))
+
+        brand_eff = brand or deck_meta.get("brand", "minimal")
+        template_eff = template or deck_meta.get("template", "consulting")
+        mode = deck_meta.get("mode", "rules")
+
+        advisor = DesignAdvisor(brand=brand_eff, template=template_eff, mode=mode)
+        slides = advisor.design_deck(
+            title=deck_meta.get("title", md_path.stem),
+            sections=sections,
+        )
+
+        results = {}
+        if "pdf" in outputs:
+            pdf_path = OUTPUT_DIR / f"{output_filename}.pdf"
+            export_typst_slides(
+                slides=slides,
+                output_path=str(pdf_path),
+                brand=brand_eff,
+                template=template_eff,
+                title=deck_meta.get("title", ""),
+            )
+            results["pdf_path"] = str(pdf_path)
+
+        if "pptx" in outputs:
+            from inkline.pptx import export_pptx_slides
+            pptx_path = OUTPUT_DIR / f"{output_filename}.pptx"
+            export_pptx_slides(slides=slides, output_path=str(pptx_path))
+            results["pptx_path"] = str(pptx_path)
+
+        return {
+            "success": True,
+            "slide_count": len(slides),
+            "outputs": outputs,
+            **results,
+        }
+
+    except Exception as exc:
+        log.exception("inkline_render_spec failed")
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_validate_spec(spec_path: str, strict: bool = False) -> dict:
+    """Pre-render validation of a spec file — checks image paths, capacity, directives.
+
+    Call this before inkline_render_spec to catch errors early.
+
+    Args:
+        spec_path: Absolute path to the .md spec file.
+        strict: If True, treat unknown directives as errors.
+    """
+    try:
+        from pathlib import Path as _Path
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.authoring.image_strategy import validate_image_directives_in_sections
+
+        md_path = _Path(spec_path)
+        if not md_path.exists():
+            return {"valid": False, "errors": [f"File not found: {spec_path}"]}
+
+        md_text = md_path.read_text(encoding="utf-8")
+        deck_meta, sections = preprocess(
+            md_text, strict_directives=strict, source_path=str(md_path)
+        )
+
+        issues = []
+        try:
+            warnings = validate_image_directives_in_sections(
+                sections, base_dir=md_path.parent, dry_run=True
+            )
+            issues.extend(warnings)
+        except FileNotFoundError as exc:
+            return {"valid": False, "errors": [str(exc)]}
+
+        return {
+            "valid": len(issues) == 0,
+            "slide_count": len(sections),
+            "brand": deck_meta.get("brand", "minimal"),
+            "audit": deck_meta.get("audit", "structural"),
+            "issues": issues,
+        }
+    except Exception as exc:
+        return {"valid": False, "errors": [str(exc)]}
+
+
+@mcp.tool()
+def inkline_critique_pdf(
+    pdf_path: str,
+    rubric: str = "institutional",
+    brand: str = "",
+) -> dict:
+    """Post-render visual audit of a PDF using the Vishwakarma vision model.
+
+    This is the repositioned Vishwakarma audit — called explicitly after
+    rendering, not in-loop. Returns structured per-slide critiques with
+    fix hints.
+
+    Args:
+        pdf_path: Absolute path to the rendered PDF file.
+        rubric: Audit rubric — "institutional", "tech_pitch", or "internal_review".
+        brand: Optional brand context for brand-aware critique.
+    """
+    try:
+        from inkline.intelligence.vishwakarma import critique_pdf
+        result = critique_pdf(pdf_path=pdf_path, rubric=rubric, brand=brand)
+        return result.to_dict()
+    except Exception as exc:
+        log.exception("inkline_critique_pdf failed")
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_get_capacity(slide_type: str) -> dict:
+    """Return capacity rules for a given slide_type.
+
+    Convenience tool for checking how many items/chars fit in a layout.
+
+    Args:
+        slide_type: The slide type to check (e.g. 'three_card', 'kpi_strip').
+    """
+    try:
+        from inkline.app.mcp_resources import _get_single_layout, ResourceNotFoundError
+        content = _get_single_layout(slide_type)
+        return {"slide_type": slide_type, "spec": content}
+    except Exception as exc:
+        return {"slide_type": slide_type, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_list_brands() -> list[str]:
+    """List all registered brands (including private plugins in ~/.config/inkline/brands/)."""
+    try:
+        from inkline.app.mcp_resources import _get_brands_list
+        content = _get_brands_list()
+        lines = [l.strip().lstrip("- ") for l in content.splitlines() if l.strip().startswith("-")]
+        return lines
+    except Exception as exc:
+        return [f"Error: {exc}"]
 
 
 @mcp.tool()

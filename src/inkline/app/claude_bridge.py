@@ -1320,6 +1320,67 @@ async def handle_progress(request: web.Request) -> web.StreamResponse:
 
 
 # ---------------------------------------------------------------------------
+# Knowledge base HTTP proxies (GET /knowledge/<resource>)
+# ---------------------------------------------------------------------------
+
+async def handle_knowledge(request: web.Request) -> web.Response:
+    """Serve knowledge base resources over HTTP.
+
+    Proxies the same content as MCP resources for clients without MCP.
+
+    Examples::
+        GET /knowledge/playbooks/index
+        GET /knowledge/layouts/three_card
+        GET /knowledge/anti-patterns
+        GET /knowledge/brands/minimal
+    """
+    resource_path = request.match_info.get("resource", "")
+    uri = f"inkline://{resource_path}"
+    try:
+        from inkline.app.mcp_resources import read_resource, ResourceNotFoundError
+        content = read_resource(uri)
+        return web.Response(text=content, content_type="text/markdown")
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=404)
+
+
+# ---------------------------------------------------------------------------
+# Post-render critique endpoint (POST /critique)
+# ---------------------------------------------------------------------------
+
+async def handle_critique(request: web.Request) -> web.Response:
+    """Post-render visual audit of a rendered PDF using Vishwakarma.
+
+    Repositioned from in-loop to explicit opt-in call::
+
+        POST /critique
+        {"pdf_path": "/path/to/deck.pdf", "rubric": "institutional", "brand": "minimal"}
+
+    Returns::
+        {"overall_score": 87, "slide_critiques": [...]}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+    pdf_path = data.get("pdf_path", "")
+    rubric = data.get("rubric", "institutional")
+    brand = data.get("brand", "minimal")
+
+    if not pdf_path:
+        return web.json_response({"error": "pdf_path is required"}, status=400)
+
+    try:
+        from inkline.intelligence.vishwakarma import critique_pdf
+        result = critique_pdf(pdf_path=pdf_path, rubric=rubric, brand=brand)
+        return web.json_response(result.to_dict())
+    except Exception as exc:
+        log.exception("handle_critique failed")
+        return web.json_response({"error": str(exc)}, status=500)
+
+
+# ---------------------------------------------------------------------------
 # App factory + main
 # ---------------------------------------------------------------------------
 def create_app() -> web.Application:
@@ -1337,6 +1398,10 @@ def create_app() -> web.Application:
     app.router.add_get("/status", handle_status)
     app.router.add_get("/progress", handle_progress)
     app.router.add_get("/health", handle_health)
+    # Knowledge base HTTP proxies (Phase 3 — execute-mode knowledge surface)
+    app.router.add_get("/knowledge/{resource:.+}", handle_knowledge)
+    # Post-render critique (Phase 4 — Vishwakarma repositioned as opt-in)
+    app.router.add_post("/critique", handle_critique)
     app.router.add_get("/", handle_index)
     # Serve static assets (JS/CSS if we add them later)
     if STATIC_DIR.exists():

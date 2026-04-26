@@ -1,3 +1,13 @@
+---
+domain: typography
+audience: [claude-code, design-advisor]
+slide_type_relevance: [all]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Font selection, type hierarchies, and typographic best practices for slides and documents."
+---
+
 # Typography for Presentations Playbook
 
 > **Purpose**: Guide the DesignAdvisor in selecting fonts, establishing type

@@ -1,3 +1,13 @@
+---
+domain: visual_libraries
+audience: [claude-code, design-advisor]
+slide_type_relevance: [chart, bar_chart, multi_chart]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Open-source visualisation resources, libraries, and design systems available to Inkline."
+---
+
 # Open Source Chart & Template Libraries Playbook
 
 > **Purpose**: Guide the DesignAdvisor in understanding available open-source
