@@ -368,7 +368,15 @@ def _resolve_section(
     layout = resolved.pop("layout", None) or resolved.pop("_layout", None)
     if layout:
         section["slide_type"] = layout
-        slide_mode = resolved.pop("_mode", resolved.pop("mode", "guided"))
+        # When _layout is explicitly specified, default to exact mode (execute-mode behaviour).
+        # Authors can override by adding _mode: guided or _mode: auto explicitly in the same
+        # directive block or a separate one.
+        if "_mode" in resolved:
+            slide_mode = resolved.pop("_mode")
+        elif "mode" in resolved:
+            slide_mode = resolved.pop("mode")
+        else:
+            slide_mode = "exact"
         section["slide_mode"] = slide_mode
     elif inferred_layout.get("slide_type"):
         # From asset shorthand — apply inferred layout

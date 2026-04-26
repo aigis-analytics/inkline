@@ -30,7 +30,87 @@ When adding a new significant feature, add a spec to `plan_docs/` before writing
 
 ---
 
-## ⚠️ CORRECT WORKFLOW — READ FIRST
+## PRIMARY PATH — Execute Mode (`inkline render`)
+
+**Execute mode is the default path for Claude Code.** Write a structured markdown spec with explicit layout directives, then call `inkline render`. No LLM is invoked — the renderer faithfully executes the spec.
+
+### Quick start
+
+```bash
+# 1. Write a spec with explicit _layout directives (see Layout Catalogue below)
+# 2. Render it:
+inkline render deck.md --output pdf,pptx --brand minimal
+
+# Or via the bridge:
+curl -X POST http://localhost:8082/render \
+  -H "Content-Type: application/json" \
+  -d '{"spec_path": "/path/to/deck.md", "outputs": ["pdf", "pptx"], "brand": "minimal"}'
+```
+
+### Why execute mode
+
+- **Deterministic.** Same spec → same output every time.
+- **Faithful.** `_layout: split` with explicit content produces exactly a split layout. No reinterpretation.
+- **Fast.** No LLM round-trip for layout decisions. Renders in seconds.
+- **CC-friendly.** Claude Code reads the knowledge base (MCP resources / `inkline://` URIs), writes a spec with full context, hands it to the engine.
+
+### Execute-mode spec format
+
+```markdown
+---
+brand: minimal
+template: consulting
+title: My Deck
+output: [pdf, pptx]
+audit: post-render
+---
+
+## Slide with explicit layout
+<!-- _layout: split
+_image: {strategy: reuse, path: assets/diagram.png, slot: right, width: 50%} -->
+Content for the left side of the split layout.
+
+| Left column | Right column |
+|---|---|
+| Data point A | 42% |
+```
+
+**Key directives:**
+- `_layout: <slide_type>` — explicit layout; defaults `_mode` to `exact` (no LLM reinterpretation)
+- `_mode: guided` — override to allow the renderer to make minor adjustments
+- `audit: post-render` — no in-loop LLM; call `inkline critique` explicitly after render
+- `_capacity_override: true` — suppress capacity warnings for this slide
+
+### Knowledge base
+
+The accumulated design knowledge is exposed as MCP resources for CC to pull into context:
+
+```
+inkline://playbooks/index       — all playbooks with descriptions
+inkline://playbooks/<name>      — full playbook markdown
+inkline://layouts               — slide-type catalogue with capacity rules
+inkline://layouts/<slide_type>  — single slide-type spec with examples
+inkline://anti-patterns         — anti-pattern library
+inkline://brands/<name>         — brand palette + typography
+inkline://typography            — type-scale + capacity rules
+```
+
+Via CLI: `inkline knowledge list` / `inkline knowledge get inkline://layouts/three_card`
+
+---
+
+## OPT-IN: Draft Mode (`/prompt`)
+
+Draft Mode is the **agentic path** — useful when you want Inkline's internal DesignAdvisor to take design decisions, or when you don't have a spec ready. It is not the default; it requires the claude CLI.
+
+**Use Draft Mode when:**
+- You have raw source material and no spec yet (cold-start)
+- You want Inkline's DesignAdvisor to propose layouts for you
+- You want the full 4-phase Archon pipeline with in-loop Vishwakarma audit
+
+---
+
+## ⚠️ CORRECT WORKFLOW — READ FIRST (Draft Mode)
 
 **Never run standalone Python scripts to generate decks or documents.**
 **Never call `export_typst_slides()` or `export_typst_document()` directly outside an Archon phase.**

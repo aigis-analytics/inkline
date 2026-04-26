@@ -2,17 +2,20 @@
 
 **Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
 
-Inkline turns structured data or Markdown into publication-quality, brand-consistent
-output with **encoded taste** — the outputs it produces are always within the range
-that a designer with good judgement would approve, without user handholding.
+Inkline is two products sharing a codebase:
+
+1. **Execution Engine.** A deterministic, fast, no-LLM renderer. Given a structured slide spec (typed layouts + `freeform` primitives), it produces PDF, PPTX, or HTML. Brand, theme, font systems are pure-Python. No Claude required.
+
+2. **Design Knowledge Base.** Accumulated playbooks, slide-type catalogue, anti-pattern library, archetypes — all exposed as MCP resources that Claude Code can pull into context when writing a spec.
+
+**Claude Code becomes the design intelligence.** It reads the knowledge base, writes a precise spec, and hands it to the execution engine. The LLM-design path (DesignAdvisor, agentic `/prompt`, two-phase loop) remains fully functional as opt-in **Draft Mode**.
 
 Ships with: 90 built-in themes, 37 slide templates, 22 slide layouts, 31 chart/exhibit
 types (11 standard + 5 institutional + 5 derived-from-pitchbook + 16 infographic
 archetypes), a 1-brand public registry (extensible via plugins), an LLM-driven design
-advisor driven by a structured **decision framework** (not an option menu), 10 design
-playbooks, a 771-template archetype catalog, a two-layer audit (structural + Claude
-vision), and a **self-learning feedback loop** that improves chart selection quality
-over time as users accept, reject, or modify slides.
+advisor (opt-in Draft Mode), 10 design playbooks exposed as MCP resources, a 771-template
+archetype catalog, a two-layer audit (structural + post-render vision), and a
+**self-learning feedback loop** for Draft Mode usage.
 
 ---
 
@@ -65,7 +68,27 @@ pip install inkline[mcp]           # + MCP server for Claude Desktop / Claude.ai
 pip install inkline[all]           # everything (excludes mcp)
 ```
 
-## Standalone app — conversational WebUI
+## Primary path — Execute Mode
+
+Write a spec with explicit `_layout` directives, render deterministically:
+
+```bash
+inkline render deck.md --output pdf,pptx --brand minimal
+```
+
+The knowledge base is available as MCP resources:
+```
+inkline://layouts                  — slide-type catalogue
+inkline://playbooks/index          — all playbooks
+inkline://anti-patterns            — anti-pattern library
+inkline://brands/<name>            — brand palette
+```
+
+Browse from CLI: `inkline knowledge list` / `inkline knowledge get inkline://layouts`
+
+See [Execute Mode spec](plan_docs/execution-engine-and-knowledge-base-pivot-spec.md) for the full directive grammar and image strategy options.
+
+## Opt-in: Draft Mode — conversational WebUI
 
 The fastest way to use Inkline for non-technical users, or anyone who wants a
 natural-language interface instead of writing Python.

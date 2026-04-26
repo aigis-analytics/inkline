@@ -1248,7 +1248,13 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    """Liveness check — also verifies claude CLI is accessible."""
+    """Liveness check — also verifies claude CLI is accessible.
+
+    Returns a ``modes`` object reporting which engine paths are available:
+    - ``execute``: always true — the deterministic render engine requires no CLI.
+    - ``draft``: true when the claude CLI is available (agentic /prompt path).
+    - ``critique``: true when the claude CLI is available (post-render vision audit).
+    """
     try:
         proc = subprocess.run(
             ["claude", "--version"], capture_output=True, text=True, timeout=5,
@@ -1261,6 +1267,11 @@ async def handle_health(request: web.Request) -> web.Response:
 
     return web.json_response({
         "status": "ok" if cli_ok else "degraded",
+        "modes": {
+            "execute": True,          # always available — no CLI required
+            "draft": cli_ok,          # requires claude CLI (agentic /prompt path)
+            "critique": cli_ok,       # requires claude CLI (post-render vision audit)
+        },
         "cli_available": cli_ok,
         "cli_version": version,
         "output_dir": str(OUTPUT_DIR),
