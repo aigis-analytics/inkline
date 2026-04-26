@@ -594,6 +594,149 @@ class PptxBuilder:
             self._text(s, tagline, 0, 5.9, 10, 0.5, _TS["body"], _TC["body"],
                        self.body_font, bold=True, align=PP_ALIGN.CENTER)
 
+    def add_freeform_slide(
+        self,
+        title: str = "",
+        section: str = "",
+        shapes: list[dict] | None = None,
+    ) -> None:
+        """Freeform slide: render positioned shapes from a shapes manifest.
+
+        Each shape dict must have a ``type`` field (one of: image, rounded_rect,
+        rect, text, line, arrow, circle, polygon) and position/style fields.
+
+        Position units are percentages (0-100) of slide dimensions by default.
+        PPTX slide canvas: 10 inches wide × 7.5 inches tall.
+
+        Parameters
+        ----------
+        title : str
+            Optional slide title shown at the top.
+        section : str
+            Optional section label shown before the title.
+        shapes : list[dict] | None
+            List of shape dicts from the freeform manifest.
+        """
+        SLIDE_W = 10.0    # inches
+        SLIDE_H = 7.5     # inches
+
+        s = self._slide()
+        self._bg(s, _BG["warm"])
+
+        def pct_x(v):
+            return float(v) / 100.0 * SLIDE_W
+
+        def pct_y(v):
+            return float(v) / 100.0 * SLIDE_H
+
+        # Header
+        if title:
+            if section:
+                self._text(s, section.upper(), 0.5, 0.2, 4.0, 0.3, _TS["label"],
+                           _TC["body"], self.body_font)
+            self._text(s, title, 0.5, 0.4, 9.0, 0.6, _TS["title"], _TC["title"],
+                       self.heading_font, bold=True)
+
+        for shape in (shapes or []):
+            s_type = shape.get("type", "rect")
+            units = shape.get("units", "pct")
+
+            def to_in_x(v):
+                v = float(v)
+                return v / 100.0 * SLIDE_W if units == "pct" else v / 96.0
+
+            def to_in_y(v):
+                v = float(v)
+                return v / 100.0 * SLIDE_H if units == "pct" else v / 96.0
+
+            if s_type == "image":
+                path_str = shape.get("path", "")
+                if path_str:
+                    from pathlib import Path as _Path
+                    img_path = _Path(path_str)
+                    if img_path.exists():
+                        x_in = to_in_x(shape.get("x", 0))
+                        y_in = to_in_y(shape.get("y", 0))
+                        w_in = to_in_x(shape.get("w", 100))
+                        h_in = to_in_y(shape.get("h", 100))
+                        s.shapes.add_picture(
+                            str(img_path),
+                            Inches(x_in), Inches(y_in),
+                            Inches(w_in), Inches(h_in),
+                        )
+                    else:
+                        log.warning("add_freeform_slide: image not found: %s", path_str)
+
+            elif s_type in ("rect", "rounded_rect"):
+                fill_hex = shape.get("fill", "#FFFFFF")
+                x_in = to_in_x(shape.get("x", 0))
+                y_in = to_in_y(shape.get("y", 0))
+                w_in = to_in_x(shape.get("w", 10))
+                h_in = to_in_y(shape.get("h", 10))
+                self._rect(s, x_in, y_in, w_in, h_in, fill_hex)
+
+            elif s_type == "text":
+                text_val = shape.get("text", "")
+                fill_hex = shape.get("color", _TC["body"])
+                x_in = to_in_x(shape.get("x", 0))
+                y_in = to_in_y(shape.get("y", 0))
+                w_in = to_in_x(shape.get("w", 20))
+                h_in = to_in_y(shape.get("h", 5))
+                size_pt = float(shape.get("size", _TS["body"]))
+                font_name = shape.get("font", self.body_font)
+                self._text(s, text_val, x_in, y_in, w_in, h_in, size_pt,
+                           fill_hex, font_name)
+
+            elif s_type in ("line", "arrow"):
+                from pptx.util import Pt as _Pt
+                from pptx.oxml.ns import qn as _qn
+                x1_in = to_in_x(shape.get("x1", 0))
+                y1_in = to_in_y(shape.get("y1", 0))
+                x2_in = to_in_x(shape.get("x2", 100))
+                y2_in = to_in_y(shape.get("y2", 0))
+                color_hex = shape.get("color", "#000000")
+                thickness = _Pt(float(shape.get("thickness", 1)))
+                connector = s.shapes.add_connector(
+                    1,  # MSO_CONNECTOR.STRAIGHT
+                    Inches(x1_in), Inches(y1_in),
+                    Inches(x2_in), Inches(y2_in),
+                )
+                ln = connector.line
+                ln.color.rgb = RGBColor(*hex_to_rgb(color_hex))
+                ln.width = thickness
+
+            elif s_type == "circle":
+                fill_hex = shape.get("fill", "#FFFFFF")
+                cx_in = to_in_x(shape.get("cx", 50))
+                cy_in = to_in_y(shape.get("cy", 50))
+                r_in = to_in_x(shape.get("r", 10))
+                # Add as oval
+                from pptx.util import Emu as _Emu
+                s.shapes.add_shape(
+                    9,  # MSO_SHAPE_TYPE.OVAL
+                    Inches(cx_in - r_in), Inches(cy_in - r_in),
+                    Inches(r_in * 2), Inches(r_in * 2),
+                )
+                oval = s.shapes[-1]
+                oval.fill.solid()
+                oval.fill.fore_color.rgb = RGBColor(*hex_to_rgb(fill_hex))
+                oval.line.color.rgb = RGBColor(*hex_to_rgb(fill_hex))
+
+            elif s_type == "polygon":
+                # Approximate as bounding-rect with fill
+                points = shape.get("points", [])
+                if points:
+                    xs_in = [to_in_x(p[0]) for p in points]
+                    ys_in = [to_in_y(p[1]) for p in points]
+                    x_in = min(xs_in)
+                    y_in = min(ys_in)
+                    w_in = max(xs_in) - x_in
+                    h_in = max(ys_in) - y_in
+                    fill_hex = shape.get("fill", "#AAAAAA")
+                    self._rect(s, x_in, y_in, w_in, h_in, fill_hex)
+            else:
+                log.debug("add_freeform_slide: unknown shape type %r — skipping", s_type)
+
     # -- Save --
 
     def set_slide_notes(self, slide: Any, notes_text: str) -> None:

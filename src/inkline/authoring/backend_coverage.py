@@ -61,6 +61,9 @@ COVERAGE: dict[str, dict[str, bool]] = {
     "bar_chart":         {"typst": True,  "pptx": False, "google_slides": False, "html": True},
     "chart_caption":     {"typst": True,  "pptx": False, "google_slides": False, "html": True},
     "multi_chart":       {"typst": True,  "pptx": False, "google_slides": False, "html": True},
+
+    # ── Execution Engine — freeform hero exhibit ───────────────────────────────
+    "freeform":          {"typst": True,  "pptx": True,  "google_slides": False, "html": False},
 }
 
 # ---------------------------------------------------------------------------
