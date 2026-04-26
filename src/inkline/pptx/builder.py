@@ -28,6 +28,45 @@ from inkline.core.colors import hex_to_rgb
 
 log = logging.getLogger(__name__)
 
+
+def resolve_pptx_layout(slide_spec: dict) -> str:
+    """Resolve the effective slide_type for PPTX export.
+
+    Checks in priority order:
+    1. ``data._layout_pptx`` — explicit PPTX-only layout override
+    2. ``slide_type`` with downgrade chain from backend_coverage
+    3. ``"content"`` as final fallback
+
+    Parameters
+    ----------
+    slide_spec : dict
+        A slide spec dict (``{"slide_type": ..., "data": {...}}``)
+
+    Returns
+    -------
+    str
+        The resolved slide_type appropriate for PPTX rendering.
+    """
+    data = slide_spec.get("data", {})
+    directives = slide_spec.get("directives", {})
+
+    # 1. Explicit PPTX-only layout override (from _layout_pptx directive)
+    pptx_override = (
+        data.get("_layout_pptx")
+        or directives.get("_layout_pptx")
+        or directives.get("layout_pptx")
+    )
+    if pptx_override:
+        return pptx_override
+
+    # 2. Apply downgrade chain for the requested slide_type
+    requested = slide_spec.get("slide_type", "content")
+    try:
+        from inkline.authoring.backend_coverage import get_downgraded_type
+        return get_downgraded_type(requested, "pptx")
+    except ImportError:
+        return requested
+
 # -- Slide dimensions (16:9) --
 SLIDE_W = Inches(10)
 SLIDE_H = Inches(7.5)
@@ -87,6 +126,7 @@ class PptxBuilder:
 
         self.grid = SlideGrid()
         self._slide_count = 0
+        self._slides_list: list = []   # parallel list of pptx slide objects
         self._logos = self._find_logos(brand)
 
     # -- Logo discovery --
@@ -119,6 +159,7 @@ class PptxBuilder:
     def _slide(self) -> Any:
         s = self._prs.slides.add_slide(self._prs.slide_layouts[6])
         self._slide_count += 1
+        self._slides_list.append(s)   # track for notes/overrides access
         return s
 
     def _bg(self, slide: Any, color: str) -> None:
@@ -554,6 +595,48 @@ class PptxBuilder:
                        self.body_font, bold=True, align=PP_ALIGN.CENTER)
 
     # -- Save --
+
+    def set_slide_notes(self, slide: Any, notes_text: str) -> None:
+        """Write speaker notes to a slide's notes_slide text frame.
+
+        python-pptx creates the notes slide on first access if it does not exist.
+        ``notes_text`` is written as plain text; existing notes are replaced.
+        """
+        if not notes_text:
+            return
+        try:
+            tf = slide.notes_slide.notes_text_frame
+            tf.text = notes_text
+        except Exception as exc:
+            log.debug("PptxBuilder.set_slide_notes: failed to write notes: %s", exc)
+
+    def set_slide_notes_at(self, slide_index: int, notes_text: str) -> None:
+        """Write speaker notes to a slide by 0-based index.
+
+        Convenience wrapper around ``set_slide_notes`` for callers that track
+        slides by index rather than object reference.
+        """
+        if slide_index < 0 or slide_index >= len(self._slides_list):
+            log.debug("set_slide_notes_at: index %d out of range", slide_index)
+            return
+        self.set_slide_notes(self._slides_list[slide_index], notes_text)
+
+    def apply_notes_from_slides(self, slide_specs: list[dict], pptx_slides: list | None = None) -> None:
+        """Apply ``_notes`` or ``notes`` fields from slide specs to PPTX slide objects.
+
+        Call this after all slides have been added.  If ``pptx_slides`` is
+        omitted, uses the internal ``_slides_list``.
+        """
+        slides = pptx_slides if pptx_slides is not None else self._slides_list
+        for spec, pptx_slide in zip(slide_specs, slides):
+            data = spec.get("data", {})
+            notes = data.get("_notes", data.get("notes", ""))
+            if not notes:
+                # Also check section-level directives
+                directives = spec.get("directives", {})
+                notes = directives.get("notes", "")
+            if notes:
+                self.set_slide_notes(pptx_slide, notes)
 
     def save(self, path: str | Path) -> Path:
         path = Path(path)
