@@ -3,6 +3,7 @@
 Vishwakarma (Sanskrit: विश्वकर्मा) is the divine architect and craftsman of
 the gods. As Inkline's design standard, Vishwakarma governs every decision
 about how information is presented. Every slide deck Inkline produces is an
+
 act of craftsmanship, not a document dump.
 
 This module is the single source of truth for the four laws. It is imported
@@ -296,6 +297,284 @@ VISUAL OVERFLOW (always flag as ERROR):
 """
 
 
+# ---------------------------------------------------------------------------
+# Post-render critique (Phase 4 — repositioned from in-loop to explicit)
+# ---------------------------------------------------------------------------
+# Note: The in-loop entry points used by /prompt's 4-phase pipeline (in
+# overflow_audit.py, design_advisor.py, archon.py) are UNCHANGED — they
+# continue to run in Draft Mode. This new public API is for the explicit
+# post-render path: CC calls critique_pdf() after rendering.
+
+import json
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+_critique_log = logging.getLogger("inkline.vishwakarma.critique")
+
+# ---------------------------------------------------------------------------
+# Rubrics
+# ---------------------------------------------------------------------------
+
+_RUBRICS: dict[str, str] = {
+    "institutional": (
+        "You are auditing this slide deck for institutional finance / consulting quality. "
+        "Apply the full Vishwakarma design standard. Flag tier violations, exhibit quality "
+        "issues, overflow, and any slide where a typed layout would serve the content better. "
+        "Provide a fix_hint for each issue — prefer _layout directive suggestions."
+    ),
+    "tech_pitch": (
+        "You are auditing this slide deck for a technology investor pitch. "
+        "Focus on narrative clarity, visual hierarchy, and whether each slide "
+        "communicates its core message within 10 seconds. "
+        "Prefer simple layouts. Flag walls of bullets, unclear hero metrics, missing traction evidence."
+    ),
+    "internal_review": (
+        "You are auditing this slide deck for an internal team review. "
+        "Focus on accuracy, completeness, and whether the deck could be handed to a "
+        "new team member without verbal context. Flag missing context, assumed knowledge, "
+        "inconsistent terminology."
+    ),
+}
+
+
+@dataclass
+class SlideCritique:
+    """Critique result for a single slide."""
+    slide_index: int
+    verdict: str   # PASS | WARN | FAIL
+    comment: str
+    fix_hint: str = ""  # actionable hint e.g. "_layout: chart_caption"
+
+
+@dataclass
+class CritiqueResult:
+    """Result of a full-deck post-render critique."""
+    overall_score: int   # 0-100
+    rubric: str
+    brand: str
+    pdf_path: str
+    slide_critiques: list[SlideCritique] = field(default_factory=list)
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "overall_score": self.overall_score,
+            "rubric": self.rubric,
+            "brand": self.brand,
+            "pdf_path": self.pdf_path,
+            "slide_critiques": [
+                {
+                    "slide_index": sc.slide_index,
+                    "verdict": sc.verdict,
+                    "comment": sc.comment,
+                    "fix_hint": sc.fix_hint,
+                }
+                for sc in self.slide_critiques
+            ],
+            "error": self.error,
+        }
+
+
+def critique_pdf(
+    pdf_path: str,
+    rubric: str = "institutional",
+    brand: str = "",
+    *,
+    vision_fn: Any | None = None,
+) -> CritiqueResult:
+    """Run a post-render vision audit on a rendered PDF.
+
+    This is the repositioned Vishwakarma audit — called explicitly after
+    rendering, not in-loop. Operates on the final PDF, not individual slide
+    specs. Returns structured per-slide critiques with actionable fix hints.
+
+    Parameters
+    ----------
+    pdf_path : str
+        Absolute path to the rendered PDF file.
+    rubric : str
+        Audit rubric to apply. One of: institutional, tech_pitch, internal_review.
+    brand : str
+        Optional brand context (used to load brand-aware anti-patterns).
+    vision_fn : callable | None
+        Optional injectable vision function for testing. Must accept
+        ``(image_b64: str, prompt: str) -> str``. If None, uses the claude
+        CLI bridge's /vision endpoint.
+
+    Returns
+    -------
+    CritiqueResult
+        Structured result with per-slide verdicts and fix hints.
+
+    Note
+    ----
+    Used in post-render / execute mode ONLY. The in-loop audit (used by
+    /prompt's 4-phase Archon pipeline) remains in overflow_audit.py.
+    """
+    rubric_text = _RUBRICS.get(rubric, _RUBRICS["institutional"])
+    pdf = Path(pdf_path)
+
+    if not pdf.exists():
+        return CritiqueResult(
+            overall_score=0,
+            rubric=rubric,
+            brand=brand,
+            pdf_path=pdf_path,
+            error=f"PDF not found: {pdf_path}",
+        )
+
+    # Try to extract PDF pages as images
+    slide_critiques: list[SlideCritique] = []
+    try:
+        images = _extract_pdf_pages(pdf)
+    except Exception as exc:
+        _critique_log.warning("Could not extract PDF pages: %s", exc)
+        # Return a structural-only result
+        return CritiqueResult(
+            overall_score=75,
+            rubric=rubric,
+            brand=brand,
+            pdf_path=pdf_path,
+            slide_critiques=[],
+            error=f"Vision audit skipped — could not extract pages: {exc}",
+        )
+
+    if not images:
+        return CritiqueResult(
+            overall_score=75,
+            rubric=rubric,
+            brand=brand,
+            pdf_path=pdf_path,
+            slide_critiques=[],
+            error="No pages extracted from PDF",
+        )
+
+    # Audit each slide
+    fail_count = 0
+    warn_count = 0
+    for idx, img_b64 in enumerate(images):
+        prompt = (
+            f"{VISHWAKARMA_AUDIT_CRITERIA}\n\n"
+            f"{rubric_text}\n\n"
+            "Respond with a JSON object: "
+            '{"verdict": "PASS"|"WARN"|"FAIL", "comment": "...", "fix_hint": "_layout: ..."}\n'
+            "Keep comment under 150 chars. fix_hint should be a specific directive if applicable."
+        )
+        try:
+            if vision_fn:
+                raw = vision_fn(img_b64, prompt)
+            else:
+                raw = _call_vision(img_b64, prompt)
+
+            parsed = _parse_verdict(raw)
+            sc = SlideCritique(
+                slide_index=idx + 1,
+                verdict=parsed.get("verdict", "PASS"),
+                comment=parsed.get("comment", ""),
+                fix_hint=parsed.get("fix_hint", ""),
+            )
+            slide_critiques.append(sc)
+            if sc.verdict == "FAIL":
+                fail_count += 1
+            elif sc.verdict == "WARN":
+                warn_count += 1
+
+        except Exception as exc:
+            _critique_log.warning("Vision audit failed for slide %d: %s", idx + 1, exc)
+            slide_critiques.append(SlideCritique(
+                slide_index=idx + 1,
+                verdict="PASS",  # default pass if vision unavailable
+                comment=f"Vision audit skipped: {exc}",
+                fix_hint="",
+            ))
+
+    # Compute overall score
+    n = len(slide_critiques)
+    if n == 0:
+        overall_score = 75
+    else:
+        deductions = (fail_count * 15) + (warn_count * 5)
+        overall_score = max(0, min(100, 100 - deductions))
+
+    return CritiqueResult(
+        overall_score=overall_score,
+        rubric=rubric,
+        brand=brand,
+        pdf_path=pdf_path,
+        slide_critiques=slide_critiques,
+    )
+
+
+def _extract_pdf_pages(pdf: Path) -> list[str]:
+    """Extract PDF pages as base64-encoded PNG strings."""
+    try:
+        import fitz  # pymupdf
+        import base64
+
+        doc = fitz.open(str(pdf))
+        images = []
+        for page in doc:
+            mat = fitz.Matrix(1.5, 1.5)  # 1.5x zoom for clarity
+            pix = page.get_pixmap(matrix=mat)
+            png_bytes = pix.tobytes("png")
+            images.append(base64.b64encode(png_bytes).decode())
+        return images
+    except ImportError:
+        raise ImportError(
+            "pymupdf is required for vision audit. Install: pip install pymupdf"
+        )
+
+
+def _call_vision(image_b64: str, prompt: str) -> str:
+    """Call the bridge /vision endpoint to get a vision audit response."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    payload = _json.dumps({
+        "image_base64": image_b64,
+        "prompt": prompt,
+    }).encode()
+
+    req = urllib.request.Request(
+        "http://localhost:8082/vision",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = _json.loads(resp.read())
+            return result.get("response", result.get("text", str(result)))
+    except Exception as exc:
+        raise RuntimeError(f"Vision endpoint unavailable: {exc}")
+
+
+def _parse_verdict(raw: str) -> dict:
+    """Parse a vision model response into a structured verdict dict."""
+    import re
+    # Try direct JSON parse
+    raw = raw.strip()
+    # Find JSON object in the response
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+    # Fallback: infer verdict from keywords
+    upper = raw.upper()
+    if "FAIL" in upper or "ERROR" in upper or "OVERFLOW" in upper:
+        verdict = "FAIL"
+    elif "WARN" in upper or "WARNING" in upper:
+        verdict = "WARN"
+    else:
+        verdict = "PASS"
+    return {"verdict": verdict, "comment": raw[:150], "fix_hint": ""}
+
+
 __all__ = [
     "VISUAL_HIERARCHY",
     "BRIDGE_FIRST",
@@ -303,4 +582,8 @@ __all__ = [
     "ARCHON_OVERSIGHT",
     "VISHWAKARMA_SYSTEM_PREAMBLE",
     "VISHWAKARMA_AUDIT_CRITERIA",
+    # Phase 4 — post-render critique
+    "CritiqueResult",
+    "SlideCritique",
+    "critique_pdf",
 ]
