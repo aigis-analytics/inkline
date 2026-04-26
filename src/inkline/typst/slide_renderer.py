@@ -398,14 +398,17 @@ class TypstSlideRenderer:
 
     @staticmethod
     def _apply_field_limits(slide_type: str, d: dict) -> dict:
-        """Truncate every text field in slide data to its geometric character limit.
+        """Walk slide data through the per-field clamp dispatch.
 
-        This is a hard pre-render pass — Typst never sees text that would overflow
-        its allocated box.  Limits are defined in FIELD_LIMITS, derived from:
-          page width 22.6cm, font metrics (Source Sans 3), and box geometry.
+        With `_clamp` now a passthrough (Typst handles overflow via adaptive
+        font sizing), this function preserves its dispatch structure but does
+        not truncate. FIELD_LIMITS remains advisory metadata used by the design
+        layer for layout hints. The function still deepcopies to preserve the
+        no-mutation contract callers depend on.
 
-        The stat slide has a special case: hero-value limits tighten as n_stats grows
-        because each column gets narrower (4-col → 8 chars, 3-col → 12, 2-col → 16).
+        The stat slide retains its n_stats-aware limit selection so the value
+        passed into `_clamp` (currently a no-op) reflects the layout the renderer
+        believes it is producing — useful if adaptive sizing is ever replaced.
         """
         import copy
         limits = FIELD_LIMITS.get(slide_type, {})
