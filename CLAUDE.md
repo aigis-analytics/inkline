@@ -128,6 +128,111 @@ If you see any of these in your run, the tunnel is the likely cause:
 **This is a known operational gotcha — bake it into your pre-flight check on every
 Inkline session run from the main PC.**
 
+### Active n8n workflows
+
+Two Gemini workflows are now registered on K1Mini n8n:
+
+| Workflow | Endpoint | Input | Use case |
+|---|---|---|---|
+| `inkblot-icon` | `POST /webhook/inkblot-icon` | `{"prompt": "..."}` | Text-only background / icon generation |
+| `gemini-multimodal-icon` | `POST /webhook/gemini-multimodal-icon` | `{"prompt": "...", "reference_image_b64": "<base64>", "mime_type": "image/png"}` | Style-anchored generation with reference image |
+
+Both use model `gemini-2.5-flash-image` (no `-preview` suffix).
+
+**IMPORTANT — multimodal `image_path` gotcha:** The multimodal workflow response contains
+an `image_path` field, but this is a container-local path inside the n8n sandbox where
+`fs` is blocked.  **Always read `imageBase64` — never trust `image_path`** for the
+multimodal workflow.  The Python wrapper (`generate_background_image_multimodal`) handles
+this correctly and always decodes `imageBase64`.
+
+### Python usage
+
+**Text-only (existing, unchanged):**
+
+```python
+from inkline.generative_assets import generate_background_image
+path = generate_background_image(
+    n8n_endpoint="http://localhost:5678/webhook/inkblot-icon",
+    prompt="Abstract geometric blue background, 16:9",
+)
+```
+
+**Multimodal (new) — explicit call:**
+
+```python
+from inkline.generative_assets import generate_background_image_multimodal
+path = generate_background_image_multimodal(
+    n8n_endpoint="http://localhost:5678/webhook/gemini-multimodal-icon",
+    prompt="Generate a 16:9 background that matches the style of the reference image",
+    reference_image_path="/path/to/reference.png",
+    output_dir=None,  # defaults to ~/.local/share/inkline/output/backgrounds/
+)
+# Returns absolute path to the saved PNG on disk.
+```
+
+**Multimodal (new) — auto-routing via existing function:**
+
+```python
+from inkline.generative_assets import generate_background_image
+# When reference_image_path is set AND endpoint ends in 'inkblot-icon',
+# the call is automatically re-routed to 'gemini-multimodal-icon'.
+path = generate_background_image(
+    n8n_endpoint="http://localhost:5678/webhook/inkblot-icon",
+    prompt="Match the visual style of the reference image",
+    reference_image_path="/path/to/reference.png",
+)
+```
+
+If `n8n_endpoint` does NOT end in `inkblot-icon`, a `UserWarning` is emitted and
+the function proceeds text-only — no multimodal call is attempted.
+
+---
+
+## Diagnostics — CLI failure dumps
+
+When a `POST /prompt` request fails because the spawned `claude -p` subprocess
+exits with rc != 0, the bridge writes a verbose dump file for post-mortem diagnosis.
+
+### Dump file location
+
+```
+~/.local/share/inkline/output/cli_failures/<YYYYMMDDTHHMMSS>_rc<code>.log
+```
+
+### What the dump contains
+
+Each file is plain text with the following sections, separated by blank lines:
+
+```
+timestamp: 20260426T194006
+exit_code: 143
+mode: slides
+deck_id: <deck id if present>
+elapsed_s: 671.3
+system_prompt_len: 4821
+
+prompt:
+<full prompt text>
+
+--- stdout ---
+<all stdout chunks collected before exit>
+
+--- stderr ---
+<full stderr>
+```
+
+The `dump_path` field is also included in the 502 JSON response so the WebUI
+can surface it:
+
+```json
+{"error": "CLI error: ", "dump_path": "/home/.../.local/share/inkline/output/cli_failures/...log"}
+```
+
+### Rotation
+
+On bridge startup, files older than **7 days** are automatically deleted from
+the `cli_failures/` directory.  No manual cleanup is needed for normal operation.
+
 ---
 
 ## Pipeline Reference — Archon-Wrapped Patterns
