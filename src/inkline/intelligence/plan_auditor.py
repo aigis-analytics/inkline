@@ -1,5 +1,10 @@
 """Plan auditor — rejects deck plans that violate VFEP constraints.
 
+**Used in Draft Mode only.** The execute-mode path (inkline render) does not
+invoke the VFEP plan auditor. This module runs inside the 4-phase Archon
+pipeline triggered by /prompt (Draft Mode). In execute-mode, spec validation
+is done at parse time by inkline.authoring.image_strategy and the preprocessor.
+
 Called between _plan_deck_llm and _review_plan_llm in _design_deck_llm.
 Returns a PlanAuditResult; callers retry planning when the audit fails.
 
