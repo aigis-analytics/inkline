@@ -198,6 +198,143 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_render(args: argparse.Namespace) -> None:
+    """Render a markdown file to PDF (and optionally other formats).
+
+    This is the non-agentic path: preprocessor → DesignAdvisor → exporter.
+    It does NOT route through Claude agentic mode — suitable for CI and
+    the live-preview editor.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    md_path = _Path(args.file)
+    if not md_path.exists():
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.intelligence import DesignAdvisor
+        from inkline.typst import export_typst_slides
+        from inkline.intelligence import audit_deck, format_report
+    except ImportError as exc:
+        print(f"ERROR: {exc}\nInstall Inkline with: pip install inkline[all]", file=sys.stderr)
+        sys.exit(1)
+
+    md_text = md_path.read_text(encoding="utf-8")
+    print(f"[inkline render] Preprocessing {md_path.name}...")
+
+    deck_meta, sections = preprocess(
+        md_text,
+        strict_directives=args.strict_directives,
+        source_path=str(md_path),
+    )
+
+    # CLI flags override front-matter
+    brand    = args.brand    or deck_meta.get("brand", "minimal")
+    template = args.template or deck_meta.get("template", "consulting")
+    mode     = deck_meta.get("mode", "rules")  # default rules for non-agentic
+
+    print(f"[inkline render] Designing deck (brand={brand}, template={template}, mode={mode})...")
+
+    advisor = DesignAdvisor(brand=brand, template=template, mode=mode)
+    slides = advisor.design_deck(
+        title=deck_meta.get("title", md_path.stem),
+        subtitle=deck_meta.get("subtitle", ""),
+        date=deck_meta.get("date", ""),
+        sections=sections,
+        audience=deck_meta.get("audience", ""),
+        goal=deck_meta.get("goal", ""),
+    )
+
+    # Determine output path
+    output_dir = _Path("~/.local/share/inkline/output").expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_stem = md_path.stem
+    pdf_path = output_dir / f"{out_stem}.pdf"
+
+    print(f"[inkline render] Exporting to {pdf_path}...")
+    export_typst_slides(
+        slides=slides,
+        output_path=str(pdf_path),
+        brand=brand,
+        template=template,
+    )
+
+    # Write notes file
+    try:
+        from inkline.authoring.notes_writer import write_notes
+        notes_path = write_notes(pdf_path, slides, sections)
+        print(f"[inkline render] Notes → {notes_path}")
+    except Exception as exc:
+        print(f"[inkline render] WARNING: notes writer failed: {exc}", file=sys.stderr)
+
+    # Structural audit
+    audit_level = deck_meta.get("audit", "structural")
+    if audit_level != "off":
+        warnings = audit_deck(slides)
+        if warnings:
+            print(format_report(warnings))
+
+    print(f"PDF ready: {pdf_path}")
+
+    if args.watch:
+        print(f"[inkline render] Watch mode — monitoring {md_path} for changes...")
+        _run_watch(md_path, args)
+
+
+def _run_watch(md_path: "Path", args: "argparse.Namespace") -> None:
+    """File-watch loop for --watch flag (synchronous polling fallback)."""
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+    except ImportError:
+        print("ERROR: watchdog is required for --watch. Install with: pip install watchdog",
+              file=sys.stderr)
+        sys.exit(1)
+
+    import time
+    from pathlib import Path
+
+    _last_render = [0.0]
+    _DEBOUNCE = 0.25
+
+    class _Handler(FileSystemEventHandler):
+        def on_modified(self, event):
+            if event.src_path == str(md_path.resolve()):
+                now = time.time()
+                if now - _last_render[0] < _DEBOUNCE:
+                    return
+                _last_render[0] = now
+                print(f"\n[inkline watch] Change detected — re-rendering...")
+                try:
+                    cmd_render(args)
+                except Exception as exc:
+                    print(f"[inkline watch] Render error: {exc}", file=sys.stderr)
+
+    observer = Observer()
+    observer.schedule(_Handler(), str(md_path.parent), recursive=False)
+    observer.start()
+    print(f"[inkline watch] Watching {md_path} — Ctrl+C to stop")
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
+
+
+def cmd_backend_coverage(_args: argparse.Namespace) -> None:
+    """Print the slide-type × backend coverage matrix."""
+    try:
+        from inkline.authoring.backend_coverage import print_coverage_table
+        print(print_coverage_table())
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="inkline",
@@ -276,6 +413,46 @@ def main(argv: list[str] | None = None) -> None:
     ingest_p.add_argument("--name", dest="deck_name", default="",
                           help="Deck identifier (default: filename stem)")
     ingest_p.set_defaults(func=cmd_ingest)
+
+    # inkline render
+    render_p = sub.add_parser(
+        "render",
+        help="Render a .md file to PDF (non-agentic; no Claude call)",
+    )
+    render_p.add_argument("file", metavar="FILE.md", help="Markdown source file")
+    render_p.add_argument("--output", default="pdf", metavar="FORMATS",
+                          help="Comma-separated output formats: pdf,pptx (default: pdf)")
+    render_p.add_argument("--brand", default="", metavar="BRAND",
+                          help="Override brand from front-matter")
+    render_p.add_argument("--template", default="", metavar="TEMPLATE",
+                          help="Override template from front-matter")
+    render_p.add_argument("--watch", action="store_true",
+                          help="Watch for file changes and re-render")
+    render_p.add_argument("--serve", action="store_true",
+                          help="Open the bridge WebUI after rendering (requires inkline serve)")
+    render_p.add_argument("--strict-directives", action="store_true",
+                          help="Treat unknown/invalid directives as errors")
+    render_p.set_defaults(func=cmd_render)
+
+    # inkline watch (alias for render --watch --serve)
+    watch_p = sub.add_parser(
+        "watch",
+        help="Alias for 'render --watch --serve' — live reload on edit",
+    )
+    watch_p.add_argument("file", metavar="FILE.md", help="Markdown source file")
+    watch_p.add_argument("--brand", default="", metavar="BRAND")
+    watch_p.add_argument("--template", default="", metavar="TEMPLATE")
+    watch_p.add_argument("--strict-directives", action="store_true")
+    watch_p.set_defaults(func=lambda a: cmd_render(
+        type("_Args", (), {**vars(a), "watch": True, "serve": True, "output": "pdf"})()
+    ))
+
+    # inkline backend-coverage
+    bc_p = sub.add_parser(
+        "backend-coverage",
+        help="Print slide-type × backend coverage matrix",
+    )
+    bc_p.set_defaults(func=cmd_backend_coverage)
 
     args = parser.parse_args(argv)
 
