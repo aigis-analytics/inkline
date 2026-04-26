@@ -31,6 +31,7 @@ from pathlib import Path
 
 try:
     from aiohttp import web
+    from aiohttp import WSMsgType as _WSMsgType
 except ImportError:
     raise ImportError(
         "aiohttp is required for the Inkline bridge. "
@@ -488,6 +489,363 @@ def _record_regen_to_store(
 # ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Phase 2: POST /render — non-agentic synchronous render
+# ---------------------------------------------------------------------------
+
+async def handle_render(request: web.Request) -> web.Response:
+    """Non-agentic render endpoint — preprocessor → DesignAdvisor → exporter.
+
+    POST /render
+    {
+      "markdown": "<full md text>",      # OR
+      "path": "/uploads/foo.md",         # absolute path to already-uploaded file
+      "deck_meta_overrides": {...},      # optional CLI-equivalent overrides
+      "skip_audit": false                # optional
+    }
+
+    Response:
+    {
+      "outputs": {"pdf": "/output/deck.pdf"},
+      "warnings": [...],
+      "audit": {"pass": N, "fail": N, "details": [...]}
+    }
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    markdown_text = data.get("markdown", "")
+    md_path_str   = data.get("path", "")
+    overrides     = data.get("deck_meta_overrides", {}) or {}
+    skip_audit    = bool(data.get("skip_audit", False))
+
+    if not markdown_text and not md_path_str:
+        return web.json_response({"error": "Provide 'markdown' or 'path'"}, status=400)
+
+    if md_path_str and not markdown_text:
+        md_file = Path(md_path_str)
+        if not md_file.exists():
+            return web.json_response({"error": f"File not found: {md_path_str}"}, status=404)
+        markdown_text = md_file.read_text(encoding="utf-8")
+        source_path = md_path_str
+    else:
+        source_path = None
+
+    try:
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.intelligence import DesignAdvisor, audit_deck
+        from inkline.typst import export_typst_slides
+        from inkline.authoring.notes_writer import write_notes
+    except ImportError as exc:
+        return web.json_response({"error": f"Missing dependency: {exc}"}, status=500)
+
+    try:
+        deck_meta, sections = preprocess(
+            markdown_text,
+            source_path=source_path,
+        )
+    except Exception as exc:
+        log.exception("Preprocessor error")
+        return web.json_response({"error": f"Preprocessor failed: {exc}"}, status=500)
+
+    # Apply overrides (CLI flags / API params take precedence over front-matter)
+    deck_meta.update({k: v for k, v in overrides.items() if v})
+
+    brand    = deck_meta.get("brand", "minimal")
+    template = deck_meta.get("template", "consulting")
+    mode     = deck_meta.get("mode", "rules")   # default rules for non-agentic
+
+    try:
+        advisor = DesignAdvisor(brand=brand, template=template, mode=mode)
+        slides = advisor.design_deck(
+            title=deck_meta.get("title", "Untitled"),
+            subtitle=deck_meta.get("subtitle", ""),
+            date=deck_meta.get("date", ""),
+            sections=sections,
+            audience=deck_meta.get("audience", ""),
+            goal=deck_meta.get("goal", ""),
+        )
+    except Exception as exc:
+        log.exception("DesignAdvisor error")
+        return web.json_response({"error": f"DesignAdvisor failed: {exc}"}, status=500)
+
+    # Determine output file
+    stem = Path(source_path).stem if source_path else "render"
+    pdf_path = OUTPUT_DIR / f"{stem}.pdf"
+
+    try:
+        export_typst_slides(
+            slides=slides,
+            output_path=str(pdf_path),
+            brand=brand,
+            template=template,
+        )
+    except Exception as exc:
+        log.exception("Export error")
+        return web.json_response({"error": f"Export failed: {exc}"}, status=500)
+
+    # Write notes file
+    notes_path = None
+    try:
+        notes_path = write_notes(pdf_path, slides, sections)
+    except Exception as exc:
+        log.warning("Notes writer failed: %s", exc)
+
+    # Audit
+    audit_result: dict = {"pass": 0, "fail": 0, "details": []}
+    warnings_list: list = []
+    if not skip_audit:
+        try:
+            from inkline.intelligence import format_report
+            audit_warnings = audit_deck(slides)
+            for w in audit_warnings:
+                warnings_list.append(str(w))
+                if "FAIL" in str(w).upper():
+                    audit_result["fail"] += 1
+                else:
+                    audit_result["pass"] += 1
+            audit_result["details"] = [str(w) for w in audit_warnings]
+        except Exception as exc:
+            log.warning("Audit failed: %s", exc)
+
+    outputs: dict = {"pdf": str(pdf_path)}
+    if notes_path:
+        outputs["notes"] = str(notes_path)
+
+    return web.json_response({
+        "outputs": outputs,
+        "spec_path": str(pdf_path.with_suffix("") / "_spec.json") if False else None,
+        "warnings": warnings_list,
+        "audit": audit_result,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: WebSocket /watch?file=<path> — file-change push
+# ---------------------------------------------------------------------------
+
+# Track active watchers to allow cleanup
+_active_watchers: dict = {}  # ws_id → observer
+
+
+async def handle_watch(request: web.Request) -> web.WebSocketResponse:
+    """WebSocket endpoint — watch a file and push render events on change.
+
+    Connect: ws://localhost:8082/watch?file=/path/to/deck.md
+    Events pushed to client:
+      {"event": "render_start"}
+      {"event": "render_done", "outputs": {...}, "audit": {...}}
+      {"event": "render_error", "message": "..."}
+      {"event": "bridge_shutdown"}
+    """
+    file_param = request.rel_url.query.get("file", "")
+    if not file_param:
+        return web.Response(text="?file= param required", status=400)
+
+    md_path = Path(file_param)
+    if not md_path.exists():
+        return web.Response(text=f"File not found: {file_param}", status=404)
+
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    ws_id = uuid.uuid4().hex
+
+    # Import watchdog
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+    except ImportError:
+        await ws.send_json({"event": "render_error", "message": "watchdog not installed"})
+        await ws.close()
+        return ws
+
+    loop = asyncio.get_event_loop()
+    _DEBOUNCE = 0.25
+    _last_render: list[float] = [0.0]
+
+    async def _do_render():
+        """Run the non-agentic render and push result to the WebSocket."""
+        await ws.send_json({"event": "render_start"})
+        try:
+            from inkline.authoring.preprocessor import preprocess
+            from inkline.intelligence import DesignAdvisor, audit_deck
+            from inkline.typst import export_typst_slides
+            from inkline.authoring.notes_writer import write_notes
+
+            md_text = md_path.read_text(encoding="utf-8")
+            deck_meta, sections = preprocess(md_text, source_path=str(md_path))
+
+            brand    = deck_meta.get("brand", "minimal")
+            template = deck_meta.get("template", "consulting")
+            mode     = deck_meta.get("mode", "rules")
+
+            advisor = DesignAdvisor(brand=brand, template=template, mode=mode)
+            slides = advisor.design_deck(
+                title=deck_meta.get("title", md_path.stem),
+                subtitle=deck_meta.get("subtitle", ""),
+                date=deck_meta.get("date", ""),
+                sections=sections,
+                audience=deck_meta.get("audience", ""),
+                goal=deck_meta.get("goal", ""),
+            )
+
+            stem = md_path.stem
+            pdf_path = OUTPUT_DIR / f"{stem}.pdf"
+            export_typst_slides(
+                slides=slides,
+                output_path=str(pdf_path),
+                brand=brand,
+                template=template,
+            )
+
+            notes_path = None
+            try:
+                notes_path = write_notes(pdf_path, slides, sections)
+            except Exception:
+                pass
+
+            from inkline.intelligence import audit_deck as _audit
+            audit_result: dict = {"pass": 0, "fail": 0, "details": []}
+            audit_level = deck_meta.get("audit", "structural")
+            if audit_level != "off":
+                try:
+                    aws = _audit(slides)
+                    for w in aws:
+                        if "FAIL" in str(w).upper():
+                            audit_result["fail"] += 1
+                        else:
+                            audit_result["pass"] += 1
+                    audit_result["details"] = [str(w) for w in aws]
+                except Exception:
+                    pass
+
+            outputs: dict = {"pdf": str(pdf_path)}
+            if notes_path:
+                outputs["notes"] = str(notes_path)
+
+            await ws.send_json({
+                "event": "render_done",
+                "outputs": outputs,
+                "audit": audit_result,
+            })
+        except Exception as exc:
+            log.exception("Watch render error")
+            try:
+                await ws.send_json({"event": "render_error", "message": str(exc)})
+            except Exception:
+                pass
+
+    class _Handler(FileSystemEventHandler):
+        def on_modified(self, event):
+            import time as _time
+            if event.src_path != str(md_path.resolve()):
+                return
+            now = _time.time()
+            if now - _last_render[0] < _DEBOUNCE:
+                return
+            _last_render[0] = now
+            asyncio.run_coroutine_threadsafe(_do_render(), loop)
+
+        def on_created(self, event):
+            self.on_modified(event)
+
+    observer = Observer()
+    observer.schedule(_Handler(), str(md_path.parent), recursive=False)
+    observer.start()
+    _active_watchers[ws_id] = observer
+
+    log.info("Watch started: %s (id=%s)", md_path, ws_id)
+
+    try:
+        # Run initial render immediately
+        await _do_render()
+
+        # Keep alive while the WebSocket is open
+        async for msg in ws:
+            if msg.type in (_WSMsgType.ERROR, _WSMsgType.CLOSE):
+                break
+    except Exception:
+        pass
+    finally:
+        observer.stop()
+        observer.join(timeout=2.0)
+        _active_watchers.pop(ws_id, None)
+        log.info("Watch stopped: %s", md_path)
+
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: POST /redesign_slide — single-slide LLM redesign (D3)
+# ---------------------------------------------------------------------------
+
+async def handle_redesign_slide(request: web.Request) -> web.Response:
+    """Single-slide redesign using DesignAdvisor.redesign_one().
+
+    POST /redesign_slide
+    {
+      "slide_index": 7,
+      "audit_findings": [{"category": "...", "message": "...", "fix": "..."}],
+      "current_spec": {...},
+      "source_section": {...}
+    }
+
+    Response:
+    {
+      "new_spec": {...},
+      "suggested_markdown": "## ... rewritten section ...",
+      "rationale": "..."
+    }
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
+    slide_index    = int(data.get("slide_index", 0))
+    audit_findings = data.get("audit_findings", [])
+    current_spec   = data.get("current_spec", {})
+    source_section = data.get("source_section", {})
+
+    try:
+        from inkline.intelligence import DesignAdvisor
+        advisor = DesignAdvisor(brand="minimal", template="consulting", mode="llm")
+        result = advisor.redesign_one(
+            slide_index=slide_index,
+            current_spec=current_spec,
+            audit_findings=audit_findings,
+            source_section=source_section,
+        )
+        return web.json_response(result)
+    except AttributeError:
+        # redesign_one not yet implemented — return stub
+        log.warning("DesignAdvisor.redesign_one() not available — returning stub response")
+        return web.json_response({
+            "new_spec": current_spec,
+            "suggested_markdown": f"## {current_spec.get('data', {}).get('title', 'Untitled')}\n<!-- redesign requested -->\n",
+            "rationale": "redesign_one() not yet implemented on this DesignAdvisor build",
+        })
+    except Exception as exc:
+        log.exception("Redesign error")
+        return web.json_response({"error": str(exc)}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: GET /authoring/directives — list all registered directives
+# ---------------------------------------------------------------------------
+
+async def handle_authoring_directives(request: web.Request) -> web.Response:
+    """Return all registered directive names for editor auto-completion."""
+    try:
+        from inkline.authoring.directives import list_directives
+        return web.json_response(list_directives())
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500)
+
+
 async def handle_prompt(request: web.Request) -> web.Response:
     """Accept a user message and route it through claude -p (agentic mode).
 
@@ -530,10 +888,25 @@ async def handle_prompt(request: web.Request) -> web.Response:
         await asyncio.sleep(wait)
     _last_request_time = time.time()
 
+    # /prompt extensions (Phase 2) — brand, template, deck_meta overrides
+    # These are injected into the system prompt so Claude picks them up automatically.
+    brand_hint    = data.get("brand", "")
+    template_hint = data.get("template", "")
+    deck_meta_ext = data.get("deck_meta", {})
+    brand_injects: list[str] = []
+    if brand_hint:
+        brand_injects.append(f"Brand: {brand_hint}")
+    if template_hint:
+        brand_injects.append(f"Template: {template_hint}")
+    if deck_meta_ext and isinstance(deck_meta_ext, dict):
+        brand_injects.append(f"Deck meta overrides: {json.dumps(deck_meta_ext)}")
+
     # Build full system prompt — base + optional caller override + mandatory mode hint
     system = SYSTEM_PROMPT
     if extra_system:
         system = system + "\n\n" + extra_system
+    if brand_injects:
+        system = system + "\n\n## DECK CONFIGURATION (from API caller)\n" + "\n".join(brand_injects)
     # Mode hint appended last so it always takes effect regardless of extra_system
     if mode == "document":
         system = system + (
@@ -912,6 +1285,12 @@ def create_app() -> web.Application:
     app.router.add_post("/prompt", handle_prompt)
     app.router.add_post("/vision", handle_vision)
     app.router.add_post("/upload", handle_upload)
+    # Phase 2: non-agentic render + watch + redesign
+    app.router.add_post("/render", handle_render)
+    app.router.add_get("/watch", handle_watch)
+    app.router.add_post("/redesign_slide", handle_redesign_slide)
+    app.router.add_get("/authoring/directives", handle_authoring_directives)
+    # Output files + status
     app.router.add_get("/output/{filename}", handle_output_file)
     app.router.add_get("/status", handle_status)
     app.router.add_get("/progress", handle_progress)
