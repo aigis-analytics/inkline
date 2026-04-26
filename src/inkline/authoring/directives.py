@@ -42,7 +42,7 @@ _GLOBAL_DIRECTIVES: dict[str, dict] = {
     "audience":        {"type": str,  "default": ""},
     "goal":            {"type": str,  "default": ""},
     "paper":           {"type": str,  "default": "16:9",    "choices": ["a4", "letter", "16:9", "4:3"]},
-    "audit":           {"type": str,  "default": "structural", "choices": ["off", "structural", "strict"]},
+    "audit":           {"type": str,  "default": "structural", "choices": ["off", "structural", "post-render", "strict"]},
     "headingDivider":  {"type": int,  "default": 2},
     "theme_overrides": {"type": dict, "default": {}},
     "output":          {"type": list, "default": ["pdf"]},
@@ -52,15 +52,18 @@ _GLOBAL_DIRECTIVES: dict[str, dict] = {
 }
 
 _LOCAL_DIRECTIVES: dict[str, dict] = {
-    "layout":       {"type": str},
-    "class":        {"type": str},
-    "paginate":     {"type": (str, bool), "choices": ["true", "false", "hold", "skip", True, False]},
-    "header":       {"type": str},
-    "footer":       {"type": str},
-    "accent":       {"type": str},
-    "bg":           {"type": str},
-    "notes":        {"type": str},
-    "mode":         {"type": str, "choices": ["auto", "guided", "exact", "llm", "rules", "advised"]},
+    "layout":              {"type": str},
+    "class":               {"type": str},
+    "paginate":            {"type": (str, bool), "choices": ["true", "false", "hold", "skip", True, False]},
+    "header":              {"type": str},
+    "footer":              {"type": str},
+    "accent":              {"type": str},
+    "bg":                  {"type": str},
+    "notes":               {"type": str},
+    "mode":                {"type": str, "choices": ["auto", "guided", "exact", "llm", "rules", "advised"]},
+    "image":               {"type": dict},    # _image: { strategy: reuse|generate|placeholder, ... }
+    "shapes_file":         {"type": str},     # _shapes_file: path/to/shapes.json
+    "capacity_override":   {"type": bool},    # _capacity_override: true — suppress capacity warnings
 }
 
 # Local directives that also have spot forms (``_name``)

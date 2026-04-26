@@ -142,9 +142,11 @@ class TestHTMLCommentDirectives:
         assert sections[0].get("slide_type") == "kpi_strip"
         assert sections[1].get("slide_type") == "three_card"
 
-    def test_layout_implies_guided_mode(self):
+    def test_layout_implies_exact_mode(self):
+        # Phase 1 pivot: _layout now defaults to exact mode (execute-mode default).
+        # Authors can override with _mode: guided explicitly.
         _, sections = preprocess(COMMENTS_MD)
-        assert sections[0].get("slide_mode") == "guided"
+        assert sections[0].get("slide_mode") == "exact"
 
     def test_narrative_still_extracted(self):
         _, sections = preprocess(COMMENTS_MD)
