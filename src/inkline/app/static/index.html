@@ -23,7 +23,9 @@
 
   html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
 
-  #app { display: grid; grid-template-columns: 380px 240px 1fr; height: 100vh; gap: 0; }
+  /* Outer shell: flex-column for tab strip + content area */
+  #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  #content-area { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
   /* ── Left panel ── */
   #left { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface); }
@@ -248,9 +250,22 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 </style>
+<link rel="stylesheet" href="/static/editor.css">
 </head>
 <body>
 <div id="app">
+
+<!-- Tab strip -->
+<div id="tab-strip">
+  <button id="tab-btn-chat" class="tab-btn active">Chat</button>
+  <button id="tab-btn-editor" class="tab-btn">Editor</button>
+</div>
+
+<!-- Content area: Chat tab + Editor tab -->
+<div id="content-area">
+
+<!-- ── Chat tab ────────────────────────────────────────────────────────── -->
+<div id="tab-chat" class="active" style="display:grid;grid-template-columns:380px 240px 1fr;flex:1;min-height:0;overflow:hidden;">
 
   <!-- Left: Chat + file upload -->
   <div id="left">
@@ -316,7 +331,58 @@
     <iframe id="pdf-frame" style="display:none"></iframe>
   </div>
 
-</div>
+</div><!-- end #tab-chat -->
+
+<!-- ── Editor tab ──────────────────────────────────────────────────────── -->
+<div id="tab-editor" style="display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden;">
+
+  <!-- 2-column split: CodeMirror | PDF -->
+  <div id="editor-split">
+
+    <!-- Left: CodeMirror host -->
+    <div id="cm-host" style="position:relative;overflow:hidden;display:flex;flex-direction:column;">
+      <div id="editor-mode-badge">Live preview — rules mode</div>
+      <!-- CodeMirror mounts here -->
+    </div>
+
+    <!-- Right: PDF iframe + notes pane -->
+    <div id="editor-right" style="display:flex;flex-direction:column;overflow:hidden;">
+      <iframe id="editor-pdf-frame" style="flex:1;border:none;background:#525659;min-height:0;"></iframe>
+
+      <!-- Speaker notes pane -->
+      <div id="notes-pane">
+        <div id="notes-header">Speaker notes ▼</div>
+        <div id="notes-body">(no speaker notes)</div>
+      </div>
+    </div>
+
+  </div><!-- end #editor-split -->
+
+  <!-- Status bar -->
+  <div id="editor-status" style="position:relative;">
+    <div id="editor-status-dot" class="idle"></div>
+    <span id="editor-status-text">Ready — Cmd/Ctrl+S to render &amp; audit</span>
+    <span id="editor-audit-badge"></span>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+      <button id="editor-settings-btn" title="Editor settings">Settings</button>
+    </div>
+
+    <!-- Settings popover -->
+    <div id="editor-settings-popover">
+      <label>
+        <input type="checkbox" id="editor-auto-render-cb" checked>
+        Auto-render on pause (1.5s)
+      </label>
+    </div>
+
+  </div><!-- end #editor-status -->
+
+</div><!-- end #tab-editor -->
+
+</div><!-- end #content-area -->
+</div><!-- end #app -->
+
+<script type="module" src="/static/editor.js"></script>
 
 <script>
 const BRIDGE = '';
