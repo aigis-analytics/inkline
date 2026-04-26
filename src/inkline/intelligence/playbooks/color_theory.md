@@ -1,3 +1,13 @@
+---
+domain: color
+audience: [claude-code, design-advisor]
+slide_type_relevance: [all]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Effective, accessible, and aesthetically sound colour palettes for charts, slides, and documents."
+---
+
 # Color Theory for Data Playbook
 
 > **Purpose**: Guide the DesignAdvisor in selecting effective, accessible, and

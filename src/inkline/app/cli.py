@@ -335,6 +335,146 @@ def cmd_backend_coverage(_args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_knowledge(args: argparse.Namespace) -> None:
+    """Browse the Inkline design knowledge base from the command line."""
+    from inkline.app.mcp_resources import list_resources, read_resource, ResourceNotFoundError
+
+    sub = getattr(args, "knowledge_cmd", None)
+
+    if sub == "list" or sub is None:
+        resources = list_resources()
+        print(f"Inkline knowledge base — {len(resources)} resources\n")
+        for r in resources:
+            print(f"  {r['uri']}")
+            if r.get("description"):
+                print(f"      {r['description']}")
+        print()
+
+    elif sub == "get":
+        uri = args.uri
+        if not uri.startswith("inkline://"):
+            # Allow short form: layouts/three_card → inkline://layouts/three_card
+            uri = f"inkline://{uri}"
+        try:
+            content = read_resource(uri)
+            print(content)
+        except ResourceNotFoundError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+    elif sub == "search":
+        query = args.query.lower()
+        resources = list_resources()
+        matches = [
+            r for r in resources
+            if query in r["uri"].lower() or query in r.get("description", "").lower()
+        ]
+        if not matches:
+            print(f"No resources matched {args.query!r}")
+        else:
+            print(f"Matches for {args.query!r}:\n")
+            for r in matches:
+                print(f"  {r['uri']}")
+                if r.get("description"):
+                    print(f"      {r['description']}")
+
+    else:
+        print(f"Unknown knowledge subcommand: {sub!r}. Use: list, get <uri>, search <query>")
+        sys.exit(1)
+
+
+def cmd_validate(args: argparse.Namespace) -> None:
+    """Pre-render validation: image paths, capacity, schema."""
+    from pathlib import Path as _Path
+
+    spec_path = _Path(args.spec)
+    if not spec_path.exists():
+        print(f"ERROR: File not found: {args.spec}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.authoring.image_strategy import validate_image_directives_in_sections
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    md_text = spec_path.read_text(encoding="utf-8")
+    deck_meta, sections = preprocess(
+        md_text,
+        strict_directives=args.strict,
+        source_path=str(spec_path),
+    )
+
+    print(f"[inkline validate] {spec_path.name}")
+    print(f"  Brand:    {deck_meta.get('brand', 'minimal')}")
+    print(f"  Sections: {len(sections)}")
+    print(f"  Audit:    {deck_meta.get('audit', 'structural')}")
+
+    # Validate image directives
+    issues = []
+    try:
+        warnings = validate_image_directives_in_sections(
+            sections, base_dir=spec_path.parent, dry_run=True
+        )
+        issues.extend(warnings)
+    except FileNotFoundError as exc:
+        print(f"\n[FAIL] Image path error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if issues:
+        print(f"\n{len(issues)} issue(s) found:")
+        for issue in issues:
+            print(f"  [{issue['severity'].upper()}] Slide {issue['slide_index']}: {issue['issue']}")
+        sys.exit(1)
+    else:
+        print("\n[OK] Spec is valid.")
+
+
+def cmd_critique(args: argparse.Namespace) -> None:
+    """Post-render visual audit of a PDF using Vishwakarma vision model."""
+    from pathlib import Path as _Path
+
+    pdf_path = _Path(args.pdf)
+    if not pdf_path.exists():
+        print(f"ERROR: File not found: {args.pdf}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        from inkline.intelligence.vishwakarma import critique_pdf
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[inkline critique] Auditing {pdf_path.name} with rubric '{args.rubric}'...")
+    try:
+        result = critique_pdf(
+            pdf_path=str(pdf_path),
+            rubric=args.rubric,
+            brand=args.brand,
+        )
+        import json as _json
+        print(_json.dumps(result.to_dict(), indent=2))
+    except Exception as exc:
+        print(f"ERROR: critique failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_draft(args: argparse.Namespace) -> None:
+    """Start Draft Mode — the agentic /prompt path (requires claude CLI).
+
+    This is an explicit alias for 'inkline serve' that makes the opt-in
+    agentic path discoverable. Opens the bridge WebUI with a note that
+    Draft Mode is active.
+    """
+    print("Starting Inkline in Draft Mode (agentic path — requires claude CLI)")
+    print("Navigate to http://localhost:{}/  to use the conversational interface.".format(
+        getattr(args, "port", 8082)
+    ))
+    from inkline.app.claude_bridge import main as bridge_main
+    bridge_main(port=getattr(args, "port", 8082))
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="inkline",
@@ -453,6 +593,55 @@ def main(argv: list[str] | None = None) -> None:
         help="Print slide-type × backend coverage matrix",
     )
     bc_p.set_defaults(func=cmd_backend_coverage)
+
+    # inkline knowledge
+    knowledge_p = sub.add_parser(
+        "knowledge",
+        help="Browse the Inkline design knowledge base (execute-mode primary resource)",
+    )
+    knowledge_sub = knowledge_p.add_subparsers(dest="knowledge_cmd", metavar="SUBCMD")
+
+    knowledge_sub.add_parser("list", help="List all knowledge resources")
+
+    kget_p = knowledge_sub.add_parser("get", help="Print a resource by URI")
+    kget_p.add_argument("uri", metavar="URI",
+                        help="Resource URI (e.g. inkline://layouts/three_card or layouts/three_card)")
+
+    ksearch_p = knowledge_sub.add_parser("search", help="Search knowledge by keyword")
+    ksearch_p.add_argument("query", metavar="QUERY", help="Search query")
+
+    knowledge_p.set_defaults(func=cmd_knowledge)
+
+    # inkline validate
+    validate_p = sub.add_parser(
+        "validate",
+        help="Pre-render validation: check image paths, capacity, directives (execute-mode)",
+    )
+    validate_p.add_argument("spec", metavar="SPEC.md", help="Spec file to validate")
+    validate_p.add_argument("--strict", action="store_true",
+                            help="Treat unknown directives as errors")
+    validate_p.set_defaults(func=cmd_validate)
+
+    # inkline critique
+    critique_p = sub.add_parser(
+        "critique",
+        help="Post-render visual audit of a PDF (Vishwakarma vision model)",
+    )
+    critique_p.add_argument("pdf", metavar="PDF", help="Path to the rendered PDF")
+    critique_p.add_argument("--rubric", default="institutional",
+                            choices=["institutional", "tech_pitch", "internal_review"],
+                            help="Audit rubric to apply (default: institutional)")
+    critique_p.add_argument("--brand", default="", metavar="BRAND",
+                            help="Brand context for brand-aware critique")
+    critique_p.set_defaults(func=cmd_critique)
+
+    # inkline draft
+    draft_p = sub.add_parser(
+        "draft",
+        help="Opt-in: start Draft Mode (agentic /prompt path, requires claude CLI)",
+    )
+    draft_p.add_argument("--port", type=int, default=8082, metavar="PORT")
+    draft_p.set_defaults(func=cmd_draft)
 
     args = parser.parse_args(argv)
 

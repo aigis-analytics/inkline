@@ -1,3 +1,13 @@
+---
+domain: document_design
+audience: [claude-code, design-advisor]
+slide_type_relevance: []
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Professional reports, memos, white papers, and board-level documents — layout and structural patterns."
+---
+
 # Document Design Patterns Playbook
 
 > **Purpose**: Guide the DesignAdvisor in designing professional reports,

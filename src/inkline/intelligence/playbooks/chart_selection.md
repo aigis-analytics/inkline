@@ -1,3 +1,13 @@
+---
+domain: charts
+audience: [claude-code, design-advisor]
+slide_type_relevance: [chart, bar_chart, chart_caption, multi_chart]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Optimal chart type selection for any data shape, communication goal, and audience context."
+---
+
 # Chart Selection Playbook
 
 > **Purpose**: Guide the DesignAdvisor in selecting the optimal chart type for any

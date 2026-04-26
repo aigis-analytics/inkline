@@ -1,3 +1,13 @@
+---
+domain: layout
+audience: [claude-code, design-advisor]
+slide_type_relevance: [all]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Guide for selecting professional slide layouts, structuring content using consulting-grade patterns."
+---
+
 # Slide Layout Patterns Playbook
 
 > **Purpose**: Guide the DesignAdvisor in selecting professional slide layouts,

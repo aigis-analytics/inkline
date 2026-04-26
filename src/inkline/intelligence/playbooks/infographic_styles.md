@@ -1,3 +1,13 @@
+---
+domain: infographics
+audience: [claude-code, design-advisor]
+slide_type_relevance: [freeform, content, split, feature_grid, kpi_strip, icon_stat]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Infographic visual formats beyond standard charts — for slides, reports, and standalone documents."
+---
+
 # Infographic Styles Playbook
 
 > **Purpose**: Guide the DesignAdvisor in selecting and composing infographic

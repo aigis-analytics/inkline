@@ -1,3 +1,13 @@
+---
+domain: exhibit_design
+audience: [claude-code, design-advisor]
+slide_type_relevance: [chart, table, multi_chart, split, kpi_strip, chart_caption]
+brand_affinity: [aigis, institutional_finance]
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Design patterns from top-tier investment banks and consulting firms — concrete rules for exhibit design."
+---
+
 # Professional Exhibit Design Playbook
 
 > **Purpose**: Translate the specific design patterns used by top-tier investment

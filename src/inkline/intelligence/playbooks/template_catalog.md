@@ -1,3 +1,13 @@
+---
+domain: templates
+audience: [claude-code, design-advisor]
+slide_type_relevance: [all]
+brand_affinity: []
+last_updated: "2026-04-26"
+version: "1.0.0"
+description: "Concrete, replicable recipes for slide archetypes from real-world template marketplaces."
+---
+
 # Template Catalog & Archetype Recipes Playbook
 
 > **Purpose**: Give the DesignAdvisor concrete, replicable recipes for the slide
