@@ -736,6 +736,157 @@ curl -X POST http://localhost:8082/prompt \
 
 ---
 
+## Markdown authoring + live preview
+
+### Directive grammar
+
+Inkline supports a Marpit-inspired directive grammar for markdown files.
+Two syntaxes are accepted:
+
+**Front-matter (deck-wide):**
+```markdown
+---
+brand: minimal
+template: consulting
+title: Q4 Strategy Review
+audience: investors
+audit: strict
+output: [pdf, pptx]
+---
+```
+
+**HTML-comment (per-slide):**
+```markdown
+## Market opportunity
+<!-- _layout: kpi_strip -->
+<!-- _notes: Emphasise the TAM number here. -->
+TAM is $40B, growing 32% YoY.
+```
+
+### Directive scopes
+
+| Scope | Prefix | Effect |
+|---|---|---|
+| Global | none | Front-matter or comment before first heading — whole-deck setting |
+| Local | none | Comment after a heading — cascades forward to subsequent slides |
+| Spot | `_` prefix | Comment in a section body — applies to this slide only |
+
+### Built-in directives
+
+**Global:** `brand`, `template`, `mode` (llm/rules/advised), `title`, `subtitle`,
+`date`, `audience`, `goal`, `paper` (a4/letter/16:9/4:3), `audit` (off/structural/strict),
+`headingDivider` (1–6, default 2), `output` ([pdf,pptx,html,google_slides,png_thumbs])
+
+**Local/spot:** `_layout` (slide type), `_class` (Typst show-rule classes), `_mode`,
+`_paginate`, `_header`, `_footer`, `_accent`, `_bg`, `_notes`, `_layout_pptx`
+
+### Asset shorthand
+
+```markdown
+## Revenue trend
+![bg left:40%](charts/revenue.png)
+ARR compounding at 34% per quarter.
+```
+
+Tokens: `bg`, `left[:N%]`, `right[:N%]`, `cover`/`contain`/`fit`,
+`w:Npx`, `h:Npx`, `blur:Npx`, `brightness:N`, `vertical`
+
+### Class system
+
+Register Typst show-rule fragments by class name:
+
+```python
+from inkline.authoring.classes import register
+
+register("lead", r"""
+  #show heading.where(level: 2): set text(size: 48pt, weight: 900)
+  #show heading.where(level: 2): set align(center)
+""")
+```
+
+Use in markdown: `<!-- _class: lead -->` or `<!-- _class: "lead invert" -->`
+
+### Plugin API
+
+Register custom directives in a brand package:
+
+```python
+from inkline.authoring.directives import register, DirectiveError
+
+@register(scope="global", name="classification")
+def classification(value, ctx):
+    valid = ("PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED")
+    if value.upper() not in valid:
+        raise DirectiveError(f"classification must be one of {valid}")
+    return {"header_overrides": {"text": value}}
+
+@register(scope="local", name="risk")
+def risk(value, ctx):
+    if value not in ("low", "medium", "high"):
+        raise DirectiveError(f"risk must be low|medium|high")
+    return {"accent": {"low": "#2e7d32", "medium": "#ef6c00", "high": "#c62828"}[value]}
+```
+
+See `src/inkline/brands/_example_brand_with_directives/` for a full example.
+
+### Editor pane workflow
+
+Open the WebUI and click the **Editor** tab to access the markdown editor:
+
+- **Left pane:** CodeMirror 6 editor — type markdown with directive support
+- **Right pane:** Live PDF preview — updates 1.5s after last keystroke
+- **Cmd/Ctrl-S:** Manual save — runs full render + audit
+- **Status bar:** Shows render state (idle/rendering/done/error) + audit badge
+- **Speaker notes:** Collapsible pane below PDF iframe reads `<deck>.notes.txt`
+- **Settings:** Toggle auto-render-on-pause
+
+The editor uses `mode: rules` for live previews (fast, deterministic) and
+switches to `mode: llm` only on manual save (higher quality).
+
+### CLI commands
+
+```bash
+inkline render deck.md                        # non-agentic render to PDF
+inkline render deck.md --watch                # watch + re-render on save
+inkline render deck.md --brand aigis --template dmd_stripe
+inkline render deck.md --strict-directives    # treat unknown directives as errors
+inkline watch deck.md                         # alias for render --watch --serve
+inkline backend-coverage                      # print slide-type × backend matrix
+```
+
+### Backend coverage matrix
+
+Run `inkline backend-coverage` to see which slide types are supported by each
+output backend (Typst, PPTX, Google Slides) and what the downgrade chain is for
+unsupported layouts.
+
+Example downgrades for PPTX:
+- `kpi_strip` → `stat`
+- `pyramid` → `three_card`
+- `multi_chart` → `chart`
+- `feature_grid` → `four_card` → `content`
+
+### PPTX notes and layout overrides
+
+**Speaker notes** written via `<!-- _notes: ... -->` are:
+1. Written to `<deck>.notes.txt` alongside the PDF
+2. Written to `slide.notes_slide.notes_text_frame` in PPTX export
+
+**PPTX-specific layout override:**
+```markdown
+## Revenue trend
+<!--
+_layout: chart_caption
+_layout_pptx: table
+-->
+```
+
+Use `PptxBuilder.set_slide_notes(slide, text)` to write notes programmatically.
+Use `PptxBuilder.apply_notes_from_slides(slide_specs)` to apply notes from a
+slide spec list after building the deck.
+
+---
+
 ## Troubleshooting
 
 - **`typst` compile error:** Run `pip install --upgrade typst`
