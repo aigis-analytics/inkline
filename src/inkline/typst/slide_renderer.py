@@ -1101,7 +1101,6 @@ class TypstSlideRenderer:
         else:
             kpi_block = f"""grid(
     columns: ({', '.join(['1fr'] * n_cols)}),
-    rows: (1fr,),
     gutter: 8pt,
     {kpis_str}
   )"""
@@ -1117,10 +1116,7 @@ class TypstSlideRenderer:
   {slide_title(title, t['text'])}
   v(8pt)
 
-  grid(
-    rows: (1fr,),
-    {kpi_block}
-  )
+  {kpi_block}
 
   v(4pt)
   {footer_bar(footnote, t['border'], t['muted'])}
@@ -1190,31 +1186,31 @@ class TypstSlideRenderer:
 )[
   #set text(fill: {_rgb(t['title_fg'])})
 
-  #v(1fr)
-  #align(center)[
+  // Footer pinned to bottom — place() removes it from normal flow
+  #place(bottom)[
+    #align(center)[
+      #text(size: 8pt, weight: "bold", tracking: 1pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}]
+    ]
+    #v(8pt)
+    #line(length: 100%, stroke: 0.5pt + {_rgb(t['border'])})
+    #v(4pt)
+    #context[
+      #grid(
+        columns: (1fr, auto),
+        align: horizon,
+        text(size: 8pt, fill: {_rgb(t['muted'])})[{_esc(t.get("footer_text", t.get("name", "")))}],
+        text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[#counter(page).display() / #counter(page).final().first()],
+      )
+    ]
+  ]
+
+  // Main content — vertically centred in available space
+  #align(center + horizon)[
     {f'#image("{logo_path}", width: 1.5cm)#v(0.2cm)' if logo_path else ''}
     #text(weight: "bold", size: 36pt, font: "{heading_font}", tracking: -1pt)[#upper[{_esc(company)}]]
     #v(0.3cm)
     #text(size: 16pt, fill: {_rgb(t['muted'])})[{_esc(tagline)}]
     {contact_section}
-  ]
-
-  #v(1fr)
-
-  // Bottom — confidentiality + footer
-  #align(center)[
-    #text(size: 8pt, weight: "bold", tracking: 1pt, fill: {_rgb(t['muted'])})[{_esc(t.get('confidentiality', ''))}]
-  ]
-  #v(8pt)
-  #line(length: 100%, stroke: 0.5pt + {_rgb(t['border'])})
-  #v(4pt)
-  #context[
-    #grid(
-      columns: (1fr, auto),
-      align: horizon,
-      text(size: 8pt, fill: {_rgb(t['muted'])})[{_esc(t.get("footer_text", t.get("name", "")))}],
-      text(size: 8pt, weight: "bold", fill: {_rgb(t['accent'])})[#counter(page).display() / #counter(page).final().first()],
-    )
   ]
 ]"""
 
@@ -3073,7 +3069,7 @@ def _esc_rich(text: str, accent_color: str = "#1A7FA0") -> str:
             out.append(_esc(part))
         else:
             out.append(
-                f'#text(weight: "bold", fill: rgb("{accent_color}")[{_esc(part)}]'
+                f'#text(weight: "bold", fill: rgb("{accent_color}"))[{_esc(part)}]'
             )
     return "".join(out)
 
