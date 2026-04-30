@@ -23,6 +23,7 @@ from inkline.brands import get_brand, BaseBrand, list_brands
 from inkline.html import export_html
 from inkline.pdf import export_pdf
 from inkline.slides import SlideBuilder
+from inkline.exhibit import render_exhibit
 
 __version__ = "0.2.0"
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "export_html",
     "export_pdf",
     "SlideBuilder",
+    "render_exhibit",
 ]
