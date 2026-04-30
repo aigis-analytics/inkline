@@ -1,0 +1,110 @@
+# Inkline project orchestrator config — consumed by ~/.claude/skills/orchestrate/.
+# Per multi_agent_orchestration/01-spec.md §3 + amendments 14.1–14.6 + 14.9–14.17.
+
+project_name      = "inkline"
+repo_root         = "/mnt/d/inkline"
+plan_docs_dir     = "plan_docs"
+reviews_dir       = "plan_docs/reviews"
+
+# Files surfaced to Opus as starting context. Resolved relative to repo_root.
+context_files = [
+  "CLAUDE.md",
+  "README.md",
+  "plan_docs/active/*.md",
+]
+
+context_token_budget = 40000
+
+# Inkline uses its own .venv (hatch-managed).
+test_command = [".venv/Scripts/python.exe", "-m", "pytest", "tests/", "-x", "--maxfail=3"]
+lint_command = [".venv/Scripts/python.exe", "-m", "ruff", "check", "--select", "E,F,B,RUF", "src"]
+
+branch_prefix = "feat/orchestrated"
+
+house_style = """
+- Deterministic execution engine: CC owns design decisions, DesignAdvisor LLM is Draft-Mode opt-in.
+- Run via bridge (upload file → POST /prompt → monitor); standalone scripts bypass visual audit.
+- Read inkline://playbooks/index first before authoring any spec involving layouts or slide types.
+- No new renderers without a matching test and visual audit sign-off.
+- Typst heading auto-numbering is disabled — use explicit markdown numbers to avoid double-numbering.
+"""
+
+# Amendment 14.1 — privacy
+[privacy]
+persist_raw = false
+raw_dir = "_raw"
+redact_env_names = [
+  "ANTHROPIC_API_KEY",
+  "GOOGLE_CLIENT_SECRET",
+  "INKLINE_API_KEY",
+]
+exclude_context_globs = [
+  ".env",
+  ".env.*",
+  "**/*.key",
+  "**/*.pem",
+  "**/*secret*",
+  "output/**",
+  "examples/**/*.pdf",
+  "plan_docs/reviews/**/_raw/**",
+]
+
+# Amendment 14.2 — git/worktree
+[git]
+base_branch = "main"
+worktree_root = ".orchestrator/worktrees"
+require_clean_worktree_for_design = false
+require_clean_worktree_for_implementation = true
+
+[budget]
+max_tokens_total = 2_000_000
+warn_at_tokens   = 1_500_000
+
+# Amendment 14.5 — model selection
+[models]
+designer          = "claude-opus-4-7"
+auditor           = "gpt-5.5"
+implementer       = "claude-sonnet-4-6"
+fallback_reviewer = "claude-opus-4-7"
+allow_fallback_reviewer = true
+
+[blast_radius]
+high_globs = [
+  "src/inkline/app/**",
+  "src/inkline/authoring/**",
+  "src/inkline/brand/**",
+  "src/inkline/execution/**",
+  "skills/**",
+  ".claude-plugin/**",
+  "pyproject.toml",
+  ".github/workflows/**",
+]
+medium_globs = [
+  "src/inkline/**",
+  "tests/**",
+  "commands/**",
+]
+
+[final_gate]
+structural_globs = [
+  "src/inkline/app/**",
+  "src/inkline/execution/**",
+  ".claude-plugin/**",
+  "pyproject.toml",
+  ".github/workflows/**",
+]
+
+# Amendment §14.9 — Codex CLI / tmux transport.
+[codex_cli]
+enabled            = true
+mode               = "tmux"
+session_prefix     = "inkline-codex"
+write_artifact     = true
+post_pr_comments   = false
+capture_transcript = false
+codex_argv         = ["codex"]
+codex_version_pin  = ""
+permission_mode    = "auto"
+artifact_poll_secs = 15
+artifact_timeout_secs = 1800
+session_idle_timeout_secs = 3600
