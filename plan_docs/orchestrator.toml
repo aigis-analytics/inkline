@@ -97,7 +97,7 @@ structural_globs = [
 # Amendment §14.9 — Codex CLI / tmux transport.
 [codex_cli]
 enabled            = true
-mode               = "tmux"
+mode               = "inline"
 session_prefix     = "inkline-codex"
 write_artifact     = true
 post_pr_comments   = false
