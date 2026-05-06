@@ -11,14 +11,19 @@ Usage
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 import webbrowser
 from pathlib import Path
 
+from inkline.app.llm_backends import available_backend_names, resolve_backend
 
-def _check_claude() -> None:
-    if not shutil.which("claude"):
+
+def _check_backend(backend_name: str) -> None:
+    backend = resolve_backend(backend_name)
+    if backend.available():
+        return
+    available = ", ".join(available_backend_names()) or "none"
+    if backend.name == "claude":
         print(
             "WARNING: 'claude' CLI not found on PATH.\n"
             "Install Claude Code and authenticate:\n"
@@ -26,11 +31,18 @@ def _check_claude() -> None:
             "  claude /login\n",
             file=sys.stderr,
         )
+        return
+    print(
+        f"WARNING: '{backend.executable}' CLI not found on PATH.\n"
+        "Install and authenticate the Gemini CLI, or choose a different backend.\n"
+        f"Available backends on this machine: {available}\n",
+        file=sys.stderr,
+    )
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
     """Start the bridge and open the WebUI in the default browser."""
-    _check_claude()
+    _check_backend(getattr(args, "backend", "auto"))
     print(f"Starting Inkline on http://localhost:{args.port}/")
     if not args.no_browser:
         # Delay browser open slightly so the server has time to bind
@@ -41,15 +53,15 @@ def cmd_serve(args: argparse.Namespace) -> None:
         threading.Thread(target=_open, daemon=True).start()
 
     from inkline.app.claude_bridge import main as bridge_main
-    bridge_main(port=args.port)
+    bridge_main(port=args.port, backend_name=getattr(args, "backend", "auto"))
 
 
 def cmd_bridge(args: argparse.Namespace) -> None:
     """Start the bridge server only (no browser)."""
-    _check_claude()
+    _check_backend(getattr(args, "backend", "auto"))
     print(f"Starting Inkline bridge on http://localhost:{args.port}/")
     from inkline.app.claude_bridge import main as bridge_main
-    bridge_main(port=args.port)
+    bridge_main(port=args.port, backend_name=getattr(args, "backend", "auto"))
 
 
 def cmd_mcp(_args: argparse.Namespace) -> None:
@@ -461,18 +473,25 @@ def cmd_critique(args: argparse.Namespace) -> None:
 
 
 def cmd_draft(args: argparse.Namespace) -> None:
-    """Start Draft Mode — the agentic /prompt path (requires claude CLI).
+    """Start Draft Mode — the agentic /prompt path.
 
     This is an explicit alias for 'inkline serve' that makes the opt-in
     agentic path discoverable. Opens the bridge WebUI with a note that
     Draft Mode is active.
     """
-    print("Starting Inkline in Draft Mode (agentic path — requires claude CLI)")
+    _check_backend(getattr(args, "backend", "auto"))
+    print(
+        "Starting Inkline in Draft Mode "
+        f"(agentic path — backend={getattr(args, 'backend', 'auto')})"
+    )
     print("Navigate to http://localhost:{}/  to use the conversational interface.".format(
         getattr(args, "port", 8082)
     ))
     from inkline.app.claude_bridge import main as bridge_main
-    bridge_main(port=getattr(args, "port", 8082))
+    bridge_main(
+        port=getattr(args, "port", 8082),
+        backend_name=getattr(args, "backend", "auto"),
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -489,6 +508,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     serve_p.add_argument("--port", type=int, default=8082, metavar="PORT",
                          help="Port to listen on (default: 8082)")
+    serve_p.add_argument("--backend", default="auto", choices=["auto", "claude", "gemini"],
+                         help="LLM backend for Draft Mode and critique routes (default: auto)")
     serve_p.add_argument("--no-browser", action="store_true",
                          help="Don't auto-open the browser")
     serve_p.set_defaults(func=cmd_serve)
@@ -500,6 +521,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     bridge_p.add_argument("--port", type=int, default=8082, metavar="PORT",
                           help="Port to listen on (default: 8082)")
+    bridge_p.add_argument("--backend", default="auto", choices=["auto", "claude", "gemini"],
+                          help="LLM backend for agentic routes (default: auto)")
     bridge_p.set_defaults(func=cmd_bridge)
 
     # inkline mcp
@@ -638,9 +661,10 @@ def main(argv: list[str] | None = None) -> None:
     # inkline draft
     draft_p = sub.add_parser(
         "draft",
-        help="Opt-in: start Draft Mode (agentic /prompt path, requires claude CLI)",
+        help="Opt-in: start Draft Mode (agentic /prompt path via Claude or Gemini)",
     )
     draft_p.add_argument("--port", type=int, default=8082, metavar="PORT")
+    draft_p.add_argument("--backend", default="auto", choices=["auto", "claude", "gemini"])
     draft_p.set_defaults(func=cmd_draft)
 
     args = parser.parse_args(argv)

@@ -43,6 +43,7 @@ let _autoRenderEnabled = true;
 const _autoRenderDebounce = 1500;
 let _lastPdfBasename = null;
 let _auditResults = [];
+let _editorOutputMode = 'pdf';
 
 // ── Settings persistence ───────────────────────────────────────────────────────
 
@@ -52,12 +53,16 @@ function _loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     _autoRenderEnabled = s.autoRender !== false;
+    _editorOutputMode = s.outputMode || 'pdf';
   } catch (_) {}
 }
 
 function _saveSettings() {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ autoRender: _autoRenderEnabled }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      autoRender: _autoRenderEnabled,
+      outputMode: _editorOutputMode,
+    }));
   } catch (_) {}
 }
 
@@ -126,6 +131,20 @@ function _showEditorPdf(basename) {
   _loadNotes(basename.replace(/\.pdf$/, ''));
 }
 
+function _setEditorDocxDownload(path) {
+  const link = document.getElementById('editor-docx-download');
+  if (!link) return;
+  if (!path) {
+    link.style.display = 'none';
+    link.removeAttribute('href');
+    return;
+  }
+  const basename = path.split('/').pop();
+  link.href = `/output/${basename}?t=${Date.now()}`;
+  link.download = basename;
+  link.style.display = 'inline-flex';
+}
+
 // ── Speaker notes ─────────────────────────────────────────────────────────────
 
 async function _loadNotes(stem) {
@@ -147,12 +166,13 @@ async function _loadNotes(stem) {
 
 async function _triggerRender(content, skipAudit = true) {
   _setStatus('rendering', 'Rendering…');
+  const outputs = _editorOutputMode === 'pdf+docx' ? ['pdf', 'docx'] : ['pdf'];
 
   try {
     const r = await fetch('/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ markdown: content, skip_audit: skipAudit }),
+      body: JSON.stringify({ markdown: content, outputs, skip_audit: skipAudit }),
     });
 
     if (!r.ok) {
@@ -163,17 +183,22 @@ async function _triggerRender(content, skipAudit = true) {
 
     const data = await r.json();
     const pdfPath = data.outputs && data.outputs.pdf;
+    const docxPath = data.outputs && data.outputs.docx;
+    _setEditorDocxDownload(docxPath);
     if (pdfPath) {
       const basename = pdfPath.split('/').pop();
       _showEditorPdf(basename);
       _auditResults = data.audit ? (data.audit.details || []) : [];
       _setAuditBadge(data.audit);
       const warnCount = data.warnings ? data.warnings.length : 0;
-      _setStatus('done', warnCount > 0 ? `Done — ${warnCount} warnings` : 'Done');
+      const docxNote = docxPath ? ' + DOCX' : '';
+      _setStatus('done', warnCount > 0 ? `Done${docxNote} — ${warnCount} warnings` : `Done${docxNote}`);
     } else if (data.error) {
+      _setEditorDocxDownload(null);
       _setStatus('error', `Error: ${data.error}`);
     }
   } catch (err) {
+    _setEditorDocxDownload(null);
     _setStatus('error', `Render failed: ${err.message}`);
   }
 }
@@ -363,6 +388,7 @@ function _initSettingsPopover() {
   const btn = document.getElementById('editor-settings-btn');
   const pop = document.getElementById('editor-settings-popover');
   const cb  = document.getElementById('editor-auto-render-cb');
+  const outputSelect = document.getElementById('editor-output-format');
   if (!btn || !pop) return;
 
   btn.addEventListener('click', (e) => {
@@ -378,6 +404,17 @@ function _initSettingsPopover() {
     cb.addEventListener('change', () => {
       _autoRenderEnabled = cb.checked;
       _saveSettings();
+    });
+  }
+
+  if (outputSelect) {
+    outputSelect.value = _editorOutputMode;
+    outputSelect.addEventListener('change', () => {
+      _editorOutputMode = outputSelect.value;
+      _saveSettings();
+      _setStatus('idle', _editorOutputMode === 'pdf+docx'
+        ? 'Ready — preview uses PDF and also exports DOCX'
+        : 'Ready — Cmd/Ctrl+S to render & audit');
     });
   }
 }

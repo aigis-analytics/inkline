@@ -1,8 +1,8 @@
-"""Inkline Claude Bridge — HTTP server that routes messages to the claude CLI.
+"""Inkline LLM bridge — HTTP server that routes messages to a supported CLI backend.
 
 Exposes:
-  POST /prompt       — send a message to Claude (agentic mode, full tool access)
-  POST /vision       — visual audit: base64 PNG + prompt → Claude reads image and responds
+  POST /prompt       — send a message to the configured backend (agentic mode, full tool access)
+  POST /vision       — visual audit: base64 PNG + prompt → backend reads image and responds
   POST /upload       — save an uploaded file, returns its absolute path
   GET  /output/{f}   — serve generated PDFs and charts
   GET  /status       — current pipeline run state (JSON)
@@ -10,7 +10,7 @@ Exposes:
   GET  /             — serve the Inkline WebUI (index.html)
   GET  /health       — liveness check
 
-Claude Code must be installed and authenticated (``claude /login``).
+Claude Code or Gemini CLI must be installed and authenticated.
 Start with: ``inkline serve`` or ``python -m inkline.app.claude_bridge``
 """
 
@@ -22,12 +22,13 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import time
 import uuid
 from pathlib import Path
+
+from inkline.app.llm_backends import available_backend_names, resolve_backend
 
 try:
     from aiohttp import web
@@ -37,6 +38,8 @@ except ImportError:
         "aiohttp is required for the Inkline bridge. "
         "Install it with: pip install \"inkline[app]\""
     )
+
+_LLM_BACKEND_KEY = web.AppKey("llm_backend", object)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -69,7 +72,7 @@ log = logging.getLogger("inkline.bridge")
 # or from the package's own CLAUDE.md equivalent
 # ---------------------------------------------------------------------------
 def _load_system_prompt() -> str:
-    """Load the Inkline system prompt for Claude."""
+    """Load the Inkline system prompt for the active LLM backend."""
     # Try installed package location first, then development path
     candidates = [
         Path(__file__).parent.parent.parent.parent / "CLAUDE.md",   # dev install: inkline/CLAUDE.md
@@ -84,8 +87,8 @@ def _load_system_prompt() -> str:
     return (
         "You are an expert at using the Inkline Python library to generate "
         "branded slide decks and documents. Use Bash to call Inkline's Python API. "
-        "Always write output PDFs to ~/.local/share/inkline/output/deck.pdf and "
-        "announce 'PDF ready: ~/.local/share/inkline/output/deck.pdf' after rendering."
+        "Always write output files to ~/.local/share/inkline/output/ and "
+        "announce '<FORMAT> ready: <path>' after rendering."
     )
 
 
@@ -121,7 +124,7 @@ _PHASE_END_RE    = re.compile(r"\[ARCHON\] (\S+) → (OK|FAILED) in ([\d.]+)s")
 _SLIDE_DESIGN_RE = re.compile(r"DesignAdvisor Phase 2: \[\s*(\d+)/(\d+)\]")
 # Bypass detection regexes
 _ARCHON_PHASE_SEEN_RE = re.compile(r"\[ARCHON\] Phase: \S+")
-_PDF_READY_RE         = re.compile(r"PDF[_ ]ready:", re.IGNORECASE)
+_OUTPUT_READY_RE      = re.compile(r"(PDF|DOCX|PPTX|HTML)[_ ]ready:", re.IGNORECASE)
 
 _run_state: dict = {
     "active": False, "phases": [], "slide_design_done": 0, "slide_design_total": 0,
@@ -253,29 +256,46 @@ def _mark_error(msg: str) -> None:
 
 
 def _check_archon_bypass(stdout_text: str, result_text: str) -> None:
-    """Detect and flag Archon bypass: 'PDF ready:' announced without Archon phase markers.
+    """Detect and flag Archon bypass when output is announced without phase markers.
 
     Archon emits ``[ARCHON] Phase: <name>`` to stdout (inside tool result blocks).
-    If a PDF is announced but no such markers appeared, Claude called the export
+    If an output is announced but no such markers appeared, the backend called the export
     function directly outside of any pipeline phase — a violation of the mandatory
     pipeline rule.
     """
     combined = stdout_text + "\n" + result_text
-    pdf_announced = bool(_PDF_READY_RE.search(combined))
+    output_announced = bool(_OUTPUT_READY_RE.search(combined))
     archon_seen   = bool(_ARCHON_PHASE_SEEN_RE.search(stdout_text))
-    if pdf_announced and not archon_seen:
+    if output_announced and not archon_seen:
         _run_state["archon_bypassed"] = True
+        _push_state()
         log.warning(
-            "ARCHON BYPASS DETECTED: 'PDF ready:' was announced but no [ARCHON] Phase: "
-            "markers were seen in the output stream. Claude called export_typst_slides() "
-            "or export_typst_document() directly, bypassing the Archon pipeline supervisor. "
+            "ARCHON BYPASS DETECTED: output was announced but no [ARCHON] Phase: "
+            "markers were seen in the output stream. The backend called an exporter "
+            "directly, bypassing the Archon pipeline supervisor. "
             "All output MUST go through the 4-phase Archon pipeline — see CLAUDE.md."
         )
 
 
 # ---------------------------------------------------------------------------
-# Claude CLI helpers
+# LLM backend helpers
 # ---------------------------------------------------------------------------
+def _get_llm_backend(request: web.Request):
+    return request.app[_LLM_BACKEND_KEY]
+
+
+def _backend_not_available_response(backend_name: str) -> web.Response:
+    if backend_name == "claude":
+        return web.json_response({
+            "error": "Claude CLI not installed. Run: npm install -g @anthropic-ai/claude-code && claude /login"
+        }, status=503)
+    if backend_name == "gemini":
+        return web.json_response({
+            "error": "Gemini CLI not installed or not authenticated. Install the Gemini CLI and sign in."
+        }, status=503)
+    return web.json_response({"error": f"Backend '{backend_name}' is unavailable"}, status=503)
+
+
 def _parse_stream_json(raw: str) -> dict:
     """Extract result text, tool calls, and metadata from stream-json output."""
     result_text = ""
@@ -501,6 +521,7 @@ async def handle_render(request: web.Request) -> web.Response:
       "markdown": "<full md text>",      # OR
       "path": "/uploads/foo.md",         # absolute path to already-uploaded file
       "deck_meta_overrides": {...},      # optional CLI-equivalent overrides
+      "outputs": ["pdf", "docx"],      # optional; defaults to ["pdf"]
       "skip_audit": false                # optional
     }
 
@@ -519,7 +540,19 @@ async def handle_render(request: web.Request) -> web.Response:
     markdown_text = data.get("markdown", "")
     md_path_str   = data.get("path", "")
     overrides     = data.get("deck_meta_overrides", {}) or {}
+    requested_outputs = data.get("outputs", ["pdf"]) or ["pdf"]
     skip_audit    = bool(data.get("skip_audit", False))
+
+    if isinstance(requested_outputs, str):
+        requested_outputs = [p.strip() for p in requested_outputs.split(",") if p.strip()]
+    requested_outputs = [fmt.lower() for fmt in requested_outputs]
+    valid_outputs = {"pdf", "docx"}
+    invalid_outputs = [fmt for fmt in requested_outputs if fmt not in valid_outputs]
+    if invalid_outputs:
+        return web.json_response(
+            {"error": f"Unsupported outputs: {', '.join(invalid_outputs)}"},
+            status=400,
+        )
 
     if not markdown_text and not md_path_str:
         return web.json_response({"error": "Provide 'markdown' or 'path'"}, status=400)
@@ -536,6 +569,7 @@ async def handle_render(request: web.Request) -> web.Response:
     try:
         from inkline.authoring.preprocessor import preprocess
         from inkline.intelligence import DesignAdvisor, audit_deck
+        from inkline.docx import export_docx
         from inkline.typst import export_typst_slides
         from inkline.authoring.notes_writer import write_notes
     except ImportError as exc:
@@ -571,17 +605,26 @@ async def handle_render(request: web.Request) -> web.Response:
         log.exception("DesignAdvisor error")
         return web.json_response({"error": f"DesignAdvisor failed: {exc}"}, status=500)
 
-    # Determine output file
+    # Determine output files
     stem = Path(source_path).stem if source_path else "render"
     pdf_path = OUTPUT_DIR / f"{stem}.pdf"
+    docx_path = OUTPUT_DIR / f"{stem}.docx"
 
     try:
-        export_typst_slides(
-            slides=slides,
-            output_path=str(pdf_path),
-            brand=brand,
-            template=template,
-        )
+        if "pdf" in requested_outputs:
+            export_typst_slides(
+                slides=slides,
+                output_path=str(pdf_path),
+                brand=brand,
+                template=template,
+            )
+        if "docx" in requested_outputs:
+            export_docx(
+                markdown_text,
+                output_path=str(docx_path),
+                brand=brand,
+                title=deck_meta.get("title", "Untitled"),
+            )
     except Exception as exc:
         log.exception("Export error")
         return web.json_response({"error": f"Export failed: {exc}"}, status=500)
@@ -589,7 +632,8 @@ async def handle_render(request: web.Request) -> web.Response:
     # Write notes file
     notes_path = None
     try:
-        notes_path = write_notes(pdf_path, slides, sections)
+        if "pdf" in requested_outputs:
+            notes_path = write_notes(pdf_path, slides, sections)
     except Exception as exc:
         log.warning("Notes writer failed: %s", exc)
 
@@ -610,7 +654,11 @@ async def handle_render(request: web.Request) -> web.Response:
         except Exception as exc:
             log.warning("Audit failed: %s", exc)
 
-    outputs: dict = {"pdf": str(pdf_path)}
+    outputs: dict = {}
+    if "pdf" in requested_outputs:
+        outputs["pdf"] = str(pdf_path)
+    if "docx" in requested_outputs:
+        outputs["docx"] = str(docx_path)
     if notes_path:
         outputs["notes"] = str(notes_path)
 
@@ -672,6 +720,7 @@ async def handle_watch(request: web.Request) -> web.WebSocketResponse:
         try:
             from inkline.authoring.preprocessor import preprocess
             from inkline.intelligence import DesignAdvisor, audit_deck
+            from inkline.docx import export_docx
             from inkline.typst import export_typst_slides
             from inkline.authoring.notes_writer import write_notes
 
@@ -692,18 +741,35 @@ async def handle_watch(request: web.Request) -> web.WebSocketResponse:
                 goal=deck_meta.get("goal", ""),
             )
 
+            requested_outputs = deck_meta.get("output", ["pdf"]) or ["pdf"]
+            if isinstance(requested_outputs, str):
+                requested_outputs = [p.strip() for p in requested_outputs.split(",") if p.strip()]
+            requested_outputs = [fmt.lower() for fmt in requested_outputs if fmt.lower() in {"pdf", "docx"}]
+            if not requested_outputs:
+                requested_outputs = ["pdf"]
+
             stem = md_path.stem
             pdf_path = OUTPUT_DIR / f"{stem}.pdf"
-            export_typst_slides(
-                slides=slides,
-                output_path=str(pdf_path),
-                brand=brand,
-                template=template,
-            )
+            docx_path = OUTPUT_DIR / f"{stem}.docx"
+            if "pdf" in requested_outputs:
+                export_typst_slides(
+                    slides=slides,
+                    output_path=str(pdf_path),
+                    brand=brand,
+                    template=template,
+                )
+            if "docx" in requested_outputs:
+                export_docx(
+                    md_text,
+                    output_path=str(docx_path),
+                    brand=brand,
+                    title=deck_meta.get("title", md_path.stem),
+                )
 
             notes_path = None
             try:
-                notes_path = write_notes(pdf_path, slides, sections)
+                if "pdf" in requested_outputs:
+                    notes_path = write_notes(pdf_path, slides, sections)
             except Exception:
                 pass
 
@@ -722,7 +788,11 @@ async def handle_watch(request: web.Request) -> web.WebSocketResponse:
                 except Exception:
                     pass
 
-            outputs: dict = {"pdf": str(pdf_path)}
+            outputs: dict = {}
+            if "pdf" in requested_outputs:
+                outputs["pdf"] = str(pdf_path)
+            if "docx" in requested_outputs:
+                outputs["docx"] = str(docx_path)
             if notes_path:
                 outputs["notes"] = str(notes_path)
 
@@ -847,7 +917,7 @@ async def handle_authoring_directives(request: web.Request) -> web.Response:
 
 
 async def handle_prompt(request: web.Request) -> web.Response:
-    """Accept a user message and route it through claude -p (agentic mode).
+    """Accept a user message and route it through the configured backend CLI.
 
     Uses an inactivity-based watchdog instead of a wall-clock timeout:
     the session runs as long as the claude process is producing output.
@@ -888,6 +958,11 @@ async def handle_prompt(request: web.Request) -> web.Response:
         await asyncio.sleep(wait)
     _last_request_time = time.time()
 
+    output_format = str(data.get("output_format", "pdf")).strip().lower() or "pdf"
+    if output_format not in ("pdf", "docx"):
+        log.warning("Unknown output_format '%s' requested — falling back to 'pdf'", output_format)
+        output_format = "pdf"
+
     # /prompt extensions (Phase 2) — brand, template, deck_meta overrides
     # These are injected into the system prompt so Claude picks them up automatically.
     brand_hint    = data.get("brand", "")
@@ -913,11 +988,13 @@ async def handle_prompt(request: web.Request) -> web.Response:
             "\n\n## ACTIVE MODE: document\n"
             "You MUST run the DOCUMENT pipeline with Archon wrapping.\n"
             "Required phases (in order): parse_input → build_doc_plan → render_document → audit_document.\n"
-            "Call export_typst_document() ONLY inside the render_document Archon phase.\n"
+            "For PDF output, call export_typst_document() ONLY inside the render_document Archon phase.\n"
+            "For DOCX output, call export_docx() ONLY inside the render_document Archon phase.\n"
             "After rendering, run per-page visual audit via POST http://localhost:8082/vision "
             "(one call per page, pymupdf renders each page to PNG) inside the audit_document phase.\n"
-            "NEVER call export_typst_document() directly without an Archon phase wrapper.\n"
-            "Announce output as: PDF ready: <path>"
+            "NEVER call document exporters directly without an Archon phase wrapper.\n"
+            f"Requested document output format: {output_format.upper()}.\n"
+            f"Announce output as: {output_format.upper()} ready: <path>"
         )
     else:
         system = system + (
@@ -928,27 +1005,22 @@ async def handle_prompt(request: web.Request) -> web.Response:
             "NEVER call export_typst_slides() directly without an Archon phase wrapper.\n"
             "Announce output as: PDF ready: <path>"
         )
-
-    cmd = [
-        "claude", "-p",
-        "--output-format", "stream-json",
-        "--verbose",
-        "--dangerously-skip-permissions",
-        "--max-turns", "40",
-        "--system-prompt", system,
-    ]
+    backend = _get_llm_backend(request)
+    if not backend.available():
+        log.error("%s CLI not found on PATH", backend.executable)
+        _mark_error(f"{backend.name} CLI not installed")
+        return _backend_not_available_response(backend.name)
+    invocation = backend.prompt_invocation(system=system, prompt=prompt, max_turns=40)
 
     log.info("Agentic request: %d chars prompt, %d chars system", len(prompt), len(system))
     _init_run_state(mode=mode)
 
     proc = None
     try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-        env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        env = backend.prepare_env(os.environ.copy())
 
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
+            *invocation.cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -956,8 +1028,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
         )
 
         # Write prompt to stdin then close it so the process can start
-        proc.stdin.write(prompt.encode("utf-8"))
-        await proc.stdin.drain()
+        if invocation.stdin_text:
+            proc.stdin.write(invocation.stdin_text.encode("utf-8"))
+            await proc.stdin.drain()
         proc.stdin.close()
 
         # Stream stdout with inactivity watchdog.
@@ -1020,7 +1093,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
             _mark_complete()
             return web.json_response({
                 "response": session["text"],
-                "source": "claude_max",
+                "source": invocation.source_label,
                 "archon_bypassed": _run_state.get("archon_bypassed", False),
                 "session": {
                     "tool_calls": session["tool_calls"],
@@ -1067,11 +1140,9 @@ async def handle_prompt(request: web.Request) -> web.Response:
             return web.json_response(resp_body, status=502)
 
     except FileNotFoundError:
-        log.error("claude CLI not found on PATH")
-        _mark_error("Claude CLI not installed")
-        return web.json_response({
-            "error": "Claude CLI not installed. Run: npm install -g @anthropic-ai/claude-code && claude /login"
-        }, status=503)
+        log.error("%s CLI not found on PATH", backend.executable)
+        _mark_error(f"{backend.name} CLI not installed")
+        return _backend_not_available_response(backend.name)
     except Exception as exc:
         if proc is not None:
             try:
@@ -1084,7 +1155,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
 
 
 async def handle_vision(request: web.Request) -> web.Response:
-    """Accept a base64 PNG slide image + audit prompt, route through Claude for visual review.
+    """Accept a base64 PNG slide image + audit prompt, route through the backend for visual review.
 
     Request JSON:
         image_base64    : base64-encoded PNG bytes
@@ -1093,11 +1164,10 @@ async def handle_vision(request: web.Request) -> web.Response:
         system          : optional system prompt override
 
     Response JSON:
-        {"response": "<Claude's audit text>"}
+        {"response": "<backend audit text>"}
 
-    Implementation: saves the image to a temp file, then calls ``claude -p``
-    with a prompt asking Claude to Read the file.  Claude Code's Read tool
-    supports images natively, so no API key is required — Claude Max covers it.
+    Implementation: saves the image to a temp file, then calls the configured
+    CLI with a prompt asking it to inspect the local file.
     """
     try:
         data = await request.json()
@@ -1130,42 +1200,30 @@ async def handle_vision(request: web.Request) -> web.Response:
         os.close(fd)
         Path(tmp_path).write_bytes(img_bytes)
 
-        # Build the full prompt: ask Claude to read the image file then audit it
-        full_prompt = (
-            f"Please use the Read tool to read this image file:\n{tmp_path}\n\n"
-            f"Then answer the following:\n{prompt}"
-        )
-
         system = SYSTEM_PROMPT
         if extra_system:
             system = extra_system  # vision calls use the caller's system prompt, not deck-building one
 
-        cmd = [
-            "claude", "-p",
-            "--output-format", "stream-json",
-            "--verbose",
-            "--dangerously-skip-permissions",
-            "--max-turns", "5",
-            "--system-prompt", system,
-        ]
+        backend = _get_llm_backend(request)
+        if not backend.available():
+            return _backend_not_available_response(backend.name)
+        invocation = backend.vision_invocation(system=system, prompt=prompt, image_path=tmp_path)
 
         timeout = 90  # vision calls are single-slide: 90s is ample
 
         log.info("Vision audit: %d bytes image, %d chars prompt", len(img_bytes), len(prompt))
 
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-        env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+        env = backend.prepare_env(os.environ.copy())
 
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
+            *invocation.cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=full_prompt.encode("utf-8")),
+            proc.communicate(input=invocation.stdin_text.encode("utf-8") if invocation.stdin_text else None),
             timeout=timeout,
         )
 
@@ -1235,7 +1293,12 @@ async def handle_output_file(request: web.Request) -> web.Response:
     if not filepath.exists():
         return web.Response(status=404)
 
-    content_type = "application/pdf" if filename.endswith(".pdf") else "image/png"
+    if filename.endswith(".pdf"):
+        content_type = "application/pdf"
+    elif filename.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        content_type = "image/png"
     return web.FileResponse(filepath, headers={"Content-Type": content_type})
 
 
@@ -1248,19 +1311,20 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    """Liveness check — also verifies claude CLI is accessible.
+    """Liveness check — also verifies the configured backend CLI is accessible.
 
     Returns a ``modes`` object reporting which engine paths are available:
     - ``execute``: always true — the deterministic render engine requires no CLI.
-    - ``draft``: true when the claude CLI is available (agentic /prompt path).
-    - ``critique``: true when the claude CLI is available (post-render vision audit).
+    - ``draft``: true when the configured backend CLI is available (agentic /prompt path).
+    - ``critique``: true when the configured backend CLI is available (post-render vision audit).
     """
+    backend = _get_llm_backend(request)
     try:
         proc = subprocess.run(
-            ["claude", "--version"], capture_output=True, text=True, timeout=5,
+            backend.version_cmd(), capture_output=True, text=True, timeout=5,
         )
         cli_ok = proc.returncode == 0
-        version = proc.stdout.strip() if cli_ok else "unavailable"
+        version = (proc.stdout or proc.stderr).strip() if cli_ok else "unavailable"
     except Exception:
         cli_ok = False
         version = "unavailable"
@@ -1269,9 +1333,11 @@ async def handle_health(request: web.Request) -> web.Response:
         "status": "ok" if cli_ok else "degraded",
         "modes": {
             "execute": True,          # always available — no CLI required
-            "draft": cli_ok,          # requires claude CLI (agentic /prompt path)
-            "critique": cli_ok,       # requires claude CLI (post-render vision audit)
+            "draft": cli_ok,          # requires backend CLI (agentic /prompt path)
+            "critique": cli_ok,       # requires backend CLI (post-render vision audit)
         },
+        "backend": backend.name,
+        "available_backends": available_backend_names(),
         "cli_available": cli_ok,
         "cli_version": version,
         "output_dir": str(OUTPUT_DIR),
@@ -1383,8 +1449,9 @@ async def handle_critique(request: web.Request) -> web.Response:
 # ---------------------------------------------------------------------------
 # App factory + main
 # ---------------------------------------------------------------------------
-def create_app() -> web.Application:
+def create_app(backend_name: str = "auto") -> web.Application:
     app = web.Application(client_max_size=50 * 1024 * 1024)  # 50 MB upload limit
+    app[_LLM_BACKEND_KEY] = resolve_backend(backend_name)
     app.router.add_post("/prompt", handle_prompt)
     app.router.add_post("/vision", handle_vision)
     app.router.add_post("/upload", handle_upload)
@@ -1438,17 +1505,25 @@ def _cleanup_old_failure_dumps(max_age_days: int = 7) -> None:
         log.warning("Failure dump cleanup error: %s", e)
 
 
-def main(port: int = 8082) -> None:
-    if not shutil.which("claude"):
-        log.warning(
-            "WARNING: 'claude' CLI not found on PATH. "
-            "Install Claude Code: npm install -g @anthropic-ai/claude-code && claude /login"
-        )
+def main(port: int = 8082, backend_name: str = "auto") -> None:
+    backend = resolve_backend(backend_name)
+    if not backend.available():
+        if backend.name == "claude":
+            log.warning(
+                "WARNING: 'claude' CLI not found on PATH. "
+                "Install Claude Code: npm install -g @anthropic-ai/claude-code && claude /login"
+            )
+        elif backend.name == "gemini":
+            log.warning(
+                "WARNING: 'gemini' CLI not found on PATH. "
+                "Install and authenticate the Gemini CLI."
+            )
     _cleanup_old_failure_dumps()
     log.info("Inkline Bridge starting on http://localhost:%d", port)
+    log.info("Configured LLM backend: %s", backend.name)
     log.info("Output directory: %s", OUTPUT_DIR)
     log.info("WebUI: http://localhost:%d/", port)
-    web.run_app(create_app(), host="0.0.0.0", port=port, print=lambda s: None)
+    web.run_app(create_app(backend_name=backend_name), host="0.0.0.0", port=port, print=lambda s: None)
 
 
 if __name__ == "__main__":

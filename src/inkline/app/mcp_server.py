@@ -25,6 +25,7 @@ Tools exposed
 -------------
 - inkline_generate_deck    — content text + intent → PDF
 - inkline_render_slides    — JSON slide specs → PDF
+- inkline_render_document  — markdown/report text → PDF and/or DOCX
 - inkline_list_templates   — list available templates
 - inkline_list_themes      — list themes, optionally filtered by category
 """
@@ -53,7 +54,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 mcp = FastMCP(
     "Inkline",
     instructions=(
-        "Inkline generates branded, publication-quality PDF slide decks and documents. "
+        "Inkline generates branded, publication-quality slide decks and documents. "
         "PRIMARY PATH (execute mode): use inkline_render_spec to render a markdown spec "
         "deterministically — no LLM needed. Read design knowledge via MCP resources "
         "(inkline://layouts, inkline://playbooks/*, inkline://anti-patterns) before "
@@ -85,7 +86,7 @@ def inkline_render_spec(
 
     Args:
         spec_path: Absolute path to the .md spec file.
-        outputs: List of output formats: ["pdf"], ["pptx"], or ["pdf", "pptx"].
+        outputs: List of output formats: ["pdf"], ["pptx"], ["docx"], or combinations.
         brand: Brand name. Default "minimal".
         template: Template name. Default "consulting".
         output_filename: Base filename for output (without extension).
@@ -97,6 +98,7 @@ def inkline_render_spec(
         from pathlib import Path as _Path
         from inkline.authoring.preprocessor import preprocess
         from inkline.intelligence import DesignAdvisor
+        from inkline.docx import export_docx
         from inkline.typst import export_typst_slides
 
         md_path = _Path(spec_path)
@@ -127,6 +129,16 @@ def inkline_render_spec(
                 title=deck_meta.get("title", ""),
             )
             results["pdf_path"] = str(pdf_path)
+
+        if "docx" in outputs:
+            docx_path = OUTPUT_DIR / f"{output_filename}.docx"
+            export_docx(
+                md_text,
+                output_path=str(docx_path),
+                brand=brand_eff,
+                title=deck_meta.get("title", md_path.stem),
+            )
+            results["docx_path"] = str(docx_path)
 
         if "pptx" in outputs:
             from inkline.pptx import export_pptx_slides
@@ -319,6 +331,59 @@ def inkline_generate_deck(
 
     except Exception as exc:
         log.exception("inkline_generate_deck failed")
+        return {"success": False, "error": str(exc)}
+
+
+@mcp.tool()
+def inkline_render_document(
+    content: str,
+    brand: str = "minimal",
+    title: str = "",
+    output_filename: str = "document",
+    outputs: list[str] | None = None,
+) -> dict[str, Any]:
+    """Render report-style content directly to PDF and/or DOCX.
+
+    Args:
+        content: Markdown or plain report text.
+        brand: Brand name. Default "minimal".
+        title: Document title. Extracted from content if blank.
+        output_filename: Output stem within the output directory.
+        outputs: Requested outputs. Defaults to ["pdf", "docx"].
+    """
+    if outputs is None:
+        outputs = ["pdf", "docx"]
+
+    try:
+        from inkline.docx import export_docx
+        from inkline.pdf import export_pdf
+
+        resolved_title = title or _extract_title(content)
+        result: dict[str, Any] = {"success": True, "outputs": outputs}
+
+        if "pdf" in outputs:
+            pdf_path = OUTPUT_DIR / f"{output_filename}.pdf"
+            export_pdf(
+                markdown=content,
+                output_path=str(pdf_path),
+                brand=brand,
+                title=resolved_title,
+            )
+            result["pdf_path"] = str(pdf_path)
+
+        if "docx" in outputs:
+            docx_path = OUTPUT_DIR / f"{output_filename}.docx"
+            export_docx(
+                markdown=content,
+                output_path=str(docx_path),
+                brand=brand,
+                title=resolved_title,
+            )
+            result["docx_path"] = str(docx_path)
+
+        return result
+    except Exception as exc:
+        log.exception("inkline_render_document failed")
         return {"success": False, "error": str(exc)}
 
 

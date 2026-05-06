@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 
 # Skip entire module if aiohttp not available
 pytest.importorskip("aiohttp")
+pytest.importorskip("pytest_aiohttp")
 
 import pytest_asyncio
 from aiohttp.test_utils import TestClient
@@ -133,3 +134,38 @@ async def test_render_multi_output_shape(client):
     assert isinstance(data["audit"], dict)
     assert "pass" in data["audit"]
     assert "fail" in data["audit"]
+
+
+@pytest.mark.asyncio
+async def test_render_docx_output(client):
+    """POST /render can emit DOCX alongside PDF."""
+    with patch("inkline.authoring.preprocessor.preprocess") as mock_preprocess, \
+         patch("inkline.intelligence.DesignAdvisor") as mock_advisor_cls, \
+         patch("inkline.typst.export_typst_slides") as mock_pdf_export, \
+         patch("inkline.docx.export_docx") as mock_docx_export, \
+         patch("inkline.authoring.notes_writer.write_notes") as mock_notes, \
+         patch("inkline.intelligence.audit_deck") as mock_audit:
+
+        mock_preprocess.return_value = (
+            {"brand": "minimal", "template": "consulting", "title": "Test", "mode": "rules",
+             "audit": "off", "audience": "", "goal": "", "subtitle": "", "date": ""},
+            [],
+        )
+        mock_advisor = MagicMock()
+        mock_advisor.design_deck.return_value = []
+        mock_advisor_cls.return_value = mock_advisor
+        mock_pdf_export.return_value = None
+        mock_docx_export.return_value = None
+        mock_notes.return_value = None
+        mock_audit.return_value = []
+
+        resp = await client.post("/render", json={
+            "markdown": "# Report\n\nBody.",
+            "outputs": ["pdf", "docx"],
+            "skip_audit": True,
+        })
+
+    assert resp.status == 200
+    data = await resp.json()
+    assert "pdf" in data["outputs"]
+    assert "docx" in data["outputs"]

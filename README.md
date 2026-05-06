@@ -1,10 +1,10 @@
 # Inkline
 
-**Branded document & presentation toolkit — Typst, HTML, PDF, PPTX, Google Slides.**
+**Branded document & presentation toolkit — Typst, HTML, PDF, DOCX, PPTX, Google Slides.**
 
 Inkline is two products sharing a codebase:
 
-1. **Execution Engine.** A deterministic, fast, no-LLM renderer. Given a structured markdown spec (typed layouts + `freeform` primitives + `_image:` directives), it produces PDF, PPTX, or HTML. Brand, theme, and font systems are pure-Python. No Claude required at render time.
+1. **Execution Engine.** A deterministic, fast, no-LLM renderer. Given a structured markdown spec (typed layouts + `freeform` primitives + `_image:` directives), it produces PDF, PPTX, or HTML for decks/specs, plus PDF/DOCX/HTML for report-style documents. Brand, theme, and font systems are pure-Python. No Claude required at render time.
 
 2. **Design Knowledge Base.** Accumulated playbooks, slide-type catalogue, anti-pattern library, and archetypes — exposed as 17 MCP resources (`inkline://...`) that Claude Code pulls into context when writing a spec.
 
@@ -99,6 +99,12 @@ audit: post-render
 ```
 
 No Python, no API key, no LLM call. The renderer executes the spec and produces a branded PDF and PPTX. See [`examples/typed_layout_deck/`](examples/typed_layout_deck/) for a complete 8-slide investor pitch.
+
+For Word output on report-style markdown:
+
+```bash
+inkline-docx report.md --brand minimal --title "My Report"
+```
 
 ---
 
@@ -234,7 +240,7 @@ pip install "inkline[all]"
 inkline serve                      # opens http://localhost:8082
 ```
 
-Upload any file (`.md`, `.docx`, `.pdf`, `.pptx`), type what you want — *"turn this into a 10-slide investor pitch"* — and a branded PDF appears in the browser. Claude Code handles the entire pipeline: file parsing, content structuring, layout selection, rendering, and iterative amendments.
+Upload any file (`.md`, `.docx`, `.pdf`, `.pptx`), type what you want — *"turn this into a 10-slide investor pitch"* — and a branded PDF appears in the browser. `.docx` is supported both as an input format for Draft Mode and as a native document export format via `inkline-docx`.
 
 ```bash
 inkline serve --port 9000          # custom port
@@ -626,6 +632,7 @@ inkline knowledge search "waterfall"
 # Document generation
 inkline-html report.md --brand minimal --title "My Report"
 inkline-pdf  report.md --brand mycorp  --title "Quarterly Review"
+inkline-docx report.md --brand minimal --title "Editable Word Version"
 
 # Draft Mode (requires Claude Code)
 inkline serve                      # WebUI at http://localhost:8082

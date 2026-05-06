@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "inkline"
 version = "0.2.0"
-description = "Branded document generation toolkit — Typst, HTML, PDF, PPTX, and Google Slides"
+description = "Branded document generation toolkit — Typst, HTML, PDF, DOCX, PPTX, and Google Slides"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -17,6 +17,7 @@ dependencies = [
     "markdown>=3.5",
     "markdown-it-py>=2.0.0",
     "mdit-py-plugins>=0.4.0",
+    "python-docx>=1.1.2",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,7 @@ all = ["inkline[pdf,slides,typst,charts,interactive-charts,intelligence,app]"]
 [project.scripts]
 inkline-html = "inkline.html:_cli"
 inkline-pdf = "inkline.pdf:_cli"
+inkline-docx = "inkline.docx:_cli"
 inkline = "inkline.app.cli:main"
 
 [tool.hatch.build.targets.wheel]

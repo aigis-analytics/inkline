@@ -52,6 +52,42 @@
   #file-badge button:hover { color: var(--error); }
 
   #input-row { padding: 12px 16px 16px; display: flex; gap: 8px; border-top: 1px solid var(--border); }
+  #composer-controls {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px 0;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .control-group label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .control-group select {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+  }
+  #composer-hint {
+    padding: 6px 16px 0;
+    color: var(--muted);
+    font-size: 11px;
+    min-height: 20px;
+  }
   #prompt { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 9px 12px; font-size: 13px; resize: none; height: 72px; font-family: inherit; outline: none; transition: border-color 0.15s; }
   #prompt:focus { border-color: var(--accent); }
   #prompt::placeholder { color: var(--muted); }
@@ -230,16 +266,41 @@
   #prog-idle svg { opacity: 0.25; }
   #prog-idle p { font-size: 11px; line-height: 1.6; }
 
-  /* ── Right panel — PDF preview ── */
+  /* ── Right panel — output preview ── */
   #right { display: flex; flex-direction: column; background: var(--bg); }
 
   #preview-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
   #preview-header span { font-weight: 600; font-size: 14px; }
   #preview-status { color: var(--muted); font-size: 12px; }
+  #preview-kind {
+    font-size: 10px;
+    color: var(--accent);
+    border: 1px solid rgba(108,99,255,0.35);
+    border-radius: 999px;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: none;
+  }
   #download-btn { margin-left: auto; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: var(--radius); font-size: 12px; cursor: pointer; text-decoration: none; display: none; transition: border-color 0.15s; }
   #download-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   #pdf-frame { flex: 1; border: none; background: #525659; }
+  #docx-state {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 24px;
+  }
+  #docx-state strong {
+    color: var(--text);
+    font-size: 14px;
+  }
 
   #empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
   #empty-state svg { opacity: 0.3; }
@@ -271,7 +332,7 @@
   <div id="left">
     <div id="header">
       <h1>Inkline</h1>
-      <p>Branded slides &amp; documents — powered by Claude</p>
+      <p>Branded slides &amp; documents — backend-aware Draft Mode</p>
     </div>
 
     <div id="messages">
@@ -287,6 +348,24 @@
       <span id="file-name"></span>
       <button id="clear-file" title="Remove file">×</button>
     </div>
+
+    <div id="composer-controls">
+      <div class="control-group">
+        <label for="mode-select">Mode</label>
+        <select id="mode-select">
+          <option value="slides">Slides</option>
+          <option value="document">Document</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="output-format-select">Output</label>
+        <select id="output-format-select">
+          <option value="pdf">PDF</option>
+          <option value="docx">DOCX</option>
+        </select>
+      </div>
+    </div>
+    <div id="composer-hint">Slides always render to PDF. Switch to Document mode to request DOCX.</div>
 
     <div id="input-row">
       <textarea id="prompt" placeholder="What would you like to create? e.g. 'Turn this into a 10-slide investor pitch'" rows="3"></textarea>
@@ -318,6 +397,7 @@
   <div id="right">
     <div id="preview-header">
       <span>Preview</span>
+      <span id="preview-kind"></span>
       <span id="preview-status">No deck yet</span>
       <a id="download-btn" href="#" download="deck.pdf">Download PDF</a>
     </div>
@@ -327,6 +407,10 @@
         <line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
       </svg>
       <p>Your generated deck will appear here.</p>
+    </div>
+    <div id="docx-state">
+      <strong>DOCX ready</strong>
+      <p>Word output can be downloaded directly. Inline browser preview is not available here.</p>
     </div>
     <iframe id="pdf-frame" style="display:none"></iframe>
   </div>
@@ -347,6 +431,10 @@
 
     <!-- Right: PDF iframe + notes pane -->
     <div id="editor-right" style="display:flex;flex-direction:column;overflow:hidden;">
+      <div id="editor-preview-header">
+        <span>Preview</span>
+        <a id="editor-docx-download" href="#" download style="display:none;">Download DOCX</a>
+      </div>
       <iframe id="editor-pdf-frame" style="flex:1;border:none;background:#525659;min-height:0;"></iframe>
 
       <!-- Speaker notes pane -->
@@ -364,6 +452,13 @@
     <span id="editor-status-text">Ready — Cmd/Ctrl+S to render &amp; audit</span>
     <span id="editor-audit-badge"></span>
     <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+      <div class="control-group">
+        <label for="editor-output-format">Export</label>
+        <select id="editor-output-format">
+          <option value="pdf">PDF only</option>
+          <option value="pdf+docx">PDF + DOCX</option>
+        </select>
+      </div>
       <button id="editor-settings-btn" title="Editor settings">Settings</button>
     </div>
 
@@ -389,12 +484,16 @@ const BRIDGE = '';
 const LS = {
   MSGS:    'inkline_messages',
   PDF:     'inkline_last_pdf',
+  OUTPUT_KIND: 'inkline_last_output_kind',
   FILE_PATH: 'inkline_file_path',
   FILE_NAME: 'inkline_file_name',
+  MODE: 'inkline_mode',
+  OUTPUT_FORMAT: 'inkline_output_format',
 };
 
 let pendingFilePath = null;
 let lastPdfFilename = null;
+let lastOutputKind = null;
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 function saveMsgs() {
@@ -431,8 +530,15 @@ function restoreSession() {
   }
 
   // 3. Restore PDF preview
+  const mode = localStorage.getItem(LS.MODE) || 'slides';
+  const outputFormat = localStorage.getItem(LS.OUTPUT_FORMAT) || 'pdf';
+  document.getElementById('mode-select').value = mode;
+  document.getElementById('output-format-select').value = outputFormat;
+  syncComposerControls();
+
   const lastPdf = localStorage.getItem(LS.PDF);
-  if (lastPdf) showPdf(lastPdf, /* skipSave */ true);
+  const savedKind = localStorage.getItem(LS.OUTPUT_KIND) || 'pdf';
+  if (lastPdf) showOutput(lastPdf, savedKind, /* skipSave */ true);
 
   // 4. Reconnect progress if a run is still active; auto-show PDF if complete
   fetch('/status')
@@ -445,11 +551,36 @@ function restoreSession() {
         updateProgress(state);
         if (state.active) startProgressTracking();
         // If run already finished and no PDF showing yet, load deck.pdf
-        if (state.complete && !lastPdf) showPdf('deck.pdf');
+        if (state.complete && !lastPdf) showOutput('deck.pdf', 'pdf');
       }
     })
     .catch(() => {});
 }
+
+const modeSelect = document.getElementById('mode-select');
+const outputFormatSelect = document.getElementById('output-format-select');
+const composerHint = document.getElementById('composer-hint');
+
+function syncComposerControls() {
+  const mode = modeSelect.value;
+  if (mode === 'slides') {
+    outputFormatSelect.value = 'pdf';
+    outputFormatSelect.disabled = true;
+    composerHint.textContent = 'Slides always render to PDF.';
+  } else {
+    outputFormatSelect.disabled = false;
+    composerHint.textContent = outputFormatSelect.value === 'docx'
+      ? 'Document mode will request DOCX output. Download is available after generation.'
+      : 'Document mode will request PDF output with inline preview.';
+  }
+  try {
+    localStorage.setItem(LS.MODE, mode);
+    localStorage.setItem(LS.OUTPUT_FORMAT, outputFormatSelect.value);
+  } catch(_) {}
+}
+
+modeSelect.addEventListener('change', syncComposerControls);
+outputFormatSelect.addEventListener('change', syncComposerControls);
 
 // ── File upload ───────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
@@ -527,6 +658,8 @@ sendBtn.addEventListener('click', sendMessage);
 async function sendMessage() {
   const text = promptEl.value.trim();
   if (!text) return;
+  const mode = modeSelect.value;
+  const outputFormat = mode === 'slides' ? 'pdf' : outputFormatSelect.value;
 
   let prompt = text;
   if (pendingFilePath) {
@@ -551,14 +684,14 @@ async function sendMessage() {
     const r = await fetch('/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, agentic: true }),
+      body: JSON.stringify({ prompt, agentic: true, mode, output_format: outputFormat }),
     });
     const d = await r.json();
     thinking.remove();
 
     if (d.response) {
       addMessage('assistant', d.response);
-      checkForPdf(d.response);
+      checkForOutput(d.response);
     } else if (d.error) {
       addMessage('assistant', `Error: ${d.error}`);
     }
@@ -573,31 +706,47 @@ async function sendMessage() {
 
 // ── PDF detection & preview ───────────────────────────────────────────────────
 const previewStatus = document.getElementById('preview-status');
+const previewKind   = document.getElementById('preview-kind');
 const downloadBtn   = document.getElementById('download-btn');
 const pdfFrame      = document.getElementById('pdf-frame');
 const emptyState    = document.getElementById('empty-state');
+const docxState     = document.getElementById('docx-state');
 
-function checkForPdf(responseText) {
-  const match = responseText.match(/PDF ready:\s*([^\s\n]+\.pdf)/i);
+function checkForOutput(responseText) {
+  const match = responseText.match(/(PDF|DOCX|PPTX|HTML)\s+ready:\s*([^\s\n]+)/i);
   if (match) {
-    const absPath = match[1];
+    const kind = match[1].toLowerCase();
+    const absPath = match[2];
     const parts = absPath.replace(/\\/g, '/').split('/');
-    showPdf(parts[parts.length - 1]);
+    showOutput(parts[parts.length - 1], kind);
   }
 }
 
-function showPdf(filename, skipSave) {
+function showOutput(filename, kind = 'pdf', skipSave) {
   const url = `/output/${filename}?t=${Date.now()}`;
   lastPdfFilename = filename;
-  pdfFrame.src = url;
-  pdfFrame.style.display = 'block';
+  lastOutputKind = kind;
+  const isPdf = kind === 'pdf';
+  pdfFrame.style.display = isPdf ? 'block' : 'none';
+  docxState.style.display = kind === 'docx' ? 'flex' : 'none';
   emptyState.style.display = 'none';
+  previewKind.textContent = kind.toUpperCase();
+  previewKind.style.display = 'inline-block';
   previewStatus.textContent = filename;
   downloadBtn.href = url;
   downloadBtn.download = filename;
+  downloadBtn.textContent = `Download ${kind.toUpperCase()}`;
   downloadBtn.style.display = 'inline-block';
+  if (isPdf) {
+    pdfFrame.src = url;
+  } else {
+    pdfFrame.removeAttribute('src');
+  }
   if (!skipSave) {
-    try { localStorage.setItem(LS.PDF, filename); } catch(_) {}
+    try {
+      localStorage.setItem(LS.PDF, filename);
+      localStorage.setItem(LS.OUTPUT_KIND, kind);
+    } catch(_) {}
   }
 }
 
@@ -721,7 +870,7 @@ function updateProgress(state) {
     stopProgressTracking();
     // Auto-show PDF when run completes and none is currently displayed
     if (state.complete && (!pdfFrame.src || pdfFrame.style.display === 'none')) {
-      showPdf('deck.pdf');
+      showOutput('deck.pdf', 'pdf');
     }
   }
 }

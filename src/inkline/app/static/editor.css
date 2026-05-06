@@ -86,6 +86,32 @@
   min-height: 0;
 }
 
+#editor-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+#editor-docx-download {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 11px;
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+#editor-docx-download:hover {
+  border-color: var(--accent);
+}
+
 #editor-pdf-frame {
   flex: 1;
   border: none;

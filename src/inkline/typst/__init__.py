@@ -1041,7 +1041,7 @@ def get_capabilities() -> dict:
     from inkline.brands import list_brands
     return {
         "version": "0.2.0",
-        "output_formats": ["typst_slides", "typst_document", "html", "pdf", "pptx", "google_slides"],
+        "output_formats": ["typst_slides", "typst_document", "html", "pdf", "docx", "pptx", "google_slides"],
         "default_format": "typst_document",
         "brands": list_brands(),
         "slide_templates": list_templates(),
