@@ -1,0 +1,20 @@
+# Inkline Codex Guide
+
+## Scope
+
+Use this repo for Inkline development: Typst rendering, slides, charts, brand
+system, and document-generation tooling.
+
+## Repo Locations
+
+- K1Mini clone: `/home/k1mini/inkline`
+- Main PC clone: `/mnt/nullhypothesis/D/inkline`
+- Private brands: `~/.config/inkline/`
+
+## Operating Rules
+
+- This is a public repo. Do not commit proprietary brand data, private assets,
+  secrets, or internal-only references.
+- Private brands load from `~/.config/inkline/`; sync that repo separately when
+  brand changes are made.
+- Typst is the default backend.

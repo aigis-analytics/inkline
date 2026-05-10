@@ -43,4 +43,11 @@ plan_docs/design-sources-and-philosophy.md
 
 # Generated / exploratory docs (may contain proprietary client references)
 docs/
+!docs/architecture/
+!docs/architecture/graphify-integration.md
 -header
+
+# Graphify local metadata
+graphify-out/manifest.json
+graphify-out/.graphify_labels.json
+graphify-out/.graphify_root

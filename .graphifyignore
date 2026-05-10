@@ -1,0 +1,24 @@
+# VCS and environment
+.git/
+.venv/
+.claude/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Generated and local output
+output/
+_audit_*/
+graphify-out/
+
+# Heavy or non-core assets
+brand/backgrounds/
+brand/logo/
+docs/charts/
+docs/charts_orbital/
+docs/
+examples/
+skills/
+
+# Keep the graph centered on the library and tests
+plan_docs/*.png
