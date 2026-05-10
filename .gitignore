@@ -51,3 +51,4 @@ docs/
 graphify-out/manifest.json
 graphify-out/.graphify_labels.json
 graphify-out/.graphify_root
+graphify-out/cache/
