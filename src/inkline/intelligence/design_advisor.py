@@ -633,7 +633,8 @@ class DesignAdvisor:
         except ImportError as exc:
             raise RuntimeError(
                 "Inkline intelligence requires the 'anthropic' package. "
-                "Install it with: pip install inkline[intelligence]"
+                "Install this project from the Aigis/GitHub repo with intelligence extras: "
+                "pip install \"inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git\""
             ) from exc
 
         if not self.api_key:

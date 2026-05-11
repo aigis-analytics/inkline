@@ -23,12 +23,14 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 import time
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 from inkline.app.llm_backends import available_backend_names, resolve_backend
+from inkline.app.safe_path import SafePathError, validate_image_path
+from inkline.app.stream_events import normalize_stream_line
 
 try:
     from aiohttp import web
@@ -36,7 +38,8 @@ try:
 except ImportError:
     raise ImportError(
         "aiohttp is required for the Inkline bridge. "
-        "Install it with: pip install \"inkline[app]\""
+        "Install this project from the Aigis/GitHub repo with the app extra: "
+        "pip install \"inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git\""
     )
 
 _LLM_BACKEND_KEY = web.AppKey("llm_backend", object)
@@ -45,7 +48,7 @@ _LLM_BACKEND_KEY = web.AppKey("llm_backend", object)
 # Paths
 # ---------------------------------------------------------------------------
 _BASE = Path("~/.local/share/inkline").expanduser()
-OUTPUT_DIR = _BASE / "output"
+OUTPUT_DIR = Path(os.environ.get("INKLINE_OUTPUT_DIR", str(_BASE / "output"))).expanduser()
 CHARTS_DIR = OUTPUT_DIR / "charts"
 UPLOAD_DIR = _BASE / "uploads"
 LOG_DIR = _BASE / "logs"
@@ -218,31 +221,9 @@ def _scan_output_text(text: str) -> None:
 
 def _process_stream_line(line: str) -> None:
     """Extract progress signals from a single stream-json event line."""
-    try:
-        event = json.loads(line.strip())
-    except json.JSONDecodeError:
-        return
-    etype = event.get("type", "")
-    texts: list[str] = []
-    # Tool result directly
-    if etype == "tool_result":
-        c = event.get("content", "")
-        if isinstance(c, str):
-            texts.append(c)
-        elif isinstance(c, list):
-            texts.extend(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
-    # Tool result inside user message (newer stream-json format)
-    elif etype == "user":
-        for item in event.get("message", {}).get("content", []):
-            if isinstance(item, dict) and item.get("type") == "tool_result":
-                inner = item.get("content", "")
-                if isinstance(inner, str):
-                    texts.append(inner)
-                elif isinstance(inner, list):
-                    texts.extend(b.get("text", "") for b in inner if isinstance(b, dict) and b.get("type") == "text")
-    for t in texts:
-        if t:
-            _scan_output_text(t)
+    for event in normalize_stream_line("bridge", line):
+        if event.kind in {"text", "tool_result", "result"} and event.text:
+            _scan_output_text(event.text)
 
 
 def _mark_complete() -> None:
@@ -284,6 +265,35 @@ def _get_llm_backend(request: web.Request):
     return request.app[_LLM_BACKEND_KEY]
 
 
+def _with_managed_knowledge_context(system: str, backend) -> str:
+    """Attach the hashed allowlisted knowledge bundle for long-context backends."""
+    if getattr(backend, "name", "") != "gemini":
+        return system
+    try:
+        from inkline.app.knowledge_bundle import build_or_load_bundle
+        bundle = build_or_load_bundle(
+            context_window=backend.capabilities().context_window,
+        )
+        bundle_text = Path(bundle.bundle_path).read_text(encoding="utf-8")
+        manifest = {
+            "bundle_hash": bundle.bundle_hash,
+            "token_count": bundle.token_count,
+            "trust_level": bundle.trust_level,
+            "last_rebuilt_at": bundle.last_rebuilt_at,
+        }
+        return (
+            f"{system}\n\n"
+            "## MANAGED INKLINE KNOWLEDGE BUNDLE\n"
+            "Use this allowlisted context as the authoritative design knowledge "
+            "for this request. Do not fetch external design references.\n\n"
+            f"Manifest: {json.dumps(manifest, sort_keys=True)}\n\n"
+            f"{bundle_text}"
+        )
+    except Exception as exc:
+        log.warning("Managed knowledge bundle unavailable: %s", exc)
+        return system
+
+
 def _backend_not_available_response(backend_name: str) -> web.Response:
     if backend_name == "claude":
         return web.json_response({
@@ -321,15 +331,12 @@ def _parse_stream_json(raw: str) -> dict:
             duration_ms = event.get("duration_ms", 0)
             cost_usd = event.get("cost_usd", 0.0)
             session_id = event.get("session_id", "")
-        elif etype == "assistant":
-            for block in event.get("message", {}).get("content", []):
-                if block.get("type") == "tool_use":
-                    inp = block.get("input", {})
-                    tool_calls.append({
-                        "tool": block.get("name", "unknown"),
-                        "input": {k: (str(v)[:500] + "..." if len(str(v)) > 500 else str(v))
-                                  for k, v in inp.items()},
-                    })
+        for normalized in normalize_stream_line("bridge", line):
+            if normalized.kind == "tool_call":
+                tool_calls.append({
+                    "tool": normalized.tool_name,
+                    "input": normalized.tool_input,
+                })
 
     return {
         "text": result_text,
@@ -1006,6 +1013,7 @@ async def handle_prompt(request: web.Request) -> web.Response:
             "Announce output as: PDF ready: <path>"
         )
     backend = _get_llm_backend(request)
+    system = _with_managed_knowledge_context(system, backend)
     if not backend.available():
         log.error("%s CLI not found on PATH", backend.executable)
         _mark_error(f"{backend.name} CLI not installed")
@@ -1181,7 +1189,7 @@ async def handle_vision(request: web.Request) -> web.Response:
     if not img_b64 or not prompt:
         return web.json_response({"error": "image_base64 and prompt are required"}, status=400)
 
-    # Decode image and write to a temp file that claude can Read
+    # Decode image and write to an Inkline-owned file that passes SafePath validation.
     try:
         img_bytes = base64.b64decode(img_b64)
     except Exception as exc:
@@ -1194,11 +1202,14 @@ async def handle_vision(request: web.Request) -> web.Response:
     except Exception:
         pass
 
-    tmp_path = None
+    image_path = None
+    proc = None
     try:
-        fd, tmp_path = tempfile.mkstemp(suffix=".png", prefix="inkline_vision_")
-        os.close(fd)
-        Path(tmp_path).write_bytes(img_bytes)
+        vision_dir = OUTPUT_DIR / "vision_uploads"
+        vision_dir.mkdir(parents=True, exist_ok=True)
+        image_path = vision_dir / f"inkline_vision_{uuid.uuid4().hex}.png"
+        image_path.write_bytes(img_bytes)
+        safe_image = validate_image_path(image_path)
 
         system = SYSTEM_PROMPT
         if extra_system:
@@ -1207,11 +1218,19 @@ async def handle_vision(request: web.Request) -> web.Response:
         backend = _get_llm_backend(request)
         if not backend.available():
             return _backend_not_available_response(backend.name)
-        invocation = backend.vision_invocation(system=system, prompt=prompt, image_path=tmp_path)
+        safe_path = str(safe_image.path)
+        invocation = backend.vision_invocation(system=system, prompt=prompt, image_path=safe_path)
 
         timeout = 90  # vision calls are single-slide: 90s is ample
 
-        log.info("Vision audit: %d bytes image, %d chars prompt", len(img_bytes), len(prompt))
+        log.info(
+            "Vision audit: %d bytes %s %dx%d, %d chars prompt",
+            safe_image.size_bytes,
+            safe_image.mime_type,
+            safe_image.width,
+            safe_image.height,
+            len(prompt),
+        )
 
         env = backend.prepare_env(os.environ.copy())
 
@@ -1242,15 +1261,19 @@ async def handle_vision(request: web.Request) -> web.Response:
             return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
 
     except asyncio.TimeoutError:
-        proc.kill()
+        if proc is not None:
+            proc.kill()
         log.error("Vision timeout (90s)")
         return web.json_response({"error": "Vision audit timed out after 90s"}, status=504)
+    except SafePathError as exc:
+        log.warning("Vision image rejected by SafePath: %s", exc)
+        return web.json_response({"error": f"Unsafe image: {exc}"}, status=400)
     except Exception as exc:
         log.exception("Vision audit error")
         return web.json_response({"error": str(exc)}, status=500)
     finally:
-        if tmp_path and Path(tmp_path).exists():
-            Path(tmp_path).unlink(missing_ok=True)
+        if image_path and Path(image_path).exists():
+            Path(image_path).unlink(missing_ok=True)
 
 
 async def handle_upload(request: web.Request) -> web.Response:
@@ -1306,7 +1329,13 @@ async def handle_index(request: web.Request) -> web.Response:
     """Serve the WebUI index.html."""
     index = STATIC_DIR / "index.html"
     if not index.exists():
-        return web.Response(text="WebUI not found. Run: pip install \"inkline[app]\"", status=404)
+        return web.Response(
+            text=(
+                "WebUI not found. Install this project from the Aigis/GitHub repo: "
+                "pip install \"inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git\""
+            ),
+            status=404,
+        )
     return web.FileResponse(index)
 
 
@@ -1329,6 +1358,16 @@ async def handle_health(request: web.Request) -> web.Response:
         cli_ok = False
         version = "unavailable"
 
+    capabilities = backend.capabilities()
+    bundle_state: dict
+    try:
+        from inkline.app.knowledge_bundle import build_or_load_bundle
+        bundle_state = build_or_load_bundle(
+            context_window=capabilities.context_window,
+        ).diagnostics()
+    except Exception as exc:
+        bundle_state = {"state": "unavailable", "error": str(exc)}
+
     return web.json_response({
         "status": "ok" if cli_ok else "degraded",
         "modes": {
@@ -1337,6 +1376,9 @@ async def handle_health(request: web.Request) -> web.Response:
             "critique": cli_ok,       # requires backend CLI (post-render vision audit)
         },
         "backend": backend.name,
+        "model": backend.model,
+        "capabilities": asdict(capabilities),
+        "knowledge_bundle": bundle_state,
         "available_backends": available_backend_names(),
         "cli_available": cli_ok,
         "cli_version": version,

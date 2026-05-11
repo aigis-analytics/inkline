@@ -1,0 +1,34 @@
+# Inkline bridge least-privilege policy for Gemini CLI.
+#
+# Gemini CLI policy files use TOML [[rule]] entries. The bridge also passes
+# --sandbox true, --approval-mode auto_edit, and --include-directories.
+
+[[rule]]
+toolName = "run_shell_command"
+decision = "deny"
+priority = 999
+denyMessage = "Inkline bridge blocks shell execution from Gemini. Use the controlled Inkline bridge/render endpoints instead."
+
+[[rule]]
+toolName = "google_web_search"
+decision = "deny"
+priority = 999
+denyMessage = "Inkline bridge blocks web search from Gemini during local rendering."
+
+[[rule]]
+toolName = "web_fetch"
+decision = "deny"
+priority = 999
+denyMessage = "Inkline bridge blocks external web fetches during local rendering."
+
+[[rule]]
+toolName = "write_file"
+decision = "allow"
+priority = 100
+modes = ["autoEdit"]
+
+[[rule]]
+toolName = "replace"
+decision = "allow"
+priority = 100
+modes = ["autoEdit"]

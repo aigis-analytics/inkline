@@ -27,7 +27,20 @@ python3 -c "import inkline; print(inkline.__version__)"
 ```
 
 - Pass: print the version and continue.
-- Fail (ModuleNotFoundError): run `pip install inkline` and retry the check. If it still fails after install, stop and tell the user to check their Python environment (virtual env, PATH, etc.).
+- Fail (ModuleNotFoundError): install this repo from Git:
+
+```bash
+pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
+```
+
+For local development:
+
+```bash
+cd /path/to/inkline
+pip install -e ".[all,mcp]"
+```
+
+Then retry the check. If it still fails after install, stop and tell the user to check their Python environment (virtual env, PATH, etc.).
 
 ## Check 2 — typst available
 
@@ -107,4 +120,4 @@ Then print the next step:
 
 - If everything passed: "Ready — run /inkline:deck <file> to generate a slide deck, or /inkline:doc <file> for a PDF document."
 - If bridge requires manual start: give the `inkline serve` instruction from Check 3 above.
-- If inkline is not installed: give the `pip install inkline` instruction.
+- If inkline is not installed: give the Git or local editable install instruction above. Never suggest bare `pip install inkline`.

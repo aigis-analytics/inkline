@@ -1,3 +1,11 @@
+---
+domain: narrative
+audience: [founders, consultants, sales, investors]
+slide_type_relevance: [title, content, process_flow, comparison, timeline]
+last_updated: 2026-05-11
+version: 1.0.0
+---
+
 # Narrative Frameworks Playbook
 
 > **Purpose**: Equip the DesignAdvisor and human authors with proven narrative structures

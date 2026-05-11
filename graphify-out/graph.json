@@ -41170,12 +41170,12 @@
       "id": "inkline_readme_install"
     },
     {
-      "label": "code:bash (pip install inkline                # core: Markdown \u2192 HTML)",
+      "label": "code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git")",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L52",
       "community": 355,
-      "norm_label": "code:bash (pip install inkline                # core: markdown \u2192 html)",
+      "norm_label": "code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git")",
       "id": "inkline_readme_codeblock_1"
     },
     {

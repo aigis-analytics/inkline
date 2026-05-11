@@ -43,7 +43,8 @@ try:
 except ImportError:
     raise ImportError(
         "fastmcp is required for the Inkline MCP server. "
-        "Install it with: pip install \"inkline[mcp]\""
+        "Install this project from the Aigis/GitHub repo with the mcp extra: "
+        "pip install \"inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git\""
     )
 
 log = logging.getLogger(__name__)

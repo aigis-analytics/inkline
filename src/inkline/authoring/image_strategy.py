@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from inkline.app.safe_path import SafePathError, allowed_image_roots, validate_image_path
+
 log = logging.getLogger(__name__)
 
 # Cache directory for generated images
@@ -127,9 +129,21 @@ def _resolve_reuse(directive: dict, base: Path) -> ImageResult:
             f"  (resolved from: {path_str!r}, base: {base})"
         )
 
+    roots = (
+        *allowed_image_roots(),
+        *((base.expanduser().resolve(),) if not Path(path_str).is_absolute() else ()),
+    )
+    try:
+        safe_image = validate_image_path(
+            candidate,
+            roots=roots,
+        )
+    except SafePathError as exc:
+        raise ImageStrategyError(f"_image: unsafe reuse image: {exc}") from exc
+
     return ImageResult(
         strategy="reuse",
-        path=candidate.resolve(),
+        path=safe_image.path,
         fit=directive.get("fit", "cover"),
         slot=directive.get("slot", "right"),
         width_pct=float(directive.get("width", "50%").rstrip("%") if isinstance(directive.get("width"), str) else directive.get("width", 50)),
@@ -155,7 +169,18 @@ def _resolve_generate(directive: dict, base: Path, *, dry_run: bool = False) -> 
             raise FileNotFoundError(
                 f"_image: generate reference_image_path not found: {candidate}"
             )
-        reference_path = candidate.resolve()
+        roots = (
+            *allowed_image_roots(),
+            *((base.expanduser().resolve(),) if not Path(reference_path_str).is_absolute() else ()),
+        )
+        try:
+            safe_reference = validate_image_path(
+                candidate,
+                roots=roots,
+            )
+        except SafePathError as exc:
+            raise ImageStrategyError(f"_image: unsafe reference image: {exc}") from exc
+        reference_path = safe_reference.path
 
     region_w = int(directive.get("region_width_px", 1920))
     region_h = int(directive.get("region_height_px", 1080))
@@ -176,9 +201,13 @@ def _resolve_generate(directive: dict, base: Path, *, dry_run: bool = False) -> 
 
     if cache_file.exists():
         log.debug("image_strategy: cache hit for key %s", cache_key)
+        try:
+            safe_cache = validate_image_path(cache_file, roots=(_CACHE_DIR.resolve(), *allowed_image_roots()))
+        except SafePathError as exc:
+            raise ImageStrategyError(f"_image: unsafe cached image: {exc}") from exc
         return ImageResult(
             strategy="generate",
-            path=cache_file,
+            path=safe_cache.path,
             fit=directive.get("fit", "cover"),
             slot=directive.get("slot", "right"),
             width_pct=float(str(directive.get("width", "50%")).rstrip("%") if isinstance(directive.get("width"), str) else directive.get("width", 50)),
@@ -205,9 +234,13 @@ def _resolve_generate(directive: dict, base: Path, *, dry_run: bool = False) -> 
             reference_image_b64=reference_b64,
             output_path=str(cache_file),
         )
+        try:
+            safe_result = validate_image_path(result_path, roots=(_CACHE_DIR.resolve(), *allowed_image_roots()))
+        except SafePathError as exc:
+            raise ImageStrategyError(f"_image: generated unsafe image: {exc}") from exc
         return ImageResult(
             strategy="generate",
-            path=Path(result_path),
+            path=safe_result.path,
             fit=directive.get("fit", "cover"),
             slot=directive.get("slot", "right"),
             width_pct=float(str(directive.get("width", "50%")).rstrip("%") if isinstance(directive.get("width"), str) else directive.get("width", 50)),

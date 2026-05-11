@@ -8,7 +8,7 @@
 
 ## 1. Problem Statement
 
-When a new user installs Inkline (`pip install inkline`) and opens Claude Code,
+When a new user installs Inkline from the Aigis/GitHub repo and opens Claude Code,
 they face a cold-start problem: Claude has no awareness of the Archon pipeline
 constraint, the bridge workflow, the slide type catalogue, or the "never call
 export functions directly" rule. Without this context, Claude will:
@@ -20,8 +20,8 @@ export functions directly" rule. Without this context, Claude will:
 - Be unable to diagnose bridge-down situations
 
 CLAUDE.md in the repo root solves this for developers working inside the repo.
-But it does not help a user who has only `pip install`-ed the package, or who
-is working in a different project directory where CLAUDE.md is not in scope.
+But it does not help a user who installed the package from Git or is working in
+a different project directory where CLAUDE.md is not in scope.
 
 The Claude Code plugin system solves exactly this problem: a user can run
 `claude plugin add https://github.com/u3126117/inkline` once, and from that
@@ -248,8 +248,9 @@ allowed-tools:
 **Check 1 — inkline installed**
 Run: `python3 -c "import inkline; print(inkline.__version__)"`
 - Pass: print version, continue
-- Fail (`ModuleNotFoundError`): tell user to run `pip install inkline`; stop
-  further checks until they confirm it's installed
+- Fail (`ModuleNotFoundError`): tell user to install from the Aigis/GitHub repo:
+  `pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"`;
+  stop further checks until they confirm it's installed
 
 **Check 2 — ANTHROPIC_API_KEY set**
 Run: `python3 -c "import os; print('SET' if os.environ.get('ANTHROPIC_API_KEY') else 'MISSING')"`
@@ -534,7 +535,7 @@ The plugin's README must clearly state:
 
 ```
 Prerequisites:
-- Inkline installed: pip install inkline
+- Inkline installed from Git: pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
 - Anthropic API key set in environment (for LLM mode; rules mode works without)
 - Bridge running: inkline serve (must be started separately, kept running)
 - typst installed: pip install typst (or system typst)

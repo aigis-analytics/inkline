@@ -35,6 +35,7 @@ duplicate entries.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -170,6 +171,23 @@ class Archon:
                 startup.finish(ok=True)
                 self.phases.insert(0, startup)
             self.phases[0].issues.append(issue)
+
+    def observe_stream_event(self, event: object) -> None:
+        """Accept provider-neutral stream events from the bridge.
+
+        Gemini and Claude stream-json shapes differ, but both are normalized by
+        ``inkline.app.stream_events`` before reaching this method. The Archon
+        only needs text/tool-result payloads that contain phase banners.
+        """
+        text = getattr(event, "text", "") or ""
+        if not text:
+            return
+        start = re.search(r"\[ARCHON\] Phase: (\S+)", text)
+        if start:
+            self.current_phase = start.group(1)
+        end = re.search(r"\[ARCHON\] (\S+) → (OK|FAILED)", text)
+        if end and self.current_phase == end.group(1):
+            self.current_phase = None
 
     # ------------------------------------------------------------------
     # Convenience queries

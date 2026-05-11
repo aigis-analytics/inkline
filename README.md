@@ -49,16 +49,14 @@ Inkline is the only code-first slide toolkit that pairs AI authoring with a dete
 
 ## Install
 
+Install this project from the Aigis/GitHub repo, or from a local checkout.
+
 ```bash
-pip install inkline                # core: Markdown → HTML
-pip install inkline[typst]         # + Typst PDF (default backend)
-pip install inkline[pdf]           # + WeasyPrint PDF
-pip install inkline[charts]        # + matplotlib chart renderer
-pip install inkline[slides]        # + Google Slides API
-pip install inkline[intelligence]  # + LLM design advisor (Anthropic, opt-in Draft Mode)
-pip install inkline[app]           # + standalone WebUI + Claude bridge
-pip install inkline[mcp]           # + MCP server for Claude Desktop / Claude.ai
-pip install inkline[all]           # everything (excludes mcp)
+pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
+
+# For development from a local checkout:
+cd /path/to/inkline
+pip install -e ".[all,mcp]"
 ```
 
 ---
@@ -236,7 +234,7 @@ For natural-language input or cold-start drafting when you don't have a spec yet
 **Requirements:** [Claude Code](https://docs.claude.com/claude-code) installed and authenticated. Optionally `pandoc` for `.docx` input.
 
 ```bash
-pip install "inkline[all]"
+pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
 inkline serve                      # opens http://localhost:8082
 ```
 
@@ -250,7 +248,7 @@ inkline bridge                     # bridge only, headless
 **Claude Desktop / Claude.ai integration (MCP):**
 
 ```bash
-pip install "inkline[mcp]"
+pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
 inkline mcp                        # start MCP server (stdio)
 ```
 
@@ -696,7 +694,7 @@ src/inkline/
 │   ├── vishwakarma.py             # design philosophy + critique_pdf()
 │   ├── archon.py                  # pipeline supervisor (Draft Mode)
 │   └── playbooks/                 # 10 design playbooks
-└── app/              # Standalone app layer (pip install inkline[app])
+└── app/              # Standalone app layer (install from the Aigis/GitHub repo with app extras)
     ├── claude_bridge.py   # HTTP bridge → claude CLI (port 8082)
     ├── mcp_server.py      # MCP server — tools + 17 resource URIs
     ├── mcp_resources.py   # inkline:// URI registry

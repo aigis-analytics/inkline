@@ -1140,7 +1140,7 @@ Nodes (13): 5.1 Public API surface, 5.2 Spec format, 5.3 New: `freeform` slide_t
 
 ### Community 177 - "Community 177"
 Cohesion: 0.15
-Nodes (13): code:block10 ("Turn this into a 10-slide investor pitch for a technical au), code:block11 ("Slide 3 is too text-heavy — make it more visual."), code:bash (cd /path/to/inkline), code:bash (npm install -g @anthropic-ai/claude-code), code:bash (brew install pandoc      # macOS), code:bash (pip install "inkline[all]"), code:bash (inkline serve --port 9000      # custom port), Output location (+5 more)
+Nodes (13): code:block10 ("Turn this into a 10-slide investor pitch for a technical au), code:block11 ("Slide 3 is too text-heavy — make it more visual."), code:bash (cd /path/to/inkline), code:bash (npm install -g @anthropic-ai/claude-code), code:bash (brew install pandoc      # macOS), code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"), code:bash (inkline serve --port 9000      # custom port), Output location (+5 more)
 
 ### Community 178 - "Community 178"
 Cohesion: 0.26
@@ -1400,7 +1400,7 @@ Nodes (7): Brands and themes, Built-in brand, code:python (# ~/.config/inkline/b
 
 ### Community 243 - "Community 243"
 Cohesion: 0.29
-Nodes (7): Available tools, code:bash (pip install "inkline[mcp]"), code:json ({), code:block15 ("Use inkline to turn this text into a consulting deck:), Example usage in Claude, MCP integration — Claude Desktop and Claude.ai, Setup
+Nodes (7): Available tools, code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"), code:json ({), code:block15 ("Use inkline to turn this text into a consulting deck:), Example usage in Claude, MCP integration — Claude Desktop and Claude.ai, Setup
 
 ### Community 244 - "Community 244"
 Cohesion: 0.29
@@ -1520,7 +1520,7 @@ Nodes (5): Chart types (31+), Infographic archetypes (16, rendered via `chart_ro
 
 ### Community 273 - "Community 273"
 Cohesion: 0.4
-Nodes (5): code:bash (pip install "inkline[all]"), code:bash (inkline serve --port 9000          # custom port), code:bash (pip install "inkline[mcp]"), code:json ({), Opt-in: Draft Mode — conversational WebUI
+Nodes (5): code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"), code:bash (inkline serve --port 9000          # custom port), code:bash (pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"), code:json ({), Opt-in: Draft Mode — conversational WebUI
 
 ### Community 274 - "Community 274"
 Cohesion: 0.4

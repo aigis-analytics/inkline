@@ -259,7 +259,7 @@ SLIDES = [
             "Active development, weekly commits",
             "Plug-in brand system for teams",
             "Built in public on GitHub",
-            "Try it: pip install inkline[all]",
+            "Try it: pip install from github.com/aigis-analytics/inkline",
         ],
     }},
 
@@ -281,7 +281,7 @@ SLIDES = [
     {"slide_type": "closing", "data": {
         "company": "Inkline",
         "tagline": "Because your output should be as good as your analysis",
-        "name": "pip install \"inkline[all]\"",
+        "name": "pip install from GitHub",
         "role": "github.com/u3126117/inkline",
         "email": "MIT licensed  ·  open source  ·  agent-ready",
     }},
@@ -347,7 +347,7 @@ palettes wander. Inkline fixes all of this with a Python API.
 ## Try it
 
 ```bash
-pip install "inkline[all] @ git+https://github.com/u3126117/inkline.git"
+pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
 ```
 
 ## A 60-second example

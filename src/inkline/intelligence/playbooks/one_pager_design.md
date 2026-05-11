@@ -1,3 +1,11 @@
+---
+domain: document_design
+audience: [founders, executives, partnerships, customers]
+slide_type_relevance: [content, split, stat, three_card, process_flow]
+last_updated: 2026-05-11
+version: 1.0.0
+---
+
 # One-Pager Design Playbook
 
 > **Purpose**: Guide production of professional single-page documents — for product/pitch

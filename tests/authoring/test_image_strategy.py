@@ -40,11 +40,16 @@ def tmp_dir(tmp_path):
 
 class TestReuseStrategy:
     def test_reuse_valid_absolute_path(self, tmp_dir):
-        directive = {"strategy": "reuse", "path": str(tmp_dir / "test.png")}
-        result = resolve_image_directive(directive)
+        directive = {"strategy": "reuse", "path": "test.png"}
+        result = resolve_image_directive(directive, base_dir=tmp_dir)
         assert result.strategy == "reuse"
         assert result.path is not None
         assert result.path.exists()
+
+    def test_reuse_absolute_path_outside_safe_roots_raises(self, tmp_dir):
+        directive = {"strategy": "reuse", "path": str(tmp_dir / "test.png")}
+        with pytest.raises(ImageStrategyError, match="unsafe reuse image"):
+            resolve_image_directive(directive)
 
     def test_reuse_valid_relative_path(self, tmp_dir):
         directive = {"strategy": "reuse", "path": "test.png"}
@@ -82,6 +87,15 @@ class TestReuseStrategy:
         result = resolve_image_directive(directive, base_dir=tmp_dir)
         assert result.width_pct == pytest.approx(40.0)
 
+    def test_reuse_rejects_symlink_escape(self, tmp_dir, tmp_path):
+        outside = tmp_path.parent / "outside.png"
+        outside.write_bytes((tmp_dir / "test.png").read_bytes())
+        link = tmp_dir / "escape.png"
+        link.symlink_to(outside)
+
+        with pytest.raises(ImageStrategyError, match="unsafe reuse image"):
+            resolve_image_directive({"strategy": "reuse", "path": "escape.png"}, base_dir=tmp_dir)
+
 
 # ---------------------------------------------------------------------------
 # strategy: generate (dry_run=True to avoid actual API calls)
@@ -111,6 +125,20 @@ class TestGenerateStrategy:
         }
         with pytest.raises(FileNotFoundError):
             resolve_image_directive(directive, base_dir=tmp_dir)
+
+    def test_generate_rejects_unsafe_reference_image(self, tmp_dir, tmp_path):
+        outside = tmp_path.parent / "outside-ref.png"
+        outside.write_bytes((tmp_dir / "test.png").read_bytes())
+        link = tmp_dir / "escape-ref.png"
+        link.symlink_to(outside)
+        directive = {
+            "strategy": "generate",
+            "prompt": "Background",
+            "reference_image_path": "escape-ref.png",
+        }
+
+        with pytest.raises(ImageStrategyError, match="unsafe reference image"):
+            resolve_image_directive(directive, base_dir=tmp_dir, dry_run=True)
 
 
 # ---------------------------------------------------------------------------

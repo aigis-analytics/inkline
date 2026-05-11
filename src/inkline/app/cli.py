@@ -231,7 +231,14 @@ def cmd_render(args: argparse.Namespace) -> None:
         from inkline.typst import export_typst_slides
         from inkline.intelligence import audit_deck, format_report
     except ImportError as exc:
-        print(f"ERROR: {exc}\nInstall Inkline with: pip install inkline[all]", file=sys.stderr)
+        print(
+            "ERROR: "
+            f"{exc}\nInstall this Inkline project from the Aigis/GitHub repo:\n"
+            "  pip install \"inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git\"\n"
+            "For local development from a checkout:\n"
+            "  pip install -e \".[all,mcp]\"",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     md_text = md_path.read_text(encoding="utf-8")

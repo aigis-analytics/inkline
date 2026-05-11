@@ -298,7 +298,7 @@ def build_slides_via_llm():
         audience="Open source developers, AI/agent builders, and analysts browsing GitHub",
         goal=enriched_goal,
         contact={
-            "name": "pip install \"inkline[all]\"",
+            "name": "pip install from GitHub",
             "role": "github.com/u3126117/inkline",
             "email": "MIT licensed  ·  open source  ·  agent-ready",
             "company": "Inkline",
@@ -400,7 +400,7 @@ export_typst_slides(slides=[...], output_path="deck.pdf", brand="minimal")
 ROADMAP: industry themes, LLM storyboarding, Keynote export, diagram integration,
 live preview server.
 
-INSTALL: pip install "inkline[all] @ git+https://github.com/u3126117/inkline.git"
+INSTALL: pip install "inkline[all,mcp] @ git+https://github.com/aigis-analytics/inkline.git"
 
 TAGLINE: "Because your output should be as good as your analysis."
 

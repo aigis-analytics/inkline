@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 
@@ -19,9 +20,44 @@ class BackendInvocation:
 
 
 @dataclass(frozen=True)
+class BackendCapabilities:
+    context_window: int
+    multimodal: bool
+    tool_streaming: bool
+    context_caching: bool
+    reasoning_profile: str
+    vision_profile: str
+
+
+@dataclass(frozen=True)
 class CLIBackend:
     name: BackendName
     executable: str
+
+    @property
+    def model(self) -> str:
+        if self.name == "gemini":
+            return os.environ.get("INKLINE_GEMINI_MODEL", "gemini-2.5-pro")
+        return os.environ.get("INKLINE_CLAUDE_MODEL", "claude-cli-default")
+
+    def capabilities(self) -> BackendCapabilities:
+        if self.name == "gemini":
+            return BackendCapabilities(
+                context_window=1_000_000,
+                multimodal=True,
+                tool_streaming=True,
+                context_caching=True,
+                reasoning_profile="long-context-design-reasoning",
+                vision_profile="native-image-understanding",
+            )
+        return BackendCapabilities(
+            context_window=200_000,
+            multimodal=True,
+            tool_streaming=True,
+            context_caching=False,
+            reasoning_profile="agentic-code-and-design-reasoning",
+            vision_profile="image-read-tool",
+        )
 
     def available(self) -> bool:
         return shutil.which(self.executable) is not None
@@ -65,9 +101,11 @@ class CLIBackend:
                 "gemini",
                 "--prompt", merged,
                 "--output-format", "stream-json",
-                "--skip-trust",
-                "--approval-mode", "yolo",
-                "--model", os.environ.get("INKLINE_GEMINI_MODEL", "gemini-2.5-pro"),
+                "--sandbox", "true",
+                "--approval-mode", "auto_edit",
+                "--policy", str(_policy_path()),
+                "--include-directories", str(_project_root()),
+                "--model", self.model,
             ],
             stdin_text="",
             source_label="gemini_cli",
@@ -106,9 +144,11 @@ class CLIBackend:
                 "gemini",
                 "--prompt", merged,
                 "--output-format", "stream-json",
-                "--skip-trust",
-                "--approval-mode", "yolo",
-                "--model", os.environ.get("INKLINE_GEMINI_MODEL", "gemini-2.5-pro"),
+                "--sandbox", "true",
+                "--approval-mode", "auto_edit",
+                "--policy", str(_policy_path()),
+                "--include-directories", str(_project_root()),
+                "--model", self.model,
             ],
             stdin_text="",
             source_label="gemini_cli",
@@ -127,8 +167,24 @@ def available_backend_names() -> list[str]:
     return [name for name, backend in KNOWN_BACKENDS.items() if backend.available()]
 
 
+def _project_root() -> Path:
+    return Path(os.environ.get("INKLINE_PROJECT_ROOT", Path.cwd())).expanduser().resolve()
+
+
+def _policy_path() -> Path:
+    return Path(os.environ.get(
+        "INKLINE_BRIDGE_POLICY",
+        Path(__file__).with_name("inkline_bridge_policy.toml"),
+    )).expanduser().resolve()
+
+
 def resolve_backend(name: str | None) -> CLIBackend:
-    requested = (name or os.environ.get("INKLINE_LLM_BACKEND", "auto")).lower()
+    requested_arg = (name or "auto").lower()
+    requested = (
+        os.environ.get("INKLINE_LLM_BACKEND", "auto").lower()
+        if requested_arg == "auto"
+        else requested_arg
+    )
     if requested == "auto":
         for candidate in ("claude", "gemini"):
             backend = KNOWN_BACKENDS[candidate]
