@@ -29,7 +29,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from inkline.app.llm_backends import available_backend_names, resolve_backend
-from inkline.app.safe_path import SafePathError, validate_image_path
+from inkline.app.safe_path import SafePathError, allowed_image_roots, validate_image_path
 from inkline.app.stream_events import normalize_stream_line
 
 try:
@@ -309,6 +309,7 @@ def _backend_not_available_response(backend_name: str) -> web.Response:
 def _parse_stream_json(raw: str) -> dict:
     """Extract result text, tool calls, and metadata from stream-json output."""
     result_text = ""
+    message_parts = []
     tool_calls = []
     num_turns = 0
     duration_ms = 0
@@ -326,17 +327,24 @@ def _parse_stream_json(raw: str) -> dict:
 
         etype = event.get("type", "")
         if etype == "result":
-            result_text = event.get("result", "")
+            result_text = event.get("result", "") or result_text
             num_turns = event.get("num_turns", 0)
             duration_ms = event.get("duration_ms", 0)
             cost_usd = event.get("cost_usd", 0.0)
             session_id = event.get("session_id", "")
+        elif etype == "message" and event.get("role") == "assistant":
+            content = event.get("content", "")
+            if isinstance(content, str) and content:
+                message_parts.append(content)
         for normalized in normalize_stream_line("bridge", line):
             if normalized.kind == "tool_call":
                 tool_calls.append({
                     "tool": normalized.tool_name,
                     "input": normalized.tool_input,
                 })
+
+    if not result_text and message_parts:
+        result_text = "".join(message_parts)
 
     return {
         "text": result_text,
@@ -1205,23 +1213,30 @@ async def handle_vision(request: web.Request) -> web.Response:
     image_path = None
     proc = None
     try:
-        vision_dir = OUTPUT_DIR / "vision_uploads"
+        backend = _get_llm_backend(request)
+        if getattr(backend, "name", "") == "gemini":
+            vision_dir = Path(os.environ.get(
+                "INKLINE_GEMINI_VISION_DIR",
+                "~/.gemini/tmp/inkline/vision_uploads",
+            )).expanduser()
+        else:
+            vision_dir = OUTPUT_DIR / "vision_uploads"
         vision_dir.mkdir(parents=True, exist_ok=True)
         image_path = vision_dir / f"inkline_vision_{uuid.uuid4().hex}.png"
         image_path.write_bytes(img_bytes)
-        safe_image = validate_image_path(image_path)
+        safe_roots = allowed_image_roots() + (vision_dir.resolve(),)
+        safe_image = validate_image_path(image_path, roots=safe_roots)
 
         system = SYSTEM_PROMPT
         if extra_system:
             system = extra_system  # vision calls use the caller's system prompt, not deck-building one
 
-        backend = _get_llm_backend(request)
         if not backend.available():
             return _backend_not_available_response(backend.name)
         safe_path = str(safe_image.path)
         invocation = backend.vision_invocation(system=system, prompt=prompt, image_path=safe_path)
 
-        timeout = 90  # vision calls are single-slide: 90s is ample
+        timeout = float(os.environ.get("INKLINE_VISION_TIMEOUT", "90"))
 
         log.info(
             "Vision audit: %d bytes %s %dx%d, %d chars prompt",
@@ -1257,8 +1272,10 @@ async def handle_vision(request: web.Request) -> web.Response:
             return web.json_response({"response": session["text"]})
         else:
             err = stderr.decode("utf-8").strip()
-            log.error("Vision CLI error (rc=%d): %s", proc.returncode, err[:200])
-            return web.json_response({"error": f"CLI error: {err[:200]}"}, status=502)
+            out = stdout.decode("utf-8", errors="replace").strip()
+            detail = err or out
+            log.error("Vision CLI error (rc=%d): %s", proc.returncode, detail[:500])
+            return web.json_response({"error": f"CLI error: {detail[:500]}"}, status=502)
 
     except asyncio.TimeoutError:
         if proc is not None:

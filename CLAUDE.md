@@ -16,6 +16,12 @@ For full architectural context, see [`plan_docs/execution-engine-and-knowledge-b
 
 All non-trivial changes to Inkline must start with a spec in `plan_docs/`.
 
+## GRAPHIFY-FIRST PROJECT CONTEXT
+
+When present, read `graphify-out/GRAPH_REPORT.md` before broad repo traversal.
+Use it as the fast structural map for Aria Code / Consigliere context loading,
+then follow repo-local specs/docs for details.
+
 | Spec | Status | Covers |
 |---|---|---|
 | `plan_docs/execution-engine-and-knowledge-base-pivot-spec.md` | Implemented | Execute-mode default, knowledge base as MCP resources, freeform + image strategy, post-render critique |

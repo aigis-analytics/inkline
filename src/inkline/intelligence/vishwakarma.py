@@ -307,6 +307,7 @@ VISUAL OVERFLOW (always flag as ERROR):
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -343,7 +344,7 @@ _RUBRICS: dict[str, str] = {
 class SlideCritique:
     """Critique result for a single slide."""
     slide_index: int
-    verdict: str   # PASS | WARN | FAIL
+    verdict: str   # PASS | WARN | FAIL | INCOMPLETE
     comment: str
     fix_hint: str = ""  # actionable hint e.g. "_layout: chart_caption"
 
@@ -459,7 +460,7 @@ def critique_pdf(
             f"{VISHWAKARMA_AUDIT_CRITERIA}\n\n"
             f"{rubric_text}\n\n"
             "Respond with a JSON object: "
-            '{"verdict": "PASS"|"WARN"|"FAIL", "comment": "...", "fix_hint": "_layout: ..."}\n'
+            '{"verdict": "PASS"|"WARN"|"FAIL"|"INCOMPLETE", "comment": "...", "fix_hint": "_layout: ..."}\n'
             "Keep comment under 150 chars. fix_hint should be a specific directive if applicable."
         )
         try:
@@ -469,14 +470,17 @@ def critique_pdf(
                 raw = _call_vision(img_b64, prompt)
 
             parsed = _parse_verdict(raw)
+            verdict = str(parsed.get("verdict", "PASS")).upper()
+            if verdict not in {"PASS", "WARN", "FAIL", "INCOMPLETE"}:
+                verdict = "WARN"
             sc = SlideCritique(
                 slide_index=idx + 1,
-                verdict=parsed.get("verdict", "PASS"),
+                verdict=verdict,
                 comment=parsed.get("comment", ""),
                 fix_hint=parsed.get("fix_hint", ""),
             )
             slide_critiques.append(sc)
-            if sc.verdict == "FAIL":
+            if sc.verdict in {"FAIL", "INCOMPLETE"}:
                 fail_count += 1
             elif sc.verdict == "WARN":
                 warn_count += 1
@@ -485,10 +489,11 @@ def critique_pdf(
             _critique_log.warning("Vision audit failed for slide %d: %s", idx + 1, exc)
             slide_critiques.append(SlideCritique(
                 slide_index=idx + 1,
-                verdict="PASS",  # default pass if vision unavailable
-                comment=f"Vision audit skipped: {exc}",
-                fix_hint="",
+                verdict="INCOMPLETE",
+                comment=f"Vision audit incomplete: {exc}",
+                fix_hint="Rerun visual audit; do not distribute until this slide is audited.",
             ))
+            fail_count += 1
 
     # Compute overall score
     n = len(slide_critiques)
@@ -536,18 +541,30 @@ def _call_vision(image_b64: str, prompt: str) -> str:
     payload = _json.dumps({
         "image_base64": image_b64,
         "prompt": prompt,
+        "system": (
+            "You are Inkline's post-render visual auditor. Inspect only the "
+            "provided slide image and return the requested JSON. Do not use or "
+            "repeat deck-generation instructions."
+        ),
     }).encode()
 
+    bridge_url = os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082").rstrip("/")
     req = urllib.request.Request(
-        "http://localhost:8082/vision",
+        f"{bridge_url}/vision",
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        timeout = float(os.environ.get("INKLINE_VISION_TIMEOUT", "360"))
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             result = _json.loads(resp.read())
+            if result.get("audit_status") == "INCOMPLETE":
+                raise RuntimeError(f"Vision endpoint incomplete: {result}")
             return result.get("response", result.get("text", str(result)))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"Vision endpoint unavailable: HTTP {exc.code}: {body}")
     except Exception as exc:
         raise RuntimeError(f"Vision endpoint unavailable: {exc}")
 
@@ -563,15 +580,21 @@ def _parse_verdict(raw: str) -> dict:
         try:
             return json.loads(m.group(0))
         except json.JSONDecodeError:
-            pass
+            return {
+                "verdict": "INCOMPLETE",
+                "comment": "Vision audit returned malformed JSON.",
+                "fix_hint": "Rerun visual audit; do not distribute until this slide is audited.",
+            }
     # Fallback: infer verdict from keywords
     upper = raw.upper()
-    if "FAIL" in upper or "ERROR" in upper or "OVERFLOW" in upper:
+    if "INCOMPLETE" in upper or "UNAVAILABLE" in upper or "SKIPPED" in upper:
+        verdict = "INCOMPLETE"
+    elif "FAIL" in upper or "ERROR" in upper or "OVERFLOW" in upper:
         verdict = "FAIL"
     elif "WARN" in upper or "WARNING" in upper:
         verdict = "WARN"
     else:
-        verdict = "PASS"
+        verdict = "INCOMPLETE"
     return {"verdict": verdict, "comment": raw[:150], "fix_hint": ""}
 
 

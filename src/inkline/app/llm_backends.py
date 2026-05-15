@@ -112,6 +112,7 @@ class CLIBackend:
         )
 
     def vision_invocation(self, *, system: str, prompt: str, image_path: str) -> BackendInvocation:
+        image_dir = str(Path(image_path).expanduser().resolve().parent)
         vision_prompt = (
             f"{prompt}\n\n"
             "Use the local file below as the image to inspect:\n"
@@ -148,6 +149,7 @@ class CLIBackend:
                 "--approval-mode", "auto_edit",
                 "--policy", str(_policy_path()),
                 "--include-directories", str(_project_root()),
+                "--include-directories", image_dir,
                 "--model", self.model,
             ],
             stdin_text="",

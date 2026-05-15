@@ -79,9 +79,9 @@ class TestParseVerdict:
         result = _parse_verdict("WARNING: too many bullets on this slide")
         assert result["verdict"] == "WARN"
 
-    def test_parse_default_pass(self):
+    def test_parse_unstructured_text_is_incomplete(self):
         result = _parse_verdict("The slide looks clean and well-structured.")
-        assert result["verdict"] == "PASS"
+        assert result["verdict"] == "INCOMPLETE"
 
     def test_parse_json_embedded_in_prose(self):
         raw = 'Overall this looks good. {"verdict": "WARN", "comment": "Minor issue", "fix_hint": ""} Done.'
@@ -145,6 +145,9 @@ class TestCritiquePdfWithMockedVision:
             "fix_hint": "_layout: three_card",
         })
 
+    def _mock_vision_unavailable(self, image_b64: str, prompt: str) -> str:
+        raise RuntimeError("bridge unavailable")
+
     def test_critique_with_mocked_vision_returns_result(self, minimal_pdf):
         """critique_pdf with mocked vision returns a valid CritiqueResult."""
         try:
@@ -172,6 +175,21 @@ class TestCritiquePdfWithMockedVision:
         except ImportError:
             pytest.skip("pymupdf not available")
         # Score should be less than 100 due to warns
+        assert result.overall_score < 100
+
+    def test_critique_marks_vision_failure_incomplete(self, minimal_pdf):
+        """Vision failures must block sign-off instead of becoming PASS."""
+        try:
+            result = critique_pdf(
+                str(minimal_pdf),
+                rubric="institutional",
+                vision_fn=self._mock_vision_unavailable,
+            )
+        except ImportError:
+            pytest.skip("pymupdf not available")
+
+        assert result.slide_critiques
+        assert result.slide_critiques[0].verdict == "INCOMPLETE"
         assert result.overall_score < 100
 
     def test_all_rubrics_accepted(self, minimal_pdf):

@@ -266,8 +266,8 @@ class TestAuditSlideWithLlm:
             result = audit_slide_with_llm(png, slide_index=5, slide_type="table")
 
         assert len(result) == 1
-        assert result[0].severity == "info"
-        assert "skipped" in result[0].message.lower()
+        assert result[0].severity == "error"
+        assert "incomplete" in result[0].message.lower()
         assert result[0].slide_index == 5
 
     def test_bridge_unavailable_no_api_key_returns_skip_warning(self, tmp_path):
@@ -280,11 +280,11 @@ class TestAuditSlideWithLlm:
             result = audit_slide_with_llm(png, slide_index=2)
 
         assert len(result) == 1
-        assert result[0].severity == "info"
-        assert "skipped" in result[0].message.lower()
+        assert result[0].severity == "error"
+        assert "incomplete" in result[0].message.lower()
 
     def test_bridge_malformed_json_returns_empty(self, tmp_path):
-        """Bridge returns 200 but non-JSON response → parse fails, return []."""
+        """Bridge returns 200 but non-JSON response → audit is incomplete."""
         png = tmp_path / "slide.png"
         png.write_bytes(_white_png())
 
@@ -294,7 +294,9 @@ class TestAuditSlideWithLlm:
 
         with patch("requests.post", return_value=mock_resp):
             result = audit_slide_with_llm(png)
-        assert result == []
+        assert len(result) == 1
+        assert result[0].severity == "error"
+        assert "malformed JSON" in result[0].message
 
     def test_bridge_empty_response_field_falls_through(self, tmp_path):
         """Bridge returns 200 but response="" → falls to API-key check → skip."""
@@ -309,7 +311,7 @@ class TestAuditSlideWithLlm:
             result = audit_slide_with_llm(png, slide_index=7, api_key=None)
 
         assert len(result) == 1
-        assert result[0].severity == "info"
+        assert result[0].severity == "error"
 
     def test_severity_normalised_for_unknown_value(self, tmp_path):
         """Findings with unrecognised severity get normalised to 'warn'."""

@@ -569,7 +569,7 @@ def audit_slide_with_llm(
     brand: str = "",
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
-    bridge_url: str = "http://localhost:8082",
+    bridge_url: str | None = None,
 ) -> list[AuditWarning]:
     """Send a rendered slide PNG to Claude and ask for a visual audit.
 
@@ -591,6 +591,7 @@ def audit_slide_with_llm(
     image_path = Path(image_path)
     if not image_path.exists():
         return []
+    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082")).rstrip("/")
 
     try:
         import base64
@@ -642,10 +643,17 @@ def audit_slide_with_llm(
                 "image_base64": img_b64,
                 "image_media_type": "image/png",
             },
-            timeout=(1, 120),  # 1s connect, 120s read
+            timeout=(1, float(os.environ.get("INKLINE_VISION_TIMEOUT", "360"))),
         )
         if resp.status_code == 200:
             data = resp.json()
+            if data.get("audit_status") == "INCOMPLETE":
+                return [AuditWarning(
+                    slide_index=slide_index,
+                    slide_type=slide_type,
+                    severity="error",
+                    message="LLM visual audit incomplete: bridge reported INCOMPLETE",
+                )]
             if data.get("response"):
                 text = data["response"]
     except Exception:
@@ -656,8 +664,8 @@ def audit_slide_with_llm(
         if not api_key:
             return [AuditWarning(
                 slide_index=slide_index, slide_type=slide_type,
-                severity="info",
-                message="LLM visual audit skipped: bridge unavailable and no api_key supplied",
+                severity="error",
+                message="LLM visual audit incomplete: bridge unavailable and no api_key supplied",
             )]
         try:
             import anthropic
@@ -685,8 +693,8 @@ def audit_slide_with_llm(
         except Exception as e:
             return [AuditWarning(
                 slide_index=slide_index, slide_type=slide_type,
-                severity="info",
-                message=f"LLM visual audit skipped: {str(e)[:80]}",
+                severity="error",
+                message=f"LLM visual audit incomplete: {str(e)[:80]}",
             )]
 
     text = (text or "").strip()
@@ -700,10 +708,20 @@ def audit_slide_with_llm(
     try:
         findings = json.loads(text)
     except json.JSONDecodeError:
-        return []
+        return [AuditWarning(
+            slide_index=slide_index,
+            slide_type=slide_type,
+            severity="error",
+            message="LLM visual audit incomplete: bridge returned malformed JSON",
+        )]
 
     if not isinstance(findings, list):
-        return []
+        return [AuditWarning(
+            slide_index=slide_index,
+            slide_type=slide_type,
+            severity="error",
+            message="LLM visual audit incomplete: bridge returned non-list findings",
+        )]
 
     warnings: list[AuditWarning] = []
     for f in findings:
@@ -732,7 +750,7 @@ def audit_deck_with_llm(
     api_key: str | None = None,
     model: str = "claude-sonnet-4-6",
     page_dir: str | Path | None = None,
-    bridge_url: str = "http://localhost:8082",
+    bridge_url: str | None = None,
     overflow_slide_indices: list[int] | None = None,
 ) -> list[AuditWarning]:
     """Render each PDF page to PNG and run LLM visual audit on each.
@@ -756,6 +774,7 @@ def audit_deck_with_llm(
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         return []
+    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082")).rstrip("/")
 
     # Render PDF pages to PNGs in a temp/output dir
     if page_dir is None:
