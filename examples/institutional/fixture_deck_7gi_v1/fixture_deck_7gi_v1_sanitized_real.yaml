@@ -1,0 +1,61 @@
+title: 7GI Fixture Deck v1 Sanitized Real
+brand: minimal
+template: consulting
+slides:
+  - slide_type: title
+    data:
+      company: Sanitized Real Fixture
+      tagline: Minimal reproduction of the 7GI institutional path
+      subtitle: Five ship-blocking families only
+      date: 2026-06-19
+  - slide_type: team_grid
+    data:
+      _layout_pptx: team_grid
+      section: People
+      title: Named local access should still render cleanly as editable cards
+      members:
+        - name: Walter Pacheco
+          role: Angola Advisor
+          bio: Local access and execution context.
+        - name: Sam Morley
+          role: Sponsor Lead
+          bio: Investor interface and transaction orchestration.
+  - slide_type: kpi_strip
+    data:
+      section: Capital
+      title: The economics slide must stay editable and legible
+      kpis:
+        - value: "$500m+"
+          label: Equity capacity
+          highlight: true
+        - value: "3:1"
+          label: D/E assumption
+        - value: "2y"
+          label: Phased deployment
+  - slide_type: timeline
+    data:
+      _layout_pptx: timeline
+      section: Process
+      title: A typical Angola process has clear stages and counterparties
+      milestones:
+        - date: Week 1
+          label: Access
+          desc: Reverse roadshow and political introductions.
+        - date: Week 4
+          label: Screening
+          desc: Narrow target list and align entry mechanism.
+        - date: Week 8
+          label: Diligence
+          desc: Technical, legal, and stakeholder workstreams.
+        - date: Week 12
+          label: Signing
+          desc: Approvals, funding, and close path.
+  - slide_type: table
+    data:
+      section: Appendix
+      title: Appendix matrix remains the density control slide
+      headers: [Target, Mechanism, Status]
+      rows:
+        - [Public package, Competitive, Screened]
+        - [Bilateral package, Network-led, Monitor]
+        - [Pre-emption, Event-driven, Optional]

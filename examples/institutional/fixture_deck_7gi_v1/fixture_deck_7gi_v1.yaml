@@ -1,0 +1,110 @@
+title: 7GI Fixture Deck v1
+brand: minimal
+template: consulting
+slides:
+  - slide_type: title
+    data:
+      company: 7GI Fixture Deck
+      tagline: Institutional editable PPTX regression corpus
+      subtitle: Weekend vertical-slice sign-off deck
+      date: 2026-06-19
+  - slide_type: section_divider
+    data:
+      title: Platform Entry
+      section: Angola
+      subtitle: Access, process, and execution
+  - slide_type: three_card
+    data:
+      section: Strategy
+      title: Entry logic should combine access, pace, and capital efficiency
+      cards:
+        - title: Access
+          body: Build visibility with ministries, operators, and local counterparties before formal deal launch.
+        - title: Pace
+          body: Use a narrow initial corpus of repeatable slide types to make sign-off reliable.
+        - title: Capital
+          body: Prioritize native editable output and auditability over one-off deck craftsmanship.
+  - slide_type: team_grid
+    data:
+      _layout_pptx: team_grid
+      section: People
+      title: Boots on the ground execution requires a visible local interface
+      members:
+        - name: Walter Pacheco
+          role: Angola Advisor
+          bio: Local access, stakeholder mapping, and operating context.
+        - name: Max Tonela
+          role: Sector Principal
+          bio: Senior industry credibility and policy connectivity.
+        - name: Olivier Colom
+          role: Transaction Advisor
+          bio: Deal execution support and sponsor dialogue.
+        - name: Sam Morley
+          role: Sponsor Lead
+          bio: Investor interface and transaction orchestration.
+  - slide_type: kpi_strip
+    data:
+      section: Capital
+      title: The fixture must prove editable KPI-heavy slides remain stable after export
+      kpis:
+        - value: "0"
+          label: Ship-blocking defects
+          highlight: true
+        - value: ">=0.90"
+          label: Native ratio target
+        - value: "<=0.12"
+          label: Parity score target
+        - value: "90s"
+          label: Audit render timeout
+  - slide_type: timeline
+    data:
+      _layout_pptx: timeline
+      section: Process
+      title: Weekend execution should move in one strict vertical slice
+      milestones:
+        - date: Day 1 AM
+          label: Audit plumbing
+          desc: Vision preflight, PPTX render loop, and JSON artifacts.
+        - date: Day 1 PM
+          label: Native export
+          desc: Five ship-blocking families only.
+        - date: Day 2 AM
+          label: Parity tune
+          desc: Fit rules and rendered comparison loop.
+        - date: Day 2 PM
+          label: Sign-off
+          desc: Fixture outputs, manual QA, and post-code audit.
+  - slide_type: table
+    data:
+      section: Appendix
+      title: Appendix matrix is the density stress test for editable output
+      headers: [Workstream, Priority, Gate, Owner]
+      rows:
+        - [Audit loop, P1, Working JSON output, Inkline operator]
+        - [PPTX metadata, P1, Native ratio emitted, Inkline operator]
+        - [Parity compare, P1, Mean diff <= 0.12, Inkline operator]
+        - [Manual QA, P1, Editability pass, Inkline operator]
+  - slide_type: chart
+    data:
+      section: Exhibit
+      title: Reference exhibit embeds may remain exempt from full native reconstruction
+      caption: Exempt embed placeholder for one allowed fallback slide.
+  - slide_type: content
+    data:
+      section: Support
+      title: Non ship-blocking support slides must still render cleanly
+      items:
+        - Clean render is required even where parity is not gated.
+        - These slides may reuse existing implementation.
+        - Defects become warnings unless they break deck-wide output.
+  - slide_type: content
+    data:
+      section: Support
+      title: Artifact contract
+      items:
+        - baseline.pdf
+        - deck.pptx
+        - deck.rendered.pdf
+        - export_metadata.json
+        - audit.json
+        - parity_report.json

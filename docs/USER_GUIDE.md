@@ -14,9 +14,10 @@
 6. [LLM design advisor](#llm-design-advisor)
 7. [Brands and themes](#brands-and-themes)
 8. [Chart renderer](#chart-renderer)
-9. [Overflow audit](#overflow-audit)
-10. [Configuration reference](#configuration-reference)
-11. [Troubleshooting](#troubleshooting)
+9. [Institutional PPTX workflow](#institutional-pptx-workflow)
+10. [Overflow audit](#overflow-audit)
+11. [Configuration reference](#configuration-reference)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -258,6 +259,65 @@ a supported plan).
  [paste your document text]
  Make it 8 slides, consulting template, minimal brand."
 ```
+
+---
+
+## Institutional PPTX workflow
+
+Inkline now supports a fixture-oriented path for editable institutional PPTX output, parity checking, and post-render PPTX critique.
+
+### Render from YAML or JSON spec
+
+```bash
+inkline render deck.json --output pdf,pptx --editable-institutional
+inkline render deck.yaml --output pdf,pptx --output-dir out/client_deck
+```
+
+For YAML support, install `PyYAML`. If it is unavailable, use JSON fixtures instead.
+
+### Inspect editability
+
+```bash
+inkline inspect-pptx out/client_deck/deck.pptx --out out/client_deck/deck.inspect.json
+```
+
+This reports:
+
+- slide count
+- editable native ratio
+- slides with image fallback
+- per-slide fallback reasons
+
+### Audit rendered PPTX
+
+```bash
+inkline audit-pptx out/client_deck/deck.pptx \
+  --rubric institutional \
+  --out out/client_deck/deck.audit.json
+```
+
+This renders the PPTX through `soffice`, writes `deck.rendered.pdf`, and critiques that rendered output. For investor and consulting decks, this is the correct sign-off surface.
+
+### Compare PDF vs rendered PPTX
+
+```bash
+inkline compare-rendered \
+  --baseline out/client_deck/deck.pdf \
+  --pptx-render out/client_deck/deck.rendered.pdf \
+  --slides cover,team_grid,institutional_kpi_cards,institutional_timeline,appendix_matrix \
+  --out out/client_deck/deck.parity.json
+```
+
+This produces a parity diff score plus per-slide scores for the chosen canonical fixture pages.
+
+### Reference corpus
+
+See:
+
+- `examples/institutional/fixture_deck_7gi_v1/`
+- `docs/templates/manual_qa_checklist_institutional.md`
+
+These are the working fixture set and manual QA checklist for institutional editable-deck sign-off.
 
 Claude will call `inkline_generate_deck` and return the PDF path.
 

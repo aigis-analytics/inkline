@@ -98,6 +98,17 @@ audit: post-render
 
 No Python, no API key, no LLM call. The renderer executes the spec and produces a branded PDF and PPTX. See [`examples/typed_layout_deck/`](examples/typed_layout_deck/) for a complete 8-slide investor pitch.
 
+Institutional YAML/JSON fixture specs are also supported:
+
+```bash
+inkline render examples/institutional/fixture_deck_7gi_v1/fixture_deck_7gi_v1.json \
+  --output pdf,pptx \
+  --output-dir artifacts/weekend_sprint_2026-06-19/fixture_deck_7gi_v1 \
+  --editable-institutional
+```
+
+This path is intended for dense consulting / investor decks where editable PPTX parity matters and where the post-render sign-off should inspect the rendered PowerPoint output, not just the source spec.
+
 For Word output on report-style markdown:
 
 ```bash
@@ -224,6 +235,24 @@ Returns per-slide verdicts (`PASS` / `WARN` / `FAIL`) with actionable fix hints.
 Available rubrics: `institutional` (investment bank standards), `tech_pitch` (startup/VC), `internal_review` (lightweight operational check).
 
 Via the bridge: `POST /critique` with `{"pdf_path": "...", "rubric": "institutional"}`.
+
+### Editable PPTX audit workflow
+
+For institutional decks, the recommended sign-off loop is:
+
+```bash
+inkline inspect-pptx deck.pptx --out deck.inspect.json
+inkline audit-pptx deck.pptx --rubric institutional --out deck.audit.json
+inkline compare-rendered --baseline deck.pdf --pptx-render deck.rendered.pdf \
+  --slides cover,team_grid,institutional_kpi_cards,institutional_timeline,appendix_matrix \
+  --out deck.parity.json
+```
+
+- `inspect-pptx` reports whether slides are exported as native editable shapes or image fallbacks.
+- `audit-pptx` renders the PPTX through LibreOffice and critiques the rendered result, which is the correct surface for visual sign-off.
+- `compare-rendered` measures PDF vs rendered-PPTX parity for a chosen institutional fixture subset.
+
+See [`examples/institutional/fixture_deck_7gi_v1/`](examples/institutional/fixture_deck_7gi_v1/) and [`docs/templates/manual_qa_checklist_institutional.md`](docs/templates/manual_qa_checklist_institutional.md) for the working corpus and manual QA checklist.
 
 ---
 

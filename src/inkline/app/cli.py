@@ -11,6 +11,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import webbrowser
 from pathlib import Path
@@ -220,10 +221,31 @@ def cmd_render(args: argparse.Namespace) -> None:
     import json as _json
     from pathlib import Path as _Path
 
-    md_path = _Path(args.file)
-    if not md_path.exists():
+    source_path = _Path(args.file)
+    if not source_path.exists():
         print(f"ERROR: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
+
+    if source_path.suffix.lower() in {".yaml", ".yml", ".json"}:
+        from inkline.app.institutional import render_spec_file
+
+        formats = [fmt.strip() for fmt in str(args.output).split(",") if fmt.strip()]
+        artifacts = render_spec_file(
+            source_path,
+            formats=formats,
+            output_dir=args.output_dir,
+            editable_institutional=bool(getattr(args, "editable_institutional", False)),
+        )
+        if artifacts.pdf_path:
+            print(f"PDF ready: {artifacts.pdf_path}")
+        if artifacts.pptx_path:
+            print(f"PPTX ready: {artifacts.pptx_path}")
+        if artifacts.export_metadata_path:
+            print(f"Export metadata: {artifacts.export_metadata_path}")
+        if args.watch:
+            print(f"[inkline render] Watch mode — monitoring {source_path} for changes...")
+            _run_watch(source_path, args)
+        return
 
     try:
         from inkline.authoring.preprocessor import preprocess
@@ -241,13 +263,13 @@ def cmd_render(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    md_text = md_path.read_text(encoding="utf-8")
-    print(f"[inkline render] Preprocessing {md_path.name}...")
+    md_text = source_path.read_text(encoding="utf-8")
+    print(f"[inkline render] Preprocessing {source_path.name}...")
 
     deck_meta, sections = preprocess(
         md_text,
         strict_directives=args.strict_directives,
-        source_path=str(md_path),
+        source_path=str(source_path),
     )
 
     # CLI flags override front-matter
@@ -259,7 +281,7 @@ def cmd_render(args: argparse.Namespace) -> None:
 
     advisor = DesignAdvisor(brand=brand, template=template, mode=mode)
     slides = advisor.design_deck(
-        title=deck_meta.get("title", md_path.stem),
+        title=deck_meta.get("title", source_path.stem),
         subtitle=deck_meta.get("subtitle", ""),
         date=deck_meta.get("date", ""),
         sections=sections,
@@ -269,8 +291,10 @@ def cmd_render(args: argparse.Namespace) -> None:
 
     # Determine output path
     output_dir = _Path("~/.local/share/inkline/output").expanduser()
+    if getattr(args, "output_dir", None):
+        output_dir = _Path(args.output_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_stem = md_path.stem
+    out_stem = source_path.stem
     pdf_path = output_dir / f"{out_stem}.pdf"
 
     print(f"[inkline render] Exporting to {pdf_path}...")
@@ -299,8 +323,8 @@ def cmd_render(args: argparse.Namespace) -> None:
     print(f"PDF ready: {pdf_path}")
 
     if args.watch:
-        print(f"[inkline render] Watch mode — monitoring {md_path} for changes...")
-        _run_watch(md_path, args)
+        print(f"[inkline render] Watch mode — monitoring {source_path} for changes...")
+        _run_watch(source_path, args)
 
 
 def _run_watch(md_path: "Path", args: "argparse.Namespace") -> None:
@@ -479,6 +503,42 @@ def cmd_critique(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_inspect_pptx(args: argparse.Namespace) -> None:
+    from inkline.app.institutional import dump_json, inspect_pptx
+
+    result = inspect_pptx(args.pptx)
+    if args.out:
+        dump_json(args.out, result)
+    print(json.dumps(result, indent=2))
+
+
+def cmd_audit_pptx(args: argparse.Namespace) -> None:
+    from inkline.app.institutional import audit_pptx
+
+    result = audit_pptx(
+        args.pptx,
+        rubric=args.rubric,
+        brand=args.brand,
+        output_path=args.out,
+    )
+    print(json.dumps(result, indent=2))
+    if result.get("error"):
+        sys.exit(21)
+
+
+def cmd_compare_rendered(args: argparse.Namespace) -> None:
+    from inkline.app.institutional import compare_rendered_pdfs
+
+    slides = [item.strip() for item in args.slides.split(",") if item.strip()]
+    result = compare_rendered_pdfs(
+        args.baseline,
+        args.pptx_render,
+        slide_tokens=slides,
+        output_path=args.out,
+    )
+    print(json.dumps(result, indent=2))
+
+
 def cmd_draft(args: argparse.Namespace) -> None:
     """Start Draft Mode — the agentic /prompt path.
 
@@ -587,11 +647,15 @@ def main(argv: list[str] | None = None) -> None:
     # inkline render
     render_p = sub.add_parser(
         "render",
-        help="Render a .md file to PDF (non-agentic; no Claude call)",
+        help="Render a markdown/YAML/JSON spec to PDF/PPTX (non-agentic; no Claude call)",
     )
-    render_p.add_argument("file", metavar="FILE.md", help="Markdown source file")
+    render_p.add_argument("file", metavar="FILE", help="Markdown, YAML, or JSON source file")
     render_p.add_argument("--output", default="pdf", metavar="FORMATS",
                           help="Comma-separated output formats: pdf,pptx (default: pdf)")
+    render_p.add_argument("--output-dir", default="", metavar="DIR",
+                          help="Override output directory")
+    render_p.add_argument("--editable-institutional", action="store_true",
+                          help="Enable the institutional editable PPTX path for YAML/JSON specs")
     render_p.add_argument("--brand", default="", metavar="BRAND",
                           help="Override brand from front-matter")
     render_p.add_argument("--template", default="", metavar="TEMPLATE",
@@ -664,6 +728,46 @@ def main(argv: list[str] | None = None) -> None:
     critique_p.add_argument("--brand", default="", metavar="BRAND",
                             help="Brand context for brand-aware critique")
     critique_p.set_defaults(func=cmd_critique)
+
+    # inkline inspect-pptx
+    inspect_p = sub.add_parser(
+        "inspect-pptx",
+        help="Inspect a PPTX and emit editability / fallback metadata",
+    )
+    inspect_p.add_argument("pptx", metavar="PPTX", help="Path to the PPTX file")
+    inspect_p.add_argument("--out", default="", metavar="JSON",
+                           help="Optional JSON output path")
+    inspect_p.set_defaults(func=cmd_inspect_pptx)
+
+    # inkline audit-pptx
+    audit_pptx_p = sub.add_parser(
+        "audit-pptx",
+        help="Render a PPTX through soffice and run post-render critique on the result",
+    )
+    audit_pptx_p.add_argument("pptx", metavar="PPTX", help="Path to the PPTX file")
+    audit_pptx_p.add_argument("--rubric", default="institutional",
+                              choices=["institutional", "tech_pitch", "internal_review"],
+                              help="Audit rubric to apply")
+    audit_pptx_p.add_argument("--brand", default="", metavar="BRAND",
+                              help="Brand context for brand-aware critique")
+    audit_pptx_p.add_argument("--out", default="", metavar="JSON",
+                              help="Optional JSON output path")
+    audit_pptx_p.set_defaults(func=cmd_audit_pptx)
+
+    # inkline compare-rendered
+    compare_p = sub.add_parser(
+        "compare-rendered",
+        help="Compare a baseline PDF and rendered PPTX PDF for parity",
+    )
+    compare_p.add_argument("--baseline", required=True, metavar="PDF",
+                           help="Baseline PDF path")
+    compare_p.add_argument("--pptx-render", required=True, metavar="PDF",
+                           help="Rendered PPTX PDF path")
+    compare_p.add_argument("--slides", required=True, metavar="SLIDES",
+                           help="Comma-separated slide tokens or page numbers")
+    compare_p.add_argument("--out", default="", metavar="JSON",
+                           help="Optional JSON output path")
+    compare_p.set_defaults(func=cmd_compare_rendered)
 
     # inkline draft
     draft_p = sub.add_parser(
