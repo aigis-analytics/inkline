@@ -522,8 +522,8 @@ class DesignAdvisor:
     """
 
     #: Default LLM bridge URL. Override via env var ``INKLINE_BRIDGE_URL``
-    #: (e.g. ``http://host.docker.internal:8082`` from inside Docker).
-    DEFAULT_BRIDGE_URL = "http://localhost:8082"
+    #: (e.g. ``http://host.docker.internal:18083`` from inside Docker).
+    DEFAULT_BRIDGE_URL = "http://localhost:18083"
 
     def __init__(
         self,

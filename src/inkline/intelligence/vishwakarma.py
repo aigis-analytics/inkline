@@ -548,7 +548,7 @@ def _call_vision(image_b64: str, prompt: str) -> str:
         ),
     }).encode()
 
-    bridge_url = os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082").rstrip("/")
+    bridge_url = os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:18083").rstrip("/")
     req = urllib.request.Request(
         f"{bridge_url}/vision",
         data=payload,

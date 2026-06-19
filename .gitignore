@@ -36,6 +36,7 @@ src/inkline/assets/sparkdcs_*
 # Test output & scratch
 output/
 decks/
+artifacts/
 scripts/gen_*_investor_deck.py
 scripts/_local_*.py
 docs/design_inspiration_analysis.md

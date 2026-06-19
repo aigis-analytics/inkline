@@ -591,7 +591,7 @@ def audit_slide_with_llm(
     image_path = Path(image_path)
     if not image_path.exists():
         return []
-    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082")).rstrip("/")
+    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:18083")).rstrip("/")
 
     try:
         import base64
@@ -774,7 +774,7 @@ def audit_deck_with_llm(
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         return []
-    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082")).rstrip("/")
+    bridge_url = (bridge_url or os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:18083")).rstrip("/")
 
     # Render PDF pages to PNGs in a temp/output dir
     if page_dir is None:

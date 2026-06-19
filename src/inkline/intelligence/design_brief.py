@@ -19,7 +19,7 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 
 # Default bridge URL — mirrors DesignAdvisor
-DEFAULT_BRIDGE_URL = "http://localhost:8082"
+DEFAULT_BRIDGE_URL = "http://localhost:18083"
 
 
 @dataclass

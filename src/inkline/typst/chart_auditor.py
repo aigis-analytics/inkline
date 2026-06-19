@@ -111,7 +111,7 @@ class ChartAuditor:
 
     def __init__(
         self,
-        bridge_url: str = "http://localhost:8082",
+        bridge_url: str = "http://localhost:18083",
         api_key: Optional[str] = None,
         max_attempts: int = 2,
         model: str = "claude-sonnet-4-6",
@@ -519,7 +519,7 @@ def render_and_audit(
     *,
     width: float = 7.0,
     height: float = 3.5,
-    bridge_url: str = "http://localhost:8082",
+    bridge_url: str = "http://localhost:18083",
     api_key: Optional[str] = None,
     max_attempts: int = 2,
 ) -> ChartAuditResult:

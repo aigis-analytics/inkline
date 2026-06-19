@@ -145,7 +145,7 @@ def build_claude_code_caller(
 
 
 def ensure_bridge_running(
-    bridge_url: str = "http://localhost:8082",
+    bridge_url: str = "http://localhost:18083",
     startup_wait: float = 4.0,
 ) -> bool:
     """Ensure the Claude bridge HTTP server is reachable.
@@ -164,7 +164,7 @@ def ensure_bridge_running(
     Parameters
     ----------
     bridge_url:
-        Base URL of the bridge server (default: ``http://localhost:8082``).
+        Base URL of the bridge server (default: ``http://localhost:18083``).
     startup_wait:
         Seconds to wait after launching the bridge process before giving up.
     """

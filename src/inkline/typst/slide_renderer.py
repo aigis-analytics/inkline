@@ -567,7 +567,7 @@ class TypstSlideRenderer:
         align: horizon,
         text(size: 8pt, fill: {_rgb(muted)})[{_esc(footer_tagline)}],
         h(1fr),
-        text(size: 8pt, weight: "bold", fill: {_rgb(accent)})[#counter(page).display() / #context counter(page).final().first()],
+        text(size: 8pt, weight: "bold", fill: {_rgb(accent)})[Page],
       )
     }}
   }},
@@ -2878,7 +2878,7 @@ class TypstSlideRenderer:
             s_type = shape.get("type", "rect")
             units = shape.get("units", "pct")
             opacity = float(shape.get("opacity", 1.0))
-            opacity_cmd = f"#set-opacity({opacity:.2f})" if opacity < 1.0 else ""
+            opacity_cmd = f"set-opacity({opacity:.2f})" if opacity < 1.0 else ""
 
             def to_cm_x(v):
                 v = float(v)
@@ -2898,13 +2898,13 @@ class TypstSlideRenderer:
                 typst_fit = "cover" if fit == "cover" else ("contain" if fit == "contain" else "stretch")
                 if path:
                     shape_blocks.append(
-                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                         f' box(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
                         f' clip: true, image("{path}", width: {w_cm:.3f}cm, height: {h_cm:.3f}cm, fit: "{typst_fit}")))'
                     )
                 else:
                     shape_blocks.append(
-                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                         f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm, fill: rgb("#CCCCCC")))'
                     )
 
@@ -2918,7 +2918,7 @@ class TypstSlideRenderer:
                 radius_cm = radius_raw * min(w_cm, h_cm) if s_type == "rounded_rect" else 0
                 radius_str = f", radius: {radius_cm:.3f}cm" if radius_cm > 0 else ""
                 shape_blocks.append(
-                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                     f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
                     f' fill: rgb("{fill}"){radius_str}))'
                 )
@@ -2941,7 +2941,7 @@ class TypstSlideRenderer:
                 }
                 h_align = align_map.get(anchor, "left")
                 shape_blocks.append(
-                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                     f' box(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
                     f' text(font: "{font}", size: {size_pt}pt, fill: rgb("{fill}"), align({h_align}, [{text_val}])))'
                     f')'
@@ -2958,7 +2958,7 @@ class TypstSlideRenderer:
                 dy = y2_cm - y1_cm
                 mark = ", mark: (end: \">\")" if s_type == "arrow" else ""
                 shape_blocks.append(
-                    f'  #place(top + left, dx: {x1_cm:.3f}cm, dy: {y1_cm:.3f}cm,'
+                    f'  place(top + left, dx: {x1_cm:.3f}cm, dy: {y1_cm:.3f}cm,'
                     f' line(start: (0cm, 0cm), end: ({dx:.3f}cm, {dy:.3f}cm),'
                     f' stroke: rgb("{color}") + {thickness_pt}pt{mark}))'
                 )
@@ -2973,7 +2973,7 @@ class TypstSlideRenderer:
                 y_cm = cy_cm - r_cm
                 d_cm = r_cm * 2
                 shape_blocks.append(
-                    f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                    f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                     f' circle(width: {d_cm:.3f}cm, height: {d_cm:.3f}cm, fill: rgb("{fill}")))'
                 )
 
@@ -2990,7 +2990,7 @@ class TypstSlideRenderer:
                     fill = shape.get("fill", "#AAAAAA")
                     shape_blocks.append(
                         f'  // polygon (approximated as bounding rect)\n'
-                        f'  #place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
+                        f'  place(top + left, dx: {x_cm:.3f}cm, dy: {y_cm:.3f}cm,'
                         f' rect(width: {w_cm:.3f}cm, height: {h_cm:.3f}cm,'
                         f' fill: rgb("{fill}"), stroke: none))'
                     )
@@ -3000,16 +3000,16 @@ class TypstSlideRenderer:
         # Header bar (optional — only if title is present)
         header_block = ""
         if title:
-            header_block = f"""  #place(top + left, dx: 1.4cm, dy: 0.4cm,
+            header_block = f"""  place(top + left, dx: 1.4cm, dy: 0.4cm,
     box(width: 22.6cm, height: 1.2cm, [
-      #if "{section}" != "" {{
-        #text(font: "{heading_font}", size: 9pt, fill: rgb("{t.get('accent', '#1A7FA0')}"), weight: "bold")[\
+      if "{section}" != "" {{
+        text(font: "{heading_font}", size: 9pt, fill: rgb("{t.get('accent', '#1A7FA0')}"), weight: "bold")[\
 {section}]
-        #h(0.5em)
-        #text(fill: gray)[|]
-        #h(0.5em)
+        h(0.5em)
+        text(fill: gray)[|]
+        h(0.5em)
       }}
-      #text(font: "{heading_font}", size: 16pt, fill: rgb("{heading_color}"), weight: "bold")[{title}]
+      text(font: "{heading_font}", size: 16pt, fill: rgb("{heading_color}"), weight: "bold")[{title}]
     ])
   )"""
 
