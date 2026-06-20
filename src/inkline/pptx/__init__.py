@@ -184,6 +184,16 @@ def _fallback_items(data: dict[str, Any]) -> list[str]:
     return []
 
 
+def _freeform_contains_raster_asset(data: dict[str, Any]) -> bool:
+    shapes = data.get("shapes") or data.get("_shapes_manifest") or []
+    if not isinstance(shapes, list):
+        return False
+    for shape in shapes:
+        if isinstance(shape, dict) and str(shape.get("type", "")).strip().lower() == "image":
+            return True
+    return False
+
+
 def export_pptx_slides(
     slides: list[dict[str, Any]],
     output_path: str | Path,
@@ -193,6 +203,7 @@ def export_pptx_slides(
     source_root: str | Path | None = None,
     metadata_path: str | Path | None = None,
     editable_institutional: bool = False,
+    deck_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Render a list of slide specs to a PPTX file."""
     output = Path(output_path)
@@ -215,6 +226,9 @@ def export_pptx_slides(
         requested_type = str(slide_spec.get("slide_type", "content"))
         status = "native"
         fallback_reason = ""
+        editability_exceptions = list(
+            (slide_spec.get("compiled_manifest", {}) or {}).get("pptx_editability_exceptions", [])
+        )
 
         if slide_type in {"title", "section_divider"}:
             builder.add_title_slide(
@@ -260,6 +274,8 @@ def export_pptx_slides(
                         )
                     )
             if cards:
+                status = "fallback"
+                fallback_reason = "timeline_backend_degraded_to_four_card"
                 builder.add_four_card_slide(
                     section=section or "Timeline",
                     title=heading or deck_title,
@@ -322,6 +338,10 @@ def export_pptx_slides(
                     chart_path=chart_path,
                     footnote=str(data.get("footnote", data.get("caption", ""))),
                 )
+                if chart_path or data.get("image_path"):
+                    status = "native_with_exceptions"
+                    if "intentional_raster_asset" not in editability_exceptions:
+                        editability_exceptions.append("intentional_raster_asset")
             else:
                 status = "fallback"
                 fallback_reason = "chart_request_missing_or_unrenderable"
@@ -337,6 +357,10 @@ def export_pptx_slides(
                 section=section,
                 shapes=data.get("shapes") or data.get("_shapes_manifest") or [],
             )
+            if _freeform_contains_raster_asset(data):
+                status = "native_with_exceptions"
+                if "intentional_raster_asset" not in editability_exceptions:
+                    editability_exceptions.append("intentional_raster_asset")
         elif slide_type == "closing":
             builder.add_closing_slide(
                 name=str(data.get("name", "")),
@@ -356,6 +380,14 @@ def export_pptx_slides(
                 footnote=str(data.get("footnote", "")),
             )
 
+        if (
+            status == "native"
+            and (data.get("image_path") or data.get("background_image"))
+        ):
+            status = "native_with_exceptions"
+            if "intentional_raster_asset" not in editability_exceptions:
+                editability_exceptions.append("intentional_raster_asset")
+
         metadata_slides.append(
             {
                 "slide_number": idx + 1,
@@ -363,8 +395,26 @@ def export_pptx_slides(
                 "resolved_type": slide_type,
                 "status": status,
                 "fallback_reason": fallback_reason,
+                "slide_id": slide_spec.get("slide_id", ""),
+                "storyboard": slide_spec.get("storyboard", {}),
+                "compiled_manifest": slide_spec.get("compiled_manifest", {}),
+                "pptx_editability_exceptions": editability_exceptions,
             }
         )
+
+    if editable_institutional:
+        fallback_slides = [
+            item for item in metadata_slides if item["status"] == "fallback"
+        ]
+        if fallback_slides:
+            slide_summary = ", ".join(
+                f"{item['slide_number']} ({item['fallback_reason'] or item['resolved_type']})"
+                for item in fallback_slides
+            )
+            raise RuntimeError(
+                "Editable institutional PPTX export requires native slides or declared editability exceptions only; "
+                f"fallback slides encountered: {slide_summary}"
+            )
 
     builder.apply_notes_from_slides(slides)
     saved = builder.save(output)
@@ -372,13 +422,22 @@ def export_pptx_slides(
         import json
 
         total = len(metadata_slides) or 1
-        native_count = sum(1 for item in metadata_slides if item["status"] == "native")
+        editable_count = sum(
+            1
+            for item in metadata_slides
+            if item["status"] in {"native", "native_with_exceptions"}
+        )
+        fully_native_count = sum(1 for item in metadata_slides if item["status"] == "native")
         payload = {
-            "pptx_path": str(saved),
+            "pptx_path": saved.name,
             "editable_institutional": editable_institutional,
-            "editable_native_ratio": native_count / total,
+            "editable_native_ratio": editable_count / total,
+            "fully_native_ratio": fully_native_count / total,
             "slides_with_image_fallback": [
                 item["slide_number"] for item in metadata_slides if item["status"] == "fallback"
+            ],
+            "slides_with_editability_exceptions": [
+                item["slide_number"] for item in metadata_slides if item["status"] == "native_with_exceptions"
             ],
             "fallback_reasons": {
                 str(item["slide_number"]): item["fallback_reason"]
@@ -389,6 +448,7 @@ def export_pptx_slides(
                 str(item["slide_number"]): item["status"] for item in metadata_slides
             },
             "slides": metadata_slides,
+            "deck_metadata": deck_metadata or {},
         }
         meta_file = Path(metadata_path)
         meta_file.parent.mkdir(parents=True, exist_ok=True)

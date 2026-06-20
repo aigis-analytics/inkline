@@ -51,6 +51,9 @@ Three modes:
 | `llm` | LLM picks layouts using 10 design playbooks | `ANTHROPIC_API_KEY` or Claude Code |
 | `advised` | Rules first, LLM reviews | `ANTHROPIC_API_KEY` or Claude Code |
 
+Storyboard-aware institutional metadata can now be resolved even without the
+LLM path when using YAML/JSON specs or explicit markdown directives.
+
 ### Layer 3 — Standalone app (conversational, no Python required)
 
 A Claude Code-powered bridge that lets you describe what you want in plain English.
@@ -218,6 +221,20 @@ Then just describe what you want. Slash commands are available:
 The MCP server exposes Inkline as tools inside Claude Desktop and Claude.ai,
 so you can generate decks as part of any Claude conversation.
 
+Useful knowledge resources for the new institutional workflow:
+
+- `inkline://slide_roles`
+- `inkline://archetypes/full_slide`
+- `inkline://reference_families`
+- `inkline://storyboard_rules`
+
+Local benchmark workflow:
+
+```bash
+inkline ingest-reference benchmark.pptx --family example_family
+inkline apply-curation --family example_family
+```
+
 ### Setup
 
 ```bash
@@ -285,8 +302,13 @@ This reports:
 
 - slide count
 - editable native ratio
+- fully native ratio
+- inspection mode and reliability
 - slides with image fallback
+- slides with intentional raster exceptions
 - per-slide fallback reasons
+
+If the adjacent `.export_metadata.json` sidecar is missing, `inspect-pptx` falls back to a best-effort heuristic and reports that reduced reliability in the JSON output.
 
 ### Audit rendered PPTX
 

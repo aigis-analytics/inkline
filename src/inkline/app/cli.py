@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import webbrowser
 from pathlib import Path
@@ -225,16 +226,20 @@ def cmd_render(args: argparse.Namespace) -> None:
     if not source_path.exists():
         print(f"ERROR: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
+    formats = [fmt.strip() for fmt in str(args.output).split(",") if fmt.strip()]
+    if not formats:
+        formats = ["pdf"]
 
     if source_path.suffix.lower() in {".yaml", ".yml", ".json"}:
         from inkline.app.institutional import render_spec_file
 
-        formats = [fmt.strip() for fmt in str(args.output).split(",") if fmt.strip()]
         artifacts = render_spec_file(
             source_path,
             formats=formats,
             output_dir=args.output_dir,
             editable_institutional=bool(getattr(args, "editable_institutional", False)),
+            brand_override=args.brand,
+            template_override=args.template,
         )
         if artifacts.pdf_path:
             print(f"PDF ready: {artifacts.pdf_path}")
@@ -242,6 +247,8 @@ def cmd_render(args: argparse.Namespace) -> None:
             print(f"PPTX ready: {artifacts.pptx_path}")
         if artifacts.export_metadata_path:
             print(f"Export metadata: {artifacts.export_metadata_path}")
+        if getattr(args, "serve", False):
+            webbrowser.open(_bridge_url())
         if args.watch:
             print(f"[inkline render] Watch mode — monitoring {source_path} for changes...")
             _run_watch(source_path, args)
@@ -288,6 +295,19 @@ def cmd_render(args: argparse.Namespace) -> None:
         audience=deck_meta.get("audience", ""),
         goal=deck_meta.get("goal", ""),
     )
+    from inkline.intelligence.storyboard import resolve_storyboard_spec, write_storyboard_artifacts
+
+    resolved_spec = resolve_storyboard_spec(
+        {
+            "title": deck_meta.get("title", source_path.stem),
+            "audience": deck_meta.get("audience", ""),
+            "reference_family": deck_meta.get("reference_family", ""),
+            "storyboard": deck_meta.get("storyboard", {}),
+            "slides": slides,
+        },
+        source_name=str(source_path),
+    )
+    slides = resolved_spec["slides"]
 
     # Determine output path
     output_dir = _Path("~/.local/share/inkline/output").expanduser()
@@ -296,19 +316,50 @@ def cmd_render(args: argparse.Namespace) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_stem = source_path.stem
     pdf_path = output_dir / f"{out_stem}.pdf"
+    pptx_path = output_dir / f"{out_stem}.pptx"
+    pptx_meta_path = output_dir / f"{out_stem}.export_metadata.json"
+    try:
+        if resolved_spec:
+            write_storyboard_artifacts(resolved_spec, output_dir=output_dir, stem=out_stem)
+    except Exception as exc:
+        print(
+            f"[inkline render] WARNING: could not write storyboard artifacts: {exc}",
+            file=sys.stderr,
+        )
+        raise
 
-    print(f"[inkline render] Exporting to {pdf_path}...")
-    export_typst_slides(
-        slides=slides,
-        output_path=str(pdf_path),
-        brand=brand,
-        template=template,
-    )
+    if "pdf" in formats:
+        print(f"[inkline render] Exporting to {pdf_path}...")
+        export_typst_slides(
+            slides=slides,
+            output_path=str(pdf_path),
+            brand=brand,
+            template=template,
+        )
+
+    if "pptx" in formats:
+        from inkline.pptx import export_pptx_slides
+        from inkline.app.institutional import _portable_sidecar_payload
+        print(f"[inkline render] Exporting to {pptx_path}...")
+        export_pptx_slides(
+            slides=slides,
+            output_path=pptx_path,
+            brand=brand,
+            title=deck_meta.get("title", source_path.stem),
+            source_root=source_path.parent,
+            metadata_path=pptx_meta_path,
+            editable_institutional=bool(getattr(args, "editable_institutional", False)),
+            deck_metadata=_portable_sidecar_payload({
+                "storyboard": resolved_spec.get("_resolved_storyboard", {}),
+                "authoring_trace": resolved_spec.get("_authoring_trace", {}),
+            }),
+        )
 
     # Write notes file
     try:
         from inkline.authoring.notes_writer import write_notes
-        notes_path = write_notes(pdf_path, slides, sections)
+        notes_target = pdf_path if "pdf" in formats else pptx_path
+        notes_path = write_notes(notes_target, slides, sections)
         print(f"[inkline render] Notes → {notes_path}")
     except Exception as exc:
         print(f"[inkline render] WARNING: notes writer failed: {exc}", file=sys.stderr)
@@ -320,11 +371,45 @@ def cmd_render(args: argparse.Namespace) -> None:
         if warnings:
             print(format_report(warnings))
 
-    print(f"PDF ready: {pdf_path}")
+    if "pdf" in formats:
+        print(f"PDF ready: {pdf_path}")
+    if "pptx" in formats:
+        print(f"PPTX ready: {pptx_path}")
+        print(f"Export metadata: {pptx_meta_path}")
+
+    if getattr(args, "serve", False):
+        webbrowser.open(_bridge_url())
 
     if args.watch:
         print(f"[inkline render] Watch mode — monitoring {source_path} for changes...")
         _run_watch(source_path, args)
+
+
+def cmd_ingest_reference(args: argparse.Namespace) -> None:
+    try:
+        from inkline.intelligence.reference_ingest import ingest_reference_pptx
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    payload = ingest_reference_pptx(
+        args.pptx,
+        family_id=args.family,
+        license_classification=args.license,
+        notes=[args.note] if args.note else None,
+    )
+    print(f"Reference family ingested: {payload['reference_family_id']}")
+    print(f"Catalog path: ~/.config/inkline/reference_catalog/{payload['reference_family_id']}")
+
+
+def cmd_apply_curation(args: argparse.Namespace) -> None:
+    try:
+        from inkline.intelligence.reference_ingest import apply_curation_overrides
+    except ImportError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    payload = apply_curation_overrides(args.family)
+    print(f"Curation applied: {payload['reference_family_id']}")
+    print(f"Override log entries: {len(payload.get('override_log', []))}")
 
 
 def _run_watch(md_path: "Path", args: "argparse.Namespace") -> None:
@@ -352,7 +437,7 @@ def _run_watch(md_path: "Path", args: "argparse.Namespace") -> None:
                 _last_render[0] = now
                 print(f"\n[inkline watch] Change detected — re-rendering...")
                 try:
-                    cmd_render(args)
+                    cmd_render(_args_for_watch_rerender(args))
                 except Exception as exc:
                     print(f"[inkline watch] Render error: {exc}", file=sys.stderr)
 
@@ -366,6 +451,17 @@ def _run_watch(md_path: "Path", args: "argparse.Namespace") -> None:
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
+
+def _bridge_url() -> str:
+    return os.environ.get("INKLINE_BRIDGE_URL", "http://localhost:8082").rstrip("/") + "/"
+
+
+def _args_for_watch_rerender(args: argparse.Namespace) -> argparse.Namespace:
+    payload = dict(vars(args))
+    payload["watch"] = False
+    payload["serve"] = False
+    return argparse.Namespace(**payload)
 
 
 def cmd_backend_coverage(_args: argparse.Namespace) -> None:
@@ -408,10 +504,18 @@ def cmd_knowledge(args: argparse.Namespace) -> None:
     elif sub == "search":
         query = args.query.lower()
         resources = list_resources()
-        matches = [
-            r for r in resources
-            if query in r["uri"].lower() or query in r.get("description", "").lower()
-        ]
+        matches = []
+        for resource in resources:
+            haystacks = [
+                resource["uri"].lower(),
+                resource.get("description", "").lower(),
+            ]
+            try:
+                haystacks.append(read_resource(resource["uri"]).lower())
+            except Exception:
+                pass
+            if any(query in haystack for haystack in haystacks):
+                matches.append(resource)
         if not matches:
             print(f"No resources matched {args.query!r}")
         else:
@@ -484,20 +588,20 @@ def cmd_critique(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        from inkline.intelligence.vishwakarma import critique_pdf
+        from inkline.app.institutional import audit_pdf_artifact
     except ImportError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
     print(f"[inkline critique] Auditing {pdf_path.name} with rubric '{args.rubric}'...")
     try:
-        result = critique_pdf(
+        result = audit_pdf_artifact(
             pdf_path=str(pdf_path),
             rubric=args.rubric,
             brand=args.brand,
         )
         import json as _json
-        print(_json.dumps(result.to_dict(), indent=2))
+        print(_json.dumps(result, indent=2))
     except Exception as exc:
         print(f"ERROR: critique failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -554,11 +658,8 @@ def cmd_draft(args: argparse.Namespace) -> None:
     print("Navigate to http://localhost:{}/  to use the conversational interface.".format(
         getattr(args, "port", 8082)
     ))
-    from inkline.app.claude_bridge import main as bridge_main
-    bridge_main(
-        port=getattr(args, "port", 8082),
-        backend_name=getattr(args, "backend", "auto"),
-    )
+    setattr(args, "no_browser", getattr(args, "no_browser", False))
+    cmd_serve(args)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -643,6 +744,28 @@ def main(argv: list[str] | None = None) -> None:
     ingest_p.add_argument("--name", dest="deck_name", default="",
                           help="Deck identifier (default: filename stem)")
     ingest_p.set_defaults(func=cmd_ingest)
+
+    ingest_ref_p = sub.add_parser(
+        "ingest-reference",
+        help="Ingest a benchmark PPTX deck into the local reference-family catalog",
+    )
+    ingest_ref_p.add_argument("pptx", metavar="PPTX", help="Path to the PPTX file")
+    ingest_ref_p.add_argument("--family", required=True, metavar="FAMILY",
+                              help="Reference family identifier")
+    ingest_ref_p.add_argument("--license", default="private_internal",
+                              choices=["public_reusable", "public_reference_only", "private_internal", "client_confidential"],
+                              help="License / confidentiality classification")
+    ingest_ref_p.add_argument("--note", default="", metavar="TEXT",
+                              help="Optional ingest note")
+    ingest_ref_p.set_defaults(func=cmd_ingest_reference)
+
+    curate_ref_p = sub.add_parser(
+        "apply-curation",
+        help="Apply local curation_overrides.yaml to a reference family",
+    )
+    curate_ref_p.add_argument("--family", required=True, metavar="FAMILY",
+                              help="Reference family identifier")
+    curate_ref_p.set_defaults(func=cmd_apply_curation)
 
     # inkline render
     render_p = sub.add_parser(

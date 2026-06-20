@@ -2,11 +2,45 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+import types
 from unittest.mock import patch
 
 import pytest
 
-pytest.importorskip("fastmcp")
+
+class _FakeFastMCP:
+    def __init__(self, *args, **kwargs):
+        self.tools = []
+        self.resources = []
+
+    def tool(self, func=None, **_kwargs):
+        def decorator(fn):
+            self.tools.append(fn)
+            return fn
+
+        if func is not None and callable(func):
+            return decorator(func)
+        return decorator
+
+    def resource(self, uri=None, **kwargs):
+        def decorator(fn):
+            self.resources.append({"uri": uri, **kwargs, "fn": fn})
+            return fn
+
+        return decorator
+
+    def run(self, **_kwargs):
+        return None
+
+
+try:
+    import fastmcp as _fastmcp  # type: ignore # noqa: F401
+except ImportError:
+    fake_fastmcp = types.ModuleType("fastmcp")
+    fake_fastmcp.FastMCP = _FakeFastMCP
+    sys.modules.setdefault("fastmcp", fake_fastmcp)
 
 from inkline.app.mcp_server import inkline_render_document, inkline_render_spec
 
@@ -57,3 +91,18 @@ def test_inkline_render_spec_emits_docx(tmp_path):
     assert result["docx_path"].endswith("report_out.docx")
     assert not mock_pdf.called
     assert mock_docx.called
+
+
+def test_mcp_server_registers_knowledge_resources(monkeypatch):
+    fake_fastmcp = types.ModuleType("fastmcp")
+    fake_fastmcp.FastMCP = _FakeFastMCP
+    monkeypatch.setitem(sys.modules, "fastmcp", fake_fastmcp)
+    sys.modules.pop("inkline.app.mcp_server", None)
+
+    module = importlib.import_module("inkline.app.mcp_server")
+    resource_uris = {item["uri"] for item in module.mcp.resources}
+
+    assert "inkline://layouts" in resource_uris
+    assert "inkline://slide_roles" in resource_uris
+    assert "inkline://archetypes/full_slide" in resource_uris
+    assert "inkline://{resource_path}" in resource_uris

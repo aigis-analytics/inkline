@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,7 +40,23 @@ class RenderArtifacts:
     export_metadata_path: Path | None = None
 
 
+def _portable_sidecar_payload(value: Any) -> Any:
+    """Strip host-bound absolute-path fields from exported sidecar metadata."""
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in {"source_name", "deck_ref", "storyboard_path", "authoring_trace_path"}:
+                continue
+            cleaned[key] = _portable_sidecar_payload(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_portable_sidecar_payload(item) for item in value]
+    return value
+
+
 def load_spec_file(path: str | Path) -> dict[str, Any]:
+    from inkline.intelligence.storyboard import resolve_storyboard_spec
+
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
@@ -60,7 +77,7 @@ def load_spec_file(path: str | Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Spec root must be a mapping")
     data.setdefault("slides", [])
-    return data
+    return resolve_storyboard_spec(data, source_name=str(path))
 
 
 def render_spec_file(
@@ -69,6 +86,8 @@ def render_spec_file(
     formats: list[str],
     output_dir: str | Path | None = None,
     editable_institutional: bool = False,
+    brand_override: str = "",
+    template_override: str = "",
 ) -> RenderArtifacts:
     from inkline.pptx import export_pptx_slides
     from inkline.typst import export_typst_slides
@@ -76,14 +95,25 @@ def render_spec_file(
     spec = load_spec_file(spec_path)
     slides = spec.get("slides", [])
     title = str(spec.get("title", Path(spec_path).stem))
-    brand = str(spec.get("brand", "minimal"))
-    template = str(spec.get("template", "consulting"))
+    brand = str(brand_override or spec.get("brand", "minimal"))
+    template = str(template_override or spec.get("template", "consulting"))
 
     out_dir = Path(output_dir) if output_dir else DEFAULT_OUTPUT_ROOT / Path(spec_path).stem
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(spec_path).stem
 
     artifacts = RenderArtifacts()
+    artifact_paths = {}
+    try:
+        from inkline.intelligence.storyboard import write_storyboard_artifacts
+        artifact_paths = write_storyboard_artifacts(spec, output_dir=out_dir, stem=stem)
+    except Exception as exc:
+        artifact_paths = {}
+        print(
+            f"[inkline render] WARNING: could not write storyboard artifacts: {exc}",
+            file=sys.stderr,
+        )
+        raise
 
     if "pdf" in formats:
         artifacts.pdf_path = out_dir / f"{stem}.pdf"
@@ -105,6 +135,19 @@ def render_spec_file(
             source_root=Path(spec_path).parent,
             metadata_path=artifacts.export_metadata_path,
             editable_institutional=editable_institutional,
+            deck_metadata=_portable_sidecar_payload({
+                "storyboard": spec.get("_resolved_storyboard", {}),
+                "authoring_trace": spec.get("_authoring_trace", {}),
+                # Keep the export sidecar portable across machines.
+                "artifact_files": {
+                    "storyboard": artifact_paths.get("storyboard_path", Path("")).name
+                    if artifact_paths.get("storyboard_path")
+                    else "",
+                    "authoring_trace": artifact_paths.get("authoring_trace_path", Path("")).name
+                    if artifact_paths.get("authoring_trace_path")
+                    else "",
+                },
+            }),
         )
 
     return artifacts
@@ -116,9 +159,18 @@ def inspect_pptx(pptx_path: str | Path) -> dict[str, Any]:
 
     pptx_path = Path(pptx_path)
     prs = Presentation(str(pptx_path))
+    export_meta_path = pptx_path.with_suffix(".export_metadata.json")
+    export_meta = None
+    if export_meta_path.exists():
+        try:
+            export_meta = json.loads(export_meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            export_meta = None
     slide_entries: list[dict[str, Any]] = []
-    native_count = 0
+    editable_count = 0
+    fully_native_count = 0
     fallback_count = 0
+    exception_count = 0
 
     slide_width = prs.slide_width
     slide_height = prs.slide_height
@@ -144,12 +196,27 @@ def inspect_pptx(pptx_path: str | Path) -> dict[str, Any]:
 
         status = "native"
         fallback_reason = ""
-        if full_slide_picture and shape_count <= 2:
+        editability_exceptions: list[str] = []
+        if export_meta and idx <= len(export_meta.get("slides", [])):
+            exported = export_meta["slides"][idx - 1]
+            status = exported.get("status", status)
+            fallback_reason = exported.get("fallback_reason", "")
+            editability_exceptions = list(exported.get("pptx_editability_exceptions", []))
+            if status == "fallback":
+                fallback_count += 1
+            elif status == "native_with_exceptions":
+                exception_count += 1
+                editable_count += 1
+            else:
+                editable_count += 1
+                fully_native_count += 1
+        elif full_slide_picture and shape_count <= 2:
             status = "fallback"
             fallback_reason = "full_slide_picture"
             fallback_count += 1
         else:
-            native_count += 1
+            editable_count += 1
+            fully_native_count += 1
 
         slide_entries.append(
             {
@@ -159,17 +226,31 @@ def inspect_pptx(pptx_path: str | Path) -> dict[str, Any]:
                 "picture_count": picture_like,
                 "status": status,
                 "fallback_reason": fallback_reason,
+                "pptx_editability_exceptions": editability_exceptions,
             }
         )
 
     total = len(slide_entries) or 1
+    inspection_mode = "metadata" if export_meta else "heuristic"
     return {
         "pptx_path": str(pptx_path),
         "slide_count": len(slide_entries),
-        "editable_native_ratio": native_count / total,
+        "editable_native_ratio": editable_count / total,
+        "fully_native_ratio": fully_native_count / total,
         "slides_with_image_fallback": [
             s["slide_number"] for s in slide_entries if s["status"] == "fallback"
         ],
+        "slides_with_editability_exceptions": [
+            s["slide_number"] for s in slide_entries if s["status"] == "native_with_exceptions"
+        ],
+        "inspection_mode": inspection_mode,
+        "reliability": "high" if export_meta else "best_effort",
+        "warning": (
+            ""
+            if export_meta
+            else "Best-effort PPTX inspection without adjacent export metadata; "
+            "native/fallback classification may be inaccurate."
+        ),
         "fallback_reasons": {
             str(s["slide_number"]): s["fallback_reason"]
             for s in slide_entries
@@ -242,18 +323,151 @@ def audit_pptx(
         rendered_pdf = pptx_path.with_suffix(".rendered.pdf")
         rendered_pdf.write_bytes(rendered_tmp.read_bytes())
 
-    os.environ.setdefault("INKLINE_VISION_PROVIDER", "codex_cli")
+    provider = os.environ.get("INKLINE_VISION_PROVIDER", "")
+    if not provider:
+        provider = "codex_cli"
+        os.environ["INKLINE_VISION_PROVIDER"] = provider
     result = critique_pdf(str(rendered_pdf), rubric=rubric, brand=brand).to_dict()
     result["artifact_type"] = "pptx_render"
     result["pptx_path"] = str(pptx_path)
     result["rendered_pdf_path"] = str(rendered_pdf)
-    result["provider_trace"] = [{"provider": "codex_cli", "source": "env/default"}]
+    result["provider_trace"] = [{"provider": provider, "source": "env/requested"}]
+
+    export_meta_path = pptx_path.with_suffix(".export_metadata.json")
+    if export_meta_path.exists():
+        try:
+            export_meta = json.loads(export_meta_path.read_text(encoding="utf-8"))
+            result["export_metadata_path"] = str(export_meta_path)
+            result["storyboard_schema_version"] = (
+                export_meta.get("deck_metadata", {})
+                .get("storyboard", {})
+                .get("schema_version")
+            )
+            result["storyboard_audit"] = _aggregate_storyboard_audit(
+                result=result,
+                slide_meta=export_meta.get("slides", []),
+                fallback_key="status",
+            )
+        except Exception as exc:
+            result["storyboard_audit_error"] = str(exc)
+    else:
+        result["storyboard_audit"] = {
+            "schema_name": "deck_audit",
+            "schema_version": 1,
+            "deck_verdict": "needs_human_signoff",
+            "deck_required_fix_count": 1,
+            "slides_failed_hard_checks": [],
+            "slides_requiring_human_signoff": [],
+            "dimensions_not_evaluated": [
+                {
+                    "slide_index": None,
+                    "dimensions": ["visual_quality_metadata_context", "storyboard_metadata"],
+                }
+            ],
+            "warning_budget_used": 0,
+            "slides": [],
+            "reason": "PPTX export metadata sidecar missing; storyboard-aware audit dimensions unavailable.",
+        }
 
     if output_path:
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
+
+
+def audit_pdf_artifact(
+    pdf_path: str | Path,
+    *,
+    rubric: str = "institutional",
+    brand: str = "",
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    from inkline.intelligence.vishwakarma import critique_pdf
+
+    pdf_path = Path(pdf_path)
+    provider = os.environ.get("INKLINE_VISION_PROVIDER", "")
+    if not provider:
+        provider = "codex_cli"
+        os.environ["INKLINE_VISION_PROVIDER"] = provider
+    result = critique_pdf(str(pdf_path), rubric=rubric, brand=brand).to_dict()
+    result["artifact_type"] = "pdf"
+    result["pdf_path"] = str(pdf_path)
+    result["provider_trace"] = [{"provider": provider, "source": "env/requested"}]
+
+    storyboard_path = pdf_path.with_name(f"{pdf_path.stem}.storyboard.json")
+    if storyboard_path.exists():
+        try:
+            storyboard = json.loads(storyboard_path.read_text(encoding="utf-8"))
+            result["storyboard_schema_version"] = storyboard.get("schema_version")
+            result["storyboard_audit"] = _aggregate_storyboard_audit(
+                result=result,
+                slide_meta=storyboard.get("slides", []),
+                fallback_key="fallback_used",
+            )
+        except Exception as exc:
+            result["storyboard_audit_error"] = str(exc)
+    else:
+        result["storyboard_audit"] = {
+            "schema_name": "deck_audit",
+            "schema_version": 1,
+            "deck_verdict": "needs_human_signoff",
+            "deck_required_fix_count": 1,
+            "slides_failed_hard_checks": [],
+            "slides_requiring_human_signoff": [],
+            "dimensions_not_evaluated": [
+                {
+                    "slide_index": None,
+                    "dimensions": ["storyboard_metadata"],
+                }
+            ],
+            "warning_budget_used": 0,
+            "slides": [],
+            "reason": "Storyboard metadata missing; storyboard-aware audit dimensions unavailable.",
+        }
+
+    if output_path:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    return result
+
+
+def _aggregate_storyboard_audit(
+    *,
+    result: dict[str, Any],
+    slide_meta: list[dict[str, Any]],
+    fallback_key: str,
+) -> dict[str, Any]:
+    from inkline.intelligence.audit_storyboard import aggregate_deck_audit, evaluate_slide_audit
+
+    critiques_by_index = {
+        int(critique.get("slide_index", 0)): critique
+        for critique in result.get("slide_critiques", [])
+        if int(critique.get("slide_index", 0)) > 0
+    }
+    slide_results = []
+    total_slides = max(len(slide_meta), max(critiques_by_index, default=0))
+    for idx in range(1, total_slides + 1):
+        critique = critiques_by_index.get(idx, {})
+        meta = slide_meta[idx - 1] if idx <= len(slide_meta) else {}
+        storyboard = meta.get("storyboard", meta)
+        critique_verdict = (
+            "INCOMPLETE"
+            if not critique or not meta
+            else str(critique.get("verdict", "INCOMPLETE"))
+        )
+        slide_results.append(
+            evaluate_slide_audit(
+                slide_index=idx,
+                storyboard=storyboard,
+                critique_verdict=critique_verdict,
+                archetype_declared=bool((storyboard or {}).get("archetype")),
+                reference_family_declared=bool((storyboard or {}).get("reference_family")),
+                fallback_used=bool(meta.get(fallback_key) == "fallback" if fallback_key == "status" else meta.get(fallback_key)),
+            )
+        )
+    return aggregate_deck_audit(slide_results)
 
 
 def compare_rendered_pdfs(

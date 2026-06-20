@@ -65,6 +65,28 @@ from inkline.intelligence.vishwakarma import (
     AUDIT_MANDATORY,
     ARCHON_OVERSIGHT,
 )
+from inkline.intelligence.storyboard import (
+    resolve_storyboard_spec,
+    write_storyboard_artifacts,
+)
+from inkline.intelligence.full_slide_archetypes import (
+    list_full_slide_archetypes,
+    get_full_slide_archetype,
+    compile_slide_manifest,
+    materialize_compiled_slide_spec,
+)
+from inkline.intelligence.reference_catalog import (
+    list_reference_families,
+    load_reference_family,
+)
+from inkline.intelligence.reference_ingest import (
+    ingest_reference_pptx,
+    apply_curation_overrides,
+)
+from inkline.intelligence.audit_storyboard import (
+    evaluate_slide_audit,
+    aggregate_deck_audit,
+)
 
 __all__ = [
     "DesignAdvisor",
@@ -104,6 +126,19 @@ __all__ = [
     "BRIDGE_FIRST",
     "AUDIT_MANDATORY",
     "ARCHON_OVERSIGHT",
+    # Storyboard/archetype system
+    "resolve_storyboard_spec",
+    "write_storyboard_artifacts",
+    "list_full_slide_archetypes",
+    "get_full_slide_archetype",
+    "compile_slide_manifest",
+    "materialize_compiled_slide_spec",
+    "list_reference_families",
+    "load_reference_family",
+    "ingest_reference_pptx",
+    "apply_curation_overrides",
+    "evaluate_slide_audit",
+    "aggregate_deck_audit",
     # Impeccable design intelligence
     "check_anti_patterns",
     "AntiPatternResult",

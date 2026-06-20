@@ -144,6 +144,10 @@ class TestReadPlaybookResource:
         with pytest.raises(ResourceNotFoundError):
             read_resource("inkline://playbooks/totally_fake_playbook_xyz")
 
+    def test_playbook_path_traversal_is_blocked(self):
+        with pytest.raises(ResourceNotFoundError):
+            read_resource("inkline://playbooks/../../../../AGENTS")
+
 
 # ---------------------------------------------------------------------------
 # Playbook index — front-matter

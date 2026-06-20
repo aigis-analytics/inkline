@@ -36,6 +36,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 try:
@@ -66,6 +67,49 @@ mcp = FastMCP(
         "after rendering."
     ),
 )
+
+
+def _register_mcp_resources() -> None:
+    """Expose the `inkline://...` knowledge registry over the actual MCP transport."""
+    try:
+        from inkline.app.mcp_resources import list_resources, read_resource
+    except Exception:
+        return
+
+    resource = getattr(mcp, "resource", None)
+    if resource is None:
+        return
+
+    def _make_reader(uri: str):
+        def _reader() -> str:
+            return read_resource(uri)
+        return _reader
+
+    for item in list_resources():
+        uri = str(item.get("uri", "")).strip()
+        if not uri:
+            continue
+        reader = _make_reader(uri)
+        reader.__name__ = re.sub(r"[^a-zA-Z0-9_]+", "_", uri).strip("_") or "inkline_resource"
+        reader.__doc__ = str(item.get("description", "") or item.get("name", "")).strip()
+        resource(
+            uri,
+            name=str(item.get("name", "")).strip() or None,
+            description=str(item.get("description", "")).strip() or None,
+            mime_type=str(item.get("mimeType", "text/markdown")).strip() or None,
+        )(reader)
+
+    @resource(
+        "inkline://{resource_path}",
+        name="Inkline Knowledge Resource",
+        description="Dynamic Inkline knowledge-base resource reader.",
+        mime_type="text/markdown",
+    )
+    def _read_dynamic_resource(resource_path: str) -> str:
+        return read_resource(f"inkline://{resource_path}")
+
+
+_register_mcp_resources()
 
 
 # ---------------------------------------------------------------------------

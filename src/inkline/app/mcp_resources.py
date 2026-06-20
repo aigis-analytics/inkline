@@ -32,10 +32,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
+_MCP_REFERENCE_LICENSES = {"public_reusable", "public_reference_only"}
 
 # Root of the inkline source tree
 _SRC_ROOT = Path(__file__).parent.parent
@@ -48,6 +50,9 @@ _ANTI_PATTERNS_MODULE = _SRC_ROOT / "intelligence" / "anti_patterns.py"
 
 class ResourceNotFoundError(KeyError):
     """Raised when a resource URI is not found in the registry."""
+
+
+_SAFE_RESOURCE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 # ---------------------------------------------------------------------------
@@ -295,21 +300,13 @@ def _get_anti_patterns() -> str:
 
 def _get_brands_list() -> str:
     """List all available brands."""
-    brands = []
-    # Check installed brands directory
-    if _BRANDS_DIR.exists():
-        for f in sorted(_BRANDS_DIR.glob("*.py")):
-            if not f.name.startswith("_"):
-                brands.append(f.stem)
-    # Check plugin brands in ~/.config/inkline/brands/
-    plugin_dir = Path("~/.config/inkline/brands").expanduser()
-    if plugin_dir.exists():
-        for f in sorted(plugin_dir.glob("*.py")):
-            if not f.name.startswith("_"):
-                brands.append(f"{f.stem} (private plugin)")
-
+    try:
+        from inkline.brands import list_brands
+        brands = list_brands()
+    except Exception:
+        brands = []
     if not brands:
-        brands = ["minimal (default)"]
+        brands = ["minimal"]
 
     lines = ["# Available Inkline Brands\n"]
     for b in brands:
@@ -325,7 +322,17 @@ def _get_brand_detail(name: str) -> str:
         brand = get_brand(name)
         if brand is None:
             raise ResourceNotFoundError(f"Brand not found: {name!r}")
-        return f"# Brand: {name}\n\n```json\n{json.dumps(brand, indent=2)}\n```"
+        if is_dataclass(brand):
+            payload = asdict(brand)
+        elif hasattr(brand, "__dict__"):
+            payload = {
+                key: value
+                for key, value in vars(brand).items()
+                if not key.startswith("_")
+            }
+        else:
+            payload = {"name": str(brand)}
+        return f"# Brand: {name}\n\n```json\n{json.dumps(payload, indent=2)}\n```"
     except ResourceNotFoundError:
         raise
     except Exception as exc:
@@ -384,6 +391,156 @@ def _get_archetypes() -> str:
     if p.exists():
         return p.read_text(encoding="utf-8")
     return "# Infographic Archetypes\n\nSee `intelligence/playbooks/infographic_styles.md`."
+
+
+def _get_slide_roles() -> str:
+    from inkline.intelligence.full_slide_archetypes import ROLE_TO_DEFAULT_ARCHETYPE
+
+    lines = ["# Inkline Slide Roles\n"]
+    for role, archetype in sorted(ROLE_TO_DEFAULT_ARCHETYPE.items()):
+        lines.append(f"- `{role}` → `{archetype}`")
+    return "\n".join(lines)
+
+
+def _get_single_slide_role(role: str) -> str:
+    from inkline.intelligence.full_slide_archetypes import (
+        ROLE_TO_DEFAULT_ARCHETYPE,
+        get_full_slide_archetype,
+    )
+
+    if role not in ROLE_TO_DEFAULT_ARCHETYPE:
+        raise ResourceNotFoundError(f"Unknown slide role: {role!r}")
+    archetype_id = ROLE_TO_DEFAULT_ARCHETYPE.get(role, "")
+    if not archetype_id:
+        payload = {
+            "role": role,
+            "default_archetype": "",
+            "functional_roles": [role],
+            "visual_intent": {},
+            "compile_targets": {},
+        }
+        return f"# Slide Role: {role}\n\n```json\n{json.dumps(payload, indent=2)}\n```"
+    archetype = get_full_slide_archetype(archetype_id)
+    payload = {
+        "role": role,
+        "default_archetype": archetype_id,
+        "functional_roles": archetype.get("functional_roles", []),
+        "visual_intent": archetype.get("visual_intent", {}),
+        "compile_targets": archetype.get("compile_targets", {}),
+    }
+    return f"# Slide Role: {role}\n\n```json\n{json.dumps(payload, indent=2)}\n```"
+
+
+def _get_full_slide_archetypes() -> str:
+    from inkline.intelligence.full_slide_archetypes import list_full_slide_archetypes
+
+    lines = ["# Inkline Full-Slide Archetypes\n"]
+    for item in list_full_slide_archetypes():
+        lines.append(f"## {item['id']}")
+        lines.append(f"- roles: {', '.join(item.get('functional_roles', []))}")
+        lines.append(f"- compile target: {item.get('compile_targets', {}).get('layout_id', '')}")
+        lines.append(f"- tone: {item.get('visual_intent', {}).get('tone', '')}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _get_single_full_slide_archetype(archetype_id: str) -> str:
+    from inkline.intelligence.full_slide_archetypes import get_full_slide_archetype
+
+    item = get_full_slide_archetype(archetype_id)
+    return f"# Full-Slide Archetype: {archetype_id}\n\n```json\n{json.dumps(item, indent=2)}\n```"
+
+
+def _get_reference_families() -> str:
+    from inkline.intelligence.reference_catalog import (
+        list_reference_families,
+        sanitize_reference_family_for_mcp,
+    )
+
+    lines = ["# Inkline Reference Families\n"]
+    families = [
+        item
+        for item in list_reference_families()
+        if item.get("license_classification") in _MCP_REFERENCE_LICENSES
+    ]
+    if not families:
+        lines.append("No reference families currently installed.")
+    for item in families:
+        safe = sanitize_reference_family_for_mcp(item)
+        lines.append(f"## {item.get('reference_family_id', '')}")
+        lines.append(f"- license: {safe.get('license_classification', '')}")
+        lines.append(f"- slide_count: {len(safe.get('slides', []))}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _get_single_reference_family(reference_family_id: str) -> str:
+    from inkline.intelligence.reference_catalog import (
+        load_reference_family,
+        sanitize_reference_family_for_mcp,
+    )
+
+    loaded = load_reference_family(reference_family_id)
+    if loaded.get("license_classification") not in _MCP_REFERENCE_LICENSES:
+        raise ResourceNotFoundError(f"Reference family not exposed via MCP: {reference_family_id!r}")
+    item = sanitize_reference_family_for_mcp(loaded)
+    return f"# Reference Family: {reference_family_id}\n\n```json\n{json.dumps(item, indent=2)}\n```"
+
+
+def _get_reference_slides() -> str:
+    from inkline.intelligence.reference_catalog import list_reference_families
+
+    lines = ["# Inkline Reference Slides\n"]
+    found = False
+    for family in list_reference_families():
+        if family.get("license_classification") not in _MCP_REFERENCE_LICENSES:
+            continue
+        for slide in family.get("slides", []):
+            slide_id = slide.get("reference_slide_id", "")
+            if not slide_id:
+                continue
+            found = True
+            lines.append(f"- `{slide_id}` ({family.get('reference_family_id', '')})")
+    if not found:
+        lines.append("No reference slides currently installed.")
+    return "\n".join(lines)
+
+
+def _get_single_reference_slide(reference_slide_id: str) -> str:
+    from inkline.intelligence.reference_catalog import (
+        list_reference_families,
+        load_reference_family,
+        load_reference_slide,
+        sanitize_reference_slide_for_mcp,
+    )
+
+    loaded = load_reference_slide(reference_slide_id)
+    family_id = str(loaded.get("reference_family_id") or "").strip()
+    if not family_id:
+        for family in list_reference_families():
+            for slide in family.get("slides", []):
+                if slide.get("reference_slide_id") == reference_slide_id:
+                    family_id = str(family.get("reference_family_id", "")).strip()
+                    break
+            if family_id:
+                break
+    if family_id:
+        family = load_reference_family(family_id)
+        if family.get("license_classification") not in _MCP_REFERENCE_LICENSES:
+            raise ResourceNotFoundError(f"Reference slide not exposed via MCP: {reference_slide_id!r}")
+    item = sanitize_reference_slide_for_mcp(loaded)
+    return f"# Reference Slide: {reference_slide_id}\n\n```json\n{json.dumps(item, indent=2)}\n```"
+
+
+def _get_storyboard_rules() -> str:
+    return (
+        "# Inkline Storyboard Rules\n\n"
+        "- Every slide gets a stable `slide_id`.\n"
+        "- Metadata precedence: explicit overrides > slide object storyboard > top-level storyboard > inferred defaults.\n"
+        "- Execute Mode renders resolved metadata only.\n"
+        "- Audit consumes the same resolved metadata plus rendered artifacts.\n"
+        "- Missing required evaluated dimensions escalate client-facing decks to human sign-off.\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +615,36 @@ def list_resources() -> list[dict]:
             "mimeType": "text/markdown",
         },
         {
+            "uri": "inkline://slide_roles",
+            "name": "Slide Roles",
+            "description": "Functional page roles mapped to default full-slide archetypes",
+            "mimeType": "text/markdown",
+        },
+        {
+            "uri": "inkline://archetypes/full_slide",
+            "name": "Full-Slide Archetypes",
+            "description": "Reference-driven full-slide design archetypes",
+            "mimeType": "text/markdown",
+        },
+        {
+            "uri": "inkline://reference_families",
+            "name": "Reference Families",
+            "description": "Installed benchmark/reference deck families",
+            "mimeType": "text/markdown",
+        },
+        {
+            "uri": "inkline://reference_slides",
+            "name": "Reference Slides",
+            "description": "Installed reference slide manifests and exemplars",
+            "mimeType": "text/markdown",
+        },
+        {
+            "uri": "inkline://storyboard_rules",
+            "name": "Storyboard Rules",
+            "description": "Shared authoring/audit rules for storyboard-aware decks",
+            "mimeType": "text/markdown",
+        },
+        {
             "uri": "inkline://brands",
             "name": "Brand Registry",
             "description": "List of available brands",
@@ -490,6 +677,55 @@ def list_resources() -> list[dict]:
             "description": meta.get("description", ""),
             "mimeType": "text/markdown",
         })
+
+    try:
+        from inkline.intelligence.full_slide_archetypes import ROLE_TO_DEFAULT_ARCHETYPE
+        for role in sorted(ROLE_TO_DEFAULT_ARCHETYPE):
+            resources.append({
+                "uri": f"inkline://slide_roles/{role}",
+                "name": f"Slide Role: {role}",
+                "description": f"Detail for slide role {role}",
+                "mimeType": "text/markdown",
+            })
+    except Exception:
+        pass
+
+    try:
+        from inkline.intelligence.full_slide_archetypes import list_full_slide_archetypes
+        for item in list_full_slide_archetypes():
+            resources.append({
+                "uri": f"inkline://archetypes/full_slide/{item['id']}",
+                "name": f"Full-Slide Archetype: {item['id']}",
+                "description": f"Roles: {', '.join(item.get('functional_roles', []))}",
+                "mimeType": "text/markdown",
+            })
+    except Exception:
+        pass
+
+    try:
+        from inkline.intelligence.reference_catalog import list_reference_families
+        for item in list_reference_families():
+            if item.get("license_classification") not in _MCP_REFERENCE_LICENSES:
+                continue
+            family_id = item.get("reference_family_id", "")
+            resources.append({
+                "uri": f"inkline://reference_families/{family_id}",
+                "name": f"Reference Family: {family_id}",
+                "description": item.get("license_classification", ""),
+                "mimeType": "text/markdown",
+            })
+            for slide in item.get("slides", []):
+                slide_id = slide.get("reference_slide_id", "")
+                if not slide_id:
+                    continue
+                resources.append({
+                    "uri": f"inkline://reference_slides/{slide_id}",
+                    "name": f"Reference Slide: {slide_id}",
+                    "description": slide.get("role", "") or family_id,
+                    "mimeType": "text/markdown",
+                })
+    except Exception:
+        pass
 
     return resources
 
@@ -531,6 +767,9 @@ def read_resource(uri: str) -> str:
     # inkline://playbooks/<name>
     if uri.startswith("inkline://playbooks/"):
         name = uri[len("inkline://playbooks/"):]
+        index = _build_playbook_index()
+        if not name or not _SAFE_RESOURCE_NAME.fullmatch(name) or name not in index:
+            raise ResourceNotFoundError(f"Playbook not found: {name!r}")
         p = _PLAYBOOKS_DIR / f"{name}.md"
         if not p.exists():
             raise ResourceNotFoundError(f"Playbook not found: {name!r}")
@@ -552,6 +791,37 @@ def read_resource(uri: str) -> str:
     # inkline://archetypes
     if uri == "inkline://archetypes":
         return _get_archetypes()
+
+    if uri == "inkline://slide_roles":
+        return _get_slide_roles()
+
+    if uri.startswith("inkline://slide_roles/"):
+        role = uri[len("inkline://slide_roles/"):]
+        return _get_single_slide_role(role)
+
+    if uri == "inkline://archetypes/full_slide":
+        return _get_full_slide_archetypes()
+
+    if uri.startswith("inkline://archetypes/full_slide/"):
+        archetype_id = uri[len("inkline://archetypes/full_slide/"):]
+        return _get_single_full_slide_archetype(archetype_id)
+
+    if uri == "inkline://reference_families":
+        return _get_reference_families()
+
+    if uri.startswith("inkline://reference_families/"):
+        family_id = uri[len("inkline://reference_families/"):]
+        return _get_single_reference_family(family_id)
+
+    if uri == "inkline://reference_slides":
+        return _get_reference_slides()
+
+    if uri.startswith("inkline://reference_slides/"):
+        slide_id = uri[len("inkline://reference_slides/"):]
+        return _get_single_reference_slide(slide_id)
+
+    if uri == "inkline://storyboard_rules":
+        return _get_storyboard_rules()
 
     # inkline://brands
     if uri == "inkline://brands":

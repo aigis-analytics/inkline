@@ -6,11 +6,18 @@ Inkline is two products sharing a codebase:
 
 1. **Execution Engine.** A deterministic, fast, no-LLM renderer. Given a structured markdown spec (typed layouts + `freeform` primitives + `_image:` directives), it produces PDF, PPTX, or HTML for decks/specs, plus PDF/DOCX/HTML for report-style documents. Brand, theme, and font systems are pure-Python. No Claude required at render time.
 
-2. **Design Knowledge Base.** Accumulated playbooks, slide-type catalogue, anti-pattern library, and archetypes — exposed as 17 MCP resources (`inkline://...`) that Claude Code pulls into context when writing a spec.
+2. **Design Knowledge Base.** Accumulated playbooks, slide-type catalogue, anti-pattern library, archetypes, and storyboard/reference-family guidance — exposed as MCP resources (`inkline://...`) that Claude Code pulls into context when writing a spec.
 
 **Claude Code becomes the design intelligence.** It reads the knowledge base, writes a precise spec with explicit `_layout:` directives, and hands it to the execution engine. The LLM-design path (DesignAdvisor, agentic `/prompt`, two-phase loop) remains fully functional as opt-in **Draft Mode**.
 
 Ships with: 90 built-in themes, 37 slide templates, 22+ slide layouts, 31 chart/exhibit types (11 standard + 5 institutional + 5 derived-from-pitchbook + 16 infographic archetypes), a 1-brand public registry (extensible via plugins), 10 design playbooks exposed as MCP resources, a 771-template archetype catalog, and a two-level audit (structural + post-render vision critique).
+
+Recent institutional additions:
+
+- storyboard resolution with stable `slide_id`, role, archetype, and key-message metadata
+- full-slide archetype registry via `inkline://archetypes/full_slide`
+- local reference-family catalog plus `inkline ingest-reference`
+- metadata-aware deck verdict aggregation layered onto PPTX/PDF audit flows
 
 ---
 
@@ -132,12 +139,16 @@ inkline://layouts                         — slide-type catalogue with capacity
 inkline://layouts/<slide_type>            — single slide-type spec with examples
 inkline://anti-patterns                   — anti-pattern library
 inkline://archetypes                      — 771 archetype templates
+inkline://slide_roles                     — functional page roles and defaults
+inkline://archetypes/full_slide          — full-slide archetype registry
+inkline://reference_families             — installed benchmark/reference families
 inkline://brands                          — registered brand list
 inkline://themes                          — theme registry
 inkline://typography                      — type-scale + capacity rules
 inkline://templates                       — template catalogue
 inkline://playbooks/index                 — all playbooks with descriptions
 inkline://playbooks/chart_selection       — chart selection playbook
+inkline://storyboard_rules                — shared authoring/audit rules
 inkline://playbooks/color_theory          — colour theory playbook
 inkline://playbooks/document_design       — document design playbook
 inkline://playbooks/infographic_styles    — infographic styles playbook
@@ -248,7 +259,8 @@ inkline compare-rendered --baseline deck.pdf --pptx-render deck.rendered.pdf \
   --out deck.parity.json
 ```
 
-- `inspect-pptx` reports whether slides are exported as native editable shapes or image fallbacks.
+- `inspect-pptx` reports editable-shape coverage, intentional raster exceptions, and image fallbacks.
+- `inspect-pptx` is high-confidence when the sibling `.export_metadata.json` sidecar exists; without it, the command falls back to best-effort heuristics and marks the result accordingly.
 - `audit-pptx` renders the PPTX through LibreOffice and critiques the rendered result, which is the correct surface for visual sign-off.
 - `compare-rendered` measures PDF vs rendered-PPTX parity for a chosen institutional fixture subset.
 
