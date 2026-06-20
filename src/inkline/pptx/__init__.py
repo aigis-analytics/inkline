@@ -221,21 +221,67 @@ def export_pptx_slides(
     for idx, slide_spec in enumerate(slides):
         data = slide_spec.get("data", {})
         slide_type = resolve_pptx_layout(slide_spec)
+        compiled_manifest = (slide_spec.get("compiled_manifest", {}) or {})
+        builder_recipe_id = str(compiled_manifest.get("builder_recipe_id", "")).strip()
         section = str(data.get("section", ""))
         heading = str(data.get("title", data.get("headline", "")))
         requested_type = str(slide_spec.get("slide_type", "content"))
         status = "native"
         fallback_reason = ""
         editability_exceptions = list(
-            (slide_spec.get("compiled_manifest", {}) or {}).get("pptx_editability_exceptions", [])
+            compiled_manifest.get("pptx_editability_exceptions", [])
         )
 
-        if slide_type in {"title", "section_divider"}:
+        if builder_recipe_id in {"cover_title_block", "cover_editorial_bleed", "divider_statement_band"} or slide_type in {"title", "section_divider"}:
             builder.add_title_slide(
                 company=str(data.get("company", deck_title)),
                 tagline=str(data.get("tagline", heading)),
                 date=str(data.get("date", "")),
                 subtitle=str(data.get("subtitle", section)),
+            )
+        elif builder_recipe_id in {"people_headshot_cards", "people_circle_portraits", "people_headshot_band", "boots_on_ground_strip"}:
+            builder.add_people_headshot_slide(
+                section=section or "People",
+                title=heading or deck_title,
+                members=data.get("members") or data.get("team") or [],
+                footnote=str(data.get("footnote", "")),
+            )
+        elif builder_recipe_id in {"timeline_vertical_spine", "timeline_milestone_cards", "timeline_phase_row", "roadshow_three_day", "workstream_lanes"}:
+            milestones = data.get("milestones") or []
+            if not milestones and data.get("steps"):
+                milestones = [
+                    {
+                        "date": str(index + 1),
+                        "label": item.get("title", item.get("label", "")) if isinstance(item, dict) else str(item),
+                        "desc": item.get("body", item.get("desc", "")) if isinstance(item, dict) else "",
+                    }
+                    for index, item in enumerate(data.get("steps") or [])
+                ]
+            builder.add_timeline_spine_slide(
+                section=section or "Timeline",
+                title=heading or deck_title,
+                milestones=milestones,
+                footnote=str(data.get("footnote", "")),
+            )
+        elif builder_recipe_id in {"economics_two_zone", "capital_growth_bridge", "reserves_bar_bridge", "portfolio_build_case", "phased_funding_map"}:
+            builder.add_economics_bridge_slide(
+                section=section or "Economics",
+                title=heading or deck_title,
+                stats=_stat_triplets(data.get("stats") or data.get("kpis") or []),
+                bullets=_as_list(data.get("bullets") or data.get("items") or []),
+                footnote=str(data.get("footnote", "")),
+            )
+        elif builder_recipe_id in {"pipeline_ranked_table", "dense_appendix_table"}:
+            headers = [str(h) for h in data.get("headers", [])]
+            rows = _table_rows(data.get("rows"), headers=headers)
+            if not headers and rows:
+                headers = [f"Column {i + 1}" for i in range(max(len(r) for r in rows))]
+            builder.add_pipeline_table_slide(
+                section=section or "Detail",
+                title=heading or deck_title,
+                headers=headers,
+                rows=rows,
+                footnote=str(data.get("footnote", "")),
             )
         elif slide_type == "content":
             builder.add_content_slide(

@@ -583,6 +583,7 @@ def test_audit_pdf_artifact_uses_sibling_storyboard_metadata(tmp_path: Path, mon
                         "archetype": "cover_hero_photo_left_text_block",
                         "key_message": "Enter Angola",
                         "reference_family": "family_v1",
+                        "source_reference_slide_ids": ["family_v1_s01"],
                     }
                 ],
             }

@@ -223,6 +223,34 @@ def test_execute_mode_explicit_archetype_is_not_marked_as_fallback():
     assert resolved["storyboard"]["slides"][0]["fallback_used"] is False
 
 
+def test_do_not_use_reference_does_not_drive_variant_selection(monkeypatch):
+    from inkline.intelligence import archetype_retriever as retriever_module
+
+    monkeypatch.setattr(
+        retriever_module,
+        "find_reference_slides",
+        lambda **_: [
+            {
+                "reference_family_id": "family_v1",
+                "reference_slide_id": "family_v1_s99",
+                "role": "team",
+                "composition_family": "people_profiles",
+                "density_class": "medium",
+                "benchmark_quality_weight": 1.0,
+                "curator_confidence": 1.0,
+                "score": 0.29,
+                "do_not_use": True,
+            }
+        ],
+    )
+    retrieved = retriever_module.retrieve_archetypes_and_references(
+        role="team",
+        slide_spec={"slide_type": "team_grid", "data": {"members": [{"name": "A"}]}},
+        reference_family="family_v1",
+    )
+    assert retrieved["reference_signals"] == {}
+
+
 def test_audit_aggregation_respects_fail_and_human_signoff():
     slide_1 = evaluate_slide_audit(
         slide_index=1,
@@ -288,7 +316,11 @@ def test_unknown_explicit_archetype_override_fails_fast():
 def test_storyboarded_slide_can_reach_clean_pass():
     slide = evaluate_slide_audit(
         slide_index=1,
-        storyboard={"role": "cover", "key_message": "Enter Angola"},
+        storyboard={
+            "role": "cover",
+            "key_message": "Enter Angola",
+            "source_reference_slide_ids": ["family_v1_s01"],
+        },
         critique_verdict="PASS",
         archetype_declared=True,
         reference_family_declared=True,
@@ -325,6 +357,28 @@ def test_warn_slide_exceeding_warning_budget_requires_human_signoff():
     )
     assert slide["warning_count"] > 2
     assert slide["verdict"] == "needs_human_signoff"
+
+
+def test_deck_warning_budget_can_force_human_signoff():
+    slide_results = [
+        {
+            "slide_index": index + 1,
+            "slide_id": f"s{index + 1:02d}",
+            "verdict": "pass_with_warnings",
+            "warning_count": 3,
+            "dimensions": {
+                "visual_quality": {"status": "scored", "required": True, "score": 75},
+                "archetype_compliance": {"status": "scored", "required": True, "score": 100},
+                "reference_family_alignment": {"status": "not_evaluated", "required": False, "score": None},
+                "message_delivery": {"status": "scored", "required": True, "score": 100},
+            },
+            "hard_failed": False,
+            "fallback_used": False,
+        }
+        for index in range(3)
+    ]
+    deck = aggregate_deck_audit(slide_results)
+    assert deck["deck_verdict"] == "needs_human_signoff"
 
 
 def test_incompatible_role_and_archetype_fail_fast():

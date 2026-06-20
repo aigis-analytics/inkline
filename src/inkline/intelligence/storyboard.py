@@ -246,6 +246,7 @@ def resolve_storyboard_spec(
                 top_k=3,
             )
         candidate_archetypes = retrieved["archetypes"]
+        reference_slides = retrieved.get("reference_slides", [])
         chosen_archetype = (
             explicit.get("archetype")
             or embedded_slide.get("archetype")
@@ -253,15 +254,20 @@ def resolve_storyboard_spec(
             or (
                 candidate_archetypes[0]["id"]
                 if candidate_archetypes
-                and candidate_archetypes[0]["score"] >= DEFAULT_AUDIT_SETTINGS["archetype_match_threshold"]
+                and candidate_archetypes[0].get("qualified")
                 else ""
             )
         )
         fallback_used = bool(candidate_archetypes) and bool(chosen_archetype) and not any(
             c["id"] == chosen_archetype
-            and c["score"] >= DEFAULT_AUDIT_SETTINGS["archetype_match_threshold"]
+            and c.get("qualified")
             for c in candidate_archetypes
         )
+        chosen_candidate = next((item for item in candidate_archetypes if item["id"] == chosen_archetype), {})
+        variant_id = str(chosen_candidate.get("variant_id", ""))
+        builder_recipe_id = str(chosen_candidate.get("builder_recipe_id", ""))
+        source_reference_family = str(reference_slides[0]["reference_family_id"]) if reference_slides else ""
+        source_reference_slide_ids = [str(item.get("reference_slide_id", "")) for item in reference_slides if item.get("reference_slide_id")]
         key_message = (
             explicit.get("key_message")
             or embedded_slide.get("key_message")
@@ -280,6 +286,11 @@ def resolve_storyboard_spec(
             slide_id=slide_id,
             resolved_role=str(resolved_role),
             archetype_id=str(chosen_archetype),
+            source_reference_family=source_reference_family,
+            source_reference_slide_ids=source_reference_slide_ids,
+            variant_id=variant_id,
+            builder_recipe_id=builder_recipe_id,
+            benchmark_tokens_applied=dict(retrieved.get("reference_signals", {}) or {}),
         )
         slide["slide_id"] = slide_id
         slide["storyboard"] = slide_storyboard
@@ -298,16 +309,24 @@ def resolve_storyboard_spec(
                 "key_message": key_message,
                 "reference_family": slide_storyboard["reference_family"],
                 "fallback_used": fallback_used,
+                "source_reference_family": source_reference_family,
+                "source_reference_slide_ids": source_reference_slide_ids,
+                "variant_id": variant_id,
+                "builder_recipe_id": builder_recipe_id,
             }
         )
         authoring_trace["slides"].append(
             {
                 "slide_id": slide_id,
                 "chosen_archetype": chosen_archetype,
+                "chosen_variant": variant_id,
+                "chosen_builder_recipe": builder_recipe_id,
                 "candidate_archetypes": candidate_archetypes,
-                "reference_slides": retrieved["reference_slides"],
+                "reference_slides": reference_slides,
+                "reference_signals": retrieved.get("reference_signals", {}),
                 "fallback_used": fallback_used,
                 "resolved_metadata": slide_storyboard,
+                "compiled_manifest": compiled_manifest,
                 "losing_values": {
                     "explicit": {k: v for k, v in explicit.items() if v and str(v) != str(slide_storyboard.get(k if k != "reference_family" else "reference_family", ""))},
                     "embedded": {k: v for k, v in embedded_slide.items() if v and str(v) != str(slide_storyboard.get(k, ""))},

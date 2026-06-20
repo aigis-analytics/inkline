@@ -14,6 +14,7 @@ from inkline.intelligence.full_slide_archetypes import (
     ROLE_TO_DEFAULT_ARCHETYPE,
     get_full_slide_archetype,
 )
+from inkline.intelligence.reference_schema import validate_reference_slide_manifest
 
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
@@ -63,6 +64,86 @@ def _normalize_shape(shape: Any, slide_width: int, slide_height: int) -> dict[st
         "h": round(float(getattr(shape, "height", 0)) / float(slide_height or 1), 6),
         "text": _safe_text(shape),
     }
+
+
+def _infer_composition_family(
+    *,
+    normalized: list[dict[str, Any]],
+    text_blocks: list[dict[str, Any]],
+    role: str,
+) -> str:
+    picture_count = sum(1 for item in normalized if "PICTURE" in str(item.get("type", "")).upper())
+    width_heavy = max((float(item.get("w", 0.0) or 0.0) for item in normalized), default=0.0)
+    if role == "cover" and width_heavy >= 0.45:
+        return "hero_cover"
+    if role in {"team", "people", "key_people"} or picture_count >= 3:
+        return "people_profiles"
+    if role in {"timeline", "process", "roadshow"}:
+        return "timeline_spine"
+    if role in {"appendix_ranked_table", "pipeline"} or len(text_blocks) >= 8:
+        return "dense_table"
+    if role in {"economics", "size_of_prize"}:
+        return "two_zone_summary"
+    return "card_grid"
+
+
+def _infer_density_class(*, normalized: list[dict[str, Any]], text_blocks: list[dict[str, Any]]) -> str:
+    score = len(normalized) + len(text_blocks)
+    if score >= 16:
+        return "high"
+    if score >= 7:
+        return "medium"
+    return "low"
+
+
+def _infer_zone_map(normalized: list[dict[str, Any]]) -> dict[str, Any]:
+    if not normalized:
+        return {}
+    title_like = next((item for item in normalized if item.get("text")), None)
+    title_zone = {
+        "x": title_like.get("x", 0.0),
+        "y": title_like.get("y", 0.0),
+        "w": title_like.get("w", 0.0),
+        "h": title_like.get("h", 0.0),
+    } if title_like else {}
+    return {
+        "title_zone": title_zone,
+        "header_present": bool(title_like and float(title_like.get("y", 1.0)) < 0.18),
+        "footer_present": any(float(item.get("y", 0.0)) > 0.85 for item in normalized),
+        "dominant_axis": "horizontal" if sum(float(item.get("w", 0.0)) for item in normalized) >= sum(float(item.get("h", 0.0)) for item in normalized) else "vertical",
+    }
+
+
+def _infer_content_slots(*, normalized: list[dict[str, Any]], text_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    picture_count = sum(1 for item in normalized if "PICTURE" in str(item.get("type", "")).upper())
+    slots = [
+        {"name": "text_blocks", "kind": "text", "required": False, "count": len(text_blocks)},
+        {"name": "images", "kind": "image", "required": False, "count": picture_count},
+    ]
+    if any(float(item.get("w", 0.0)) > 0.4 for item in normalized):
+        slots.append({"name": "hero_zone", "kind": "hero", "required": False, "count": 1})
+    return slots
+
+
+def _infer_style_tokens(
+    *,
+    normalized: list[dict[str, Any]],
+    role: str,
+    prs_style_tokens: dict[str, Any],
+) -> dict[str, Any]:
+    tokens = dict(prs_style_tokens)
+    picture_count = sum(1 for item in normalized if "PICTURE" in str(item.get("type", "")).upper())
+    tokens.update(
+        {
+            "title_alignment": "left",
+            "card_count": max(0, len(normalized) - picture_count),
+            "picture_count": picture_count,
+            "hero_occupancy_ratio": round(max((float(item.get("w", 0.0)) * float(item.get("h", 0.0)) for item in normalized), default=0.0), 4),
+            "typography_treatment_class": "editorial_cover" if role == "cover" else "institutional_grid",
+            "image_treatment": "headshots" if role in {"team", "people"} else "reference_exhibit" if role in {"market_map", "map"} else "mixed",
+        }
+    )
+    return tokens
 
 
 def _infer_reference_role(
@@ -144,23 +225,47 @@ def ingest_reference_pptx(
         _write_placeholder_png(preview_path)
         normalized = [_normalize_shape(shape, slide_width, slide_height) for shape in slide.shapes]
         text_blocks = [entry for entry in normalized if entry.get("text")]
-        manifest = {
-            "schema_name": "reference_slide_manifest",
-            "schema_version": 1,
-            "reference_slide_id": reference_slide_id,
-            "reference_family_id": family_id,
-            "source_slide_index": idx,
-            "normalized_geometry": normalized,
-            "text_blocks": text_blocks,
-            "confidence_score": 1.0,
-        }
         inferred_role = _infer_reference_role(
             slide_index=idx,
             text_blocks=text_blocks,
             shape_count=len(normalized),
         )
+        composition_family = _infer_composition_family(
+            normalized=normalized,
+            text_blocks=text_blocks,
+            role=inferred_role,
+        )
+        density_class = _infer_density_class(normalized=normalized, text_blocks=text_blocks)
+        manifest = validate_reference_slide_manifest(
+            {
+                "reference_slide_id": reference_slide_id,
+                "reference_family_id": family_id,
+                "source_slide_index": idx,
+                "role": inferred_role,
+                "composition_family": composition_family,
+                "density_class": density_class,
+                "style_tokens": _infer_style_tokens(
+                    normalized=normalized,
+                    role=inferred_role,
+                    prs_style_tokens=_style_tokens(prs),
+                ),
+                "zone_map": _infer_zone_map(normalized),
+                "content_slots": _infer_content_slots(normalized=normalized, text_blocks=text_blocks),
+                "usable_for_retrieval": True,
+                "archetype_tag": ROLE_TO_DEFAULT_ARCHETYPE.get(inferred_role, ""),
+                "hero_kind": "portraits" if inferred_role in {"team", "people"} else "full_bleed" if inferred_role == "cover" else "",
+                "evidence_kind": "table" if density_class == "high" else "cards",
+                "benchmark_quality_weight": 0.7 if inferred_role != "content" else 0.45,
+                "strong_exemplar": inferred_role != "content",
+                "do_not_imitate": False,
+                "preview_path": f"{reference_slide_id}.png",
+                "curation_notes": [],
+                "normalized_geometry": normalized,
+                "text_blocks": text_blocks,
+            }
+        )
         (target_family / f"{reference_slide_id}.json").write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
+            json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
         )
         slide_entries.append(
             {
@@ -169,6 +274,12 @@ def ingest_reference_pptx(
                 "archetype_candidate": ROLE_TO_DEFAULT_ARCHETYPE.get(
                     inferred_role, ""
                 ),
+                "composition_family": composition_family,
+                "density_class": density_class,
+                "benchmark_quality_weight": manifest["benchmark_quality_weight"],
+                "strong_exemplar": manifest["strong_exemplar"],
+                "do_not_imitate": manifest["do_not_imitate"],
+                "usable_for_retrieval": True,
                 "preview_path": f"{reference_slide_id}.png",
                 "manifest_path": f"{reference_slide_id}.json",
             }
@@ -192,7 +303,7 @@ def ingest_reference_pptx(
         "override_log": [],
     }
     manifest_path = target_family / "reference_family_manifest.json"
-    manifest_path.write_text(json.dumps(family_manifest, indent=2), encoding="utf-8")
+    manifest_path.write_text(json.dumps(family_manifest, indent=2, sort_keys=True), encoding="utf-8")
     overrides_path = target_family / "curation_overrides.yaml"
     if not overrides_path.exists():
         overrides_path.write_text(
@@ -234,6 +345,12 @@ def apply_curation_overrides(reference_family_id: str, *, catalog_root: str | Pa
         for source, target in (
             ("role_override", "role"),
             ("archetype_override", "archetype_candidate"),
+            ("composition_family", "composition_family"),
+            ("density_class", "density_class"),
+            ("benchmark_quality_weight", "benchmark_quality_weight"),
+            ("strong_exemplar", "strong_exemplar"),
+            ("do_not_imitate", "do_not_imitate"),
+            ("usable_for_retrieval", "usable_for_retrieval"),
             ("exemplar_strength", "exemplar_strength"),
             ("imitate", "imitate"),
             ("notes", "notes"),
@@ -246,7 +363,7 @@ def apply_curation_overrides(reference_family_id: str, *, catalog_root: str | Pa
                 "applied_fields": sorted(k for k in item.keys() if k != "reference_slide_id"),
             }
         )
-    manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return payload
 
 

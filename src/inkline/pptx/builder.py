@@ -305,6 +305,13 @@ class PptxBuilder:
         if logo and logo.exists():
             slide.shapes.add_picture(str(logo), Inches(x), Inches(y), height=Inches(h))
 
+    def _picture(self, slide: Any, path: str | Path, x: float, y: float, w: float, h: float) -> bool:
+        candidate = Path(path)
+        if not candidate.exists():
+            return False
+        slide.shapes.add_picture(str(candidate), Inches(x), Inches(y), width=Inches(w), height=Inches(h))
+        return True
+
     def _footer_bar(self, slide: Any, text: str, y: float = 6.2) -> None:
         """Footer quote/note area with thin top border."""
         # Thin divider line
@@ -548,6 +555,83 @@ class PptxBuilder:
 
         if footnote:
             self._footer_bar(s, footnote, y=6.6)
+
+    def add_people_headshot_slide(self, section: str, title: str, members: list[dict[str, Any]], footnote: str = "") -> None:
+        s = self._slide()
+        self._bg(s, _BG["warm"])
+        self._label_badge(s, section or "Team", 0.5, 0.35)
+        self._heading(s, title, 0.5, 0.75, 8.5, 0.8)
+
+        cards = members[:4]
+        gap = 0.3
+        card_w = (9.0 - 3 * gap) / 4
+        x = 0.5
+        y = 2.0
+        for member in cards:
+            self._card(s, x, y, card_w, 3.9)
+            image_path = member.get("image_path") or member.get("photo") or member.get("headshot")
+            if image_path:
+                self._picture(s, image_path, x + 0.25, y + 0.2, card_w - 0.5, 1.2)
+            else:
+                self._rect(s, x + 0.35, y + 0.25, card_w - 0.7, 1.05, _BG["footer"])
+            self._card_heading(s, str(member.get("name", "")), x + 0.2, y + 1.55, card_w - 0.4)
+            self._text(s, str(member.get("role", "")), x + 0.2, y + 1.85, card_w - 0.4, 0.32, _TS["body_sm"], _TC["body"], self.body_font, bold=True)
+            self._text(s, str(member.get("bio", member.get("description", ""))), x + 0.2, y + 2.2, card_w - 0.4, 1.3, _TS["body_sm"], _TC["body"], self.body_font)
+            x += card_w + gap
+        if footnote:
+            self._footer_bar(s, footnote, y=6.4)
+
+    def add_timeline_spine_slide(self, section: str, title: str, milestones: list[dict[str, Any]], footnote: str = "") -> None:
+        s = self._slide()
+        self._bg(s, _BG["warm"])
+        self._label_badge(s, section or "Timeline", 0.5, 0.35)
+        self._heading(s, title, 0.5, 0.75, 8.5, 0.8)
+        self._rect(s, 1.0, 1.9, 0.05, 4.6, _BG["navy"])
+        y = 2.0
+        for milestone in milestones[:5]:
+            self._rect(s, 0.86, y + 0.2, 0.32, 0.32, _BG["navy"])
+            self._card(s, 1.35, y, 7.9, 0.9)
+            self._text(s, str(milestone.get("date", "")), 1.55, y + 0.12, 1.1, 0.25, _TS["label"], _TC["body"], self.body_font, bold=True)
+            self._card_heading(s, str(milestone.get("label", milestone.get("title", ""))), 2.45, y + 0.08, 2.6)
+            self._text(s, str(milestone.get("desc", milestone.get("body", ""))), 5.0, y + 0.08, 4.0, 0.42, _TS["body_sm"], _TC["body"], self.body_font)
+            y += 0.95
+        if footnote:
+            self._footer_bar(s, footnote, y=6.6)
+
+    def add_economics_bridge_slide(
+        self,
+        section: str,
+        title: str,
+        stats: list[tuple[str, str, str]],
+        bullets: list[str],
+        footnote: str = "",
+    ) -> None:
+        s = self._slide()
+        self._bg(s, _BG["warm"])
+        self._label_badge(s, section or "Economics", 0.5, 0.35)
+        self._heading(s, title, 0.5, 0.75, 8.5, 0.8)
+        self._card(s, 0.5, 1.9, 5.4, 3.6)
+        self._card(s, 6.15, 1.9, 3.35, 3.6, dark=True)
+        y = 2.2
+        for value, label, desc in stats[:4]:
+            self._text(s, value, 0.8, y, 1.3, 0.45, _TS["card_title"], _TC["title"], self.heading_font, bold=True)
+            self._text(s, label.upper(), 2.0, y + 0.02, 1.7, 0.24, _TS["label"], _TC["body"], self.body_font, bold=True)
+            self._text(s, desc, 3.7, y + 0.02, 1.8, 0.32, _TS["body_sm"], _TC["body"], self.body_font)
+            y += 0.78
+        self._text(s, "VALUE CREATION", 6.35, 2.2, 2.9, 0.35, _TS["card_title"], _TC["white"], self.heading_font, bold=True, align=PP_ALIGN.CENTER)
+        self._bullets(s, bullets[:4], 6.45, 2.8, 2.7, 2.2, _TC["white"], _TS["body_sm"])
+        if footnote:
+            self._footer_bar(s, footnote, y=6.0)
+
+    def add_pipeline_table_slide(
+        self,
+        section: str,
+        title: str,
+        headers: list[str],
+        rows: list[list[str]],
+        footnote: str = "",
+    ) -> None:
+        self.add_table_slide(section=section, title=title, headers=headers, rows=rows, footnote=footnote)
 
     def add_chart_slide(self, section: str, title: str,
                         chart_path: str | Path, footnote: str = "") -> None:

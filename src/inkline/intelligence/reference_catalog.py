@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from inkline.intelligence.reference_schema import validate_reference_slide_manifest
+
 PACKAGE_ROOT = Path(__file__).resolve().parent / "reference_catalog"
 LOCAL_ROOT = Path("~/.config/inkline/reference_catalog").expanduser()
 _FAMILY_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
@@ -71,11 +73,15 @@ def sanitize_reference_family_for_mcp(payload: dict[str, Any]) -> dict[str, Any]
 
 
 def sanitize_reference_slide_for_mcp(payload: dict[str, Any]) -> dict[str, Any]:
+    payload = validate_reference_slide_manifest(payload)
     safe = {
         "reference_slide_id": payload.get("reference_slide_id", ""),
         "reference_family_id": payload.get("reference_family_id", payload.get("_reference_family_manifest", "")),
         "source_slide_index": payload.get("source_slide_index", 0),
-        "confidence_score": payload.get("confidence_score", 0),
+        "role": payload.get("role", ""),
+        "composition_family": payload.get("composition_family", ""),
+        "density_class": payload.get("density_class", ""),
+        "style_tokens": payload.get("style_tokens", {}),
         "text_blocks": payload.get("text_blocks", []),
         "normalized_geometry": payload.get("normalized_geometry", []),
     }
@@ -128,15 +134,24 @@ def load_reference_slide(reference_slide_id: str) -> dict[str, Any]:
                     )
                     payload["reference_family_id"] = family.get("reference_family_id", "")
                     payload["_reference_family_manifest"] = family.get("reference_family_id", "")
-                    return payload
+                    return validate_reference_slide_manifest(payload)
                 payload = dict(slide)
                 payload["reference_family_id"] = family.get("reference_family_id", "")
                 payload["_reference_family_manifest"] = family.get("reference_family_id", "")
-                return payload
+                return validate_reference_slide_manifest(payload)
     raise FileNotFoundError(reference_slide_id)
 
 
-def find_reference_slides(*, role: str, reference_family: str = "", top_k: int = 3) -> list[dict[str, Any]]:
+def find_reference_slides(
+    *,
+    role: str,
+    reference_family: str = "",
+    deck_type: str = "investor",
+    desired_density_class: str = "",
+    desired_composition_family: str = "",
+    style_tokens: dict[str, Any] | None = None,
+    top_k: int = 3,
+) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     if reference_family:
         try:
@@ -145,27 +160,70 @@ def find_reference_slides(*, role: str, reference_family: str = "", top_k: int =
             families = []
     else:
         families = list_reference_families()
+    desired_style_tokens = style_tokens or {}
     for family in families:
         for slide in family.get("slides", []):
             slide_role = slide.get("role") or slide.get("role_override") or ""
-            score = 0.0
-            if slide_role == role:
-                score += 0.7
-            archetype_candidate = str(slide.get("archetype_candidate", ""))
-            if role and role in archetype_candidate:
-                score += 0.1
-            if score <= 0:
+            role_score = 1.0 if slide_role == role else 0.0
+            if role_score <= 0:
                 continue
+            archetype_candidate = str(slide.get("archetype_candidate", ""))
+            density_class = str(slide.get("density_class", "")).strip()
+            composition_family = str(slide.get("composition_family", "")).strip()
+            benchmark_quality = float(slide.get("benchmark_quality_weight", family.get("confidence_score", 0.0)) or 0.0)
+            curator_confidence = 1.0 if slide.get("strong_exemplar") else 0.5 if slide.get("usable_for_retrieval", True) else 0.0
+            style_match = 0.0
+            family_style_tokens = family.get("style_tokens", {}) if isinstance(family.get("style_tokens"), dict) else {}
+            if desired_style_tokens:
+                style_match = 1.0 if desired_style_tokens.get("typography_treatment_class") == family_style_tokens.get("typography_treatment_class") else 0.5
+            else:
+                style_match = 0.5
+            density_match = 1.0 if desired_density_class and density_class == desired_density_class else 0.6 if not desired_density_class else 0.0
+            composition_match = 1.0 if desired_composition_family and composition_family == desired_composition_family else 0.6 if not desired_composition_family else 0.0
+            deck_match = 1.0 if deck_type in {"investor", "consulting", "board"} else 0.0
+            score_components = {
+                "role_match": role_score,
+                "content_schema_match": 1.0 if archetype_candidate else 0.0,
+                "deck_type_match": deck_match,
+                "density_match": density_match,
+                "composition_family_match": composition_match,
+                "style_token_match": style_match,
+                "benchmark_quality": benchmark_quality,
+                "curator_confidence": curator_confidence,
+            }
+            score = round(
+                (0.28 * role_score)
+                + (0.18 * score_components["content_schema_match"])
+                + (0.10 * deck_match)
+                + (0.08 * density_match)
+                + (0.14 * composition_match)
+                + (0.10 * style_match)
+                + (0.07 * benchmark_quality)
+                + (0.05 * curator_confidence),
+                4,
+            )
+            if slide.get("do_not_imitate"):
+                score = min(score, 0.29)
+            if not slide.get("usable_for_retrieval", True):
+                score = min(score, 0.39)
             results.append(
                 {
                     "reference_family_id": family.get("reference_family_id", ""),
                     "reference_slide_id": slide.get("reference_slide_id", ""),
                     "role": slide_role,
                     "archetype_candidate": archetype_candidate,
-                    "score": round(score, 4),
+                    "composition_family": composition_family,
+                    "density_class": density_class,
+                    "benchmark_quality_weight": benchmark_quality,
+                    "curator_confidence": curator_confidence,
+                    "score_components": score_components,
+                    "score": score,
+                    "qualified": score >= 0.62,
+                    "advisory_only": 0.45 <= score < 0.62,
+                    "do_not_use": score < 0.45,
                 }
             )
-    results.sort(key=lambda item: (-item["score"], item["reference_slide_id"]))
+    results.sort(key=lambda item: (-item["score"], item["do_not_use"], item["reference_slide_id"]))
     return results[:top_k]
 
 
