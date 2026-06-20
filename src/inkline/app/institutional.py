@@ -55,8 +55,6 @@ def _portable_sidecar_payload(value: Any) -> Any:
 
 
 def load_spec_file(path: str | Path) -> dict[str, Any]:
-    from inkline.intelligence.storyboard import resolve_storyboard_spec
-
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
@@ -76,8 +74,7 @@ def load_spec_file(path: str | Path) -> dict[str, Any]:
         raise ValueError(f"Unsupported spec file type: {path.suffix}")
     if not isinstance(data, dict):
         raise ValueError("Spec root must be a mapping")
-    data.setdefault("slides", [])
-    return resolve_storyboard_spec(data, source_name=str(path))
+    return load_spec_file_dict(data, source_name=str(path))
 
 
 def render_spec_file(
@@ -88,11 +85,24 @@ def render_spec_file(
     editable_institutional: bool = False,
     brand_override: str = "",
     template_override: str = "",
+    execution_mode: str = "",
+    design_locked: bool | None = None,
+    use_design_advisor: bool | None = None,
+    authoring_mode: str = "",
 ) -> RenderArtifacts:
     from inkline.pptx import export_pptx_slides
     from inkline.typst import export_typst_slides
 
     spec = load_spec_file(spec_path)
+    if execution_mode:
+        spec["execution_mode"] = execution_mode
+    if design_locked is not None:
+        spec["design_locked"] = design_locked
+    if use_design_advisor is not None:
+        spec["use_design_advisor"] = use_design_advisor
+    if authoring_mode:
+        spec["authoring_mode"] = authoring_mode
+    spec = load_spec_file_dict(spec, source_name=str(spec_path))
     slides = spec.get("slides", [])
     title = str(spec.get("title", Path(spec_path).stem))
     brand = str(brand_override or spec.get("brand", "minimal"))
@@ -151,6 +161,14 @@ def render_spec_file(
         )
 
     return artifacts
+
+
+def load_spec_file_dict(spec: dict[str, Any], *, source_name: str = "") -> dict[str, Any]:
+    from inkline.intelligence.storyboard import resolve_storyboard_spec
+
+    data = dict(spec)
+    data.setdefault("slides", [])
+    return resolve_storyboard_spec(data, source_name=source_name)
 
 
 def inspect_pptx(pptx_path: str | Path) -> dict[str, Any]:

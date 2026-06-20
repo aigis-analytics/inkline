@@ -2031,7 +2031,9 @@ class DesignAdvisor:
         CORE_PLAYBOOKS: list[str] = []
         SUMMARY_PLAYBOOKS = [
             "slide_layouts", "professional_exhibit_design",
-            "template_catalog", "typography", "color_theory",
+            "template_catalog", "full_slide_archetypes",
+            "storyboard_and_message_design",
+            "typography", "color_theory",
         ]
 
         from inkline.intelligence.vishwakarma import VISHWAKARMA_SYSTEM_PREAMBLE

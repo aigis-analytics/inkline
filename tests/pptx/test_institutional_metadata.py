@@ -22,6 +22,7 @@ def test_load_fixture_spec():
     assert len(spec["slides"]) == 10
     assert spec["storyboard"]["schema_name"] == "storyboard"
     assert spec["slides"][0]["slide_id"]
+    assert spec["storyboard"]["deck"]["execution_contract"]["execution_mode"] == "explicit_spec"
 
 
 def test_export_writes_metadata(tmp_path: Path):
@@ -85,6 +86,10 @@ def test_render_spec_file_sidecar_omits_host_bound_artifact_paths(tmp_path: Path
         formats=["pptx"],
         output_dir=tmp_path / "out",
         editable_institutional=True,
+        execution_mode="explicit_spec",
+        design_locked=True,
+        use_design_advisor=False,
+        authoring_mode="external_llm",
     )
     payload = json.loads(artifacts.export_metadata_path.read_text(encoding="utf-8"))
     deck_metadata = payload["deck_metadata"]
@@ -93,6 +98,8 @@ def test_render_spec_file_sidecar_omits_host_bound_artifact_paths(tmp_path: Path
     assert "authoring_trace_path" not in deck_metadata
     assert deck_metadata["artifact_files"]["storyboard"].endswith(".storyboard.json")
     assert deck_metadata["artifact_files"]["authoring_trace"].endswith(".authoring_trace.json")
+    assert deck_metadata["storyboard"]["deck"]["execution_contract"]["use_design_advisor"] is False
+    assert deck_metadata["authoring_trace"]["execution_contract"]["authoring_mode"] == "external_llm"
     serialized = json.dumps(deck_metadata)
     assert str(tmp_path) not in serialized
 
@@ -256,6 +263,10 @@ def test_cmd_render_yaml_json_watch_enters_watch_loop(tmp_path: Path, monkeypatc
         editable_institutional=False,
         brand_override="",
         template_override="",
+        execution_mode="",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     ):
         calls["render"] = {
             "path": Path(path),
@@ -264,6 +275,10 @@ def test_cmd_render_yaml_json_watch_enters_watch_loop(tmp_path: Path, monkeypatc
             "editable": editable_institutional,
             "brand_override": brand_override,
             "template_override": template_override,
+            "execution_mode": execution_mode,
+            "design_locked": design_locked,
+            "use_design_advisor": use_design_advisor,
+            "authoring_mode": authoring_mode,
         }
         return Namespace(pdf_path=tmp_path / "fixture.pdf", pptx_path=None, export_metadata_path=None)
 
@@ -283,6 +298,10 @@ def test_cmd_render_yaml_json_watch_enters_watch_loop(tmp_path: Path, monkeypatc
         strict_directives=False,
         brand="",
         template="",
+        execution_mode="explicit_spec",
+        design_locked=True,
+        use_design_advisor=False,
+        authoring_mode="external_llm",
     )
     cli_module.cmd_render(args)
 
@@ -290,6 +309,10 @@ def test_cmd_render_yaml_json_watch_enters_watch_loop(tmp_path: Path, monkeypatc
     assert calls["watch"]["path"] == spec_path
     assert calls["render"]["brand_override"] == ""
     assert calls["render"]["template_override"] == ""
+    assert calls["render"]["execution_mode"] == "explicit_spec"
+    assert calls["render"]["design_locked"] is True
+    assert calls["render"]["use_design_advisor"] is False
+    assert calls["render"]["authoring_mode"] == "external_llm"
 
 
 def test_args_for_watch_rerender_disables_recursive_watch():
@@ -314,6 +337,10 @@ def test_cmd_render_yaml_json_serve_opens_browser(tmp_path: Path, monkeypatch):
         editable_institutional=False,
         brand_override="",
         template_override="",
+        execution_mode="",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     ):
         return Namespace(pdf_path=tmp_path / "fixture.pdf", pptx_path=None, export_metadata_path=None)
 
@@ -330,6 +357,10 @@ def test_cmd_render_yaml_json_serve_opens_browser(tmp_path: Path, monkeypatch):
         strict_directives=False,
         brand="",
         template="",
+        execution_mode="",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     )
     cli_module.cmd_render(args)
 
@@ -350,9 +381,14 @@ def test_cmd_render_yaml_json_forwards_brand_and_template_overrides(tmp_path: Pa
         editable_institutional=False,
         brand_override="",
         template_override="",
+        execution_mode="",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     ):
         calls["brand_override"] = brand_override
         calls["template_override"] = template_override
+        calls["execution_mode"] = execution_mode
         return Namespace(pdf_path=tmp_path / "fixture.pdf", pptx_path=None, export_metadata_path=None)
 
     monkeypatch.setattr("inkline.app.institutional.render_spec_file", fake_render_spec_file)
@@ -367,10 +403,18 @@ def test_cmd_render_yaml_json_forwards_brand_and_template_overrides(tmp_path: Pa
         strict_directives=False,
         brand="client_brand",
         template="board",
+        execution_mode="draft",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     )
     cli_module.cmd_render(args)
 
-    assert calls == {"brand_override": "client_brand", "template_override": "board"}
+    assert calls == {
+        "brand_override": "client_brand",
+        "template_override": "board",
+        "execution_mode": "draft",
+    }
 
 
 def test_cmd_draft_delegates_to_cmd_serve(monkeypatch):

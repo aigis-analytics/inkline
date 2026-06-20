@@ -40,6 +40,9 @@ PLAYBOOK_REGISTRY: Dict[str, str] = {
     "visual_libraries": "visual_libraries.md",
     "template_catalog": "template_catalog.md",
     "professional_exhibit_design": "professional_exhibit_design.md",
+    "full_slide_archetypes": "full_slide_archetypes.md",
+    "storyboard_and_message_design": "storyboard_and_message_design.md",
+    "reference_deck_ingestion": "reference_deck_ingestion.md",
     "design_md_styles": "__generated__",  # Dynamic: loaded from design_md_styles module
 }
 
@@ -134,9 +137,24 @@ def load_playbooks_for_task(task_type: str) -> Dict[str, str]:
     """
     task_playbooks = {
         "chart": ["chart_selection", "color_theory", "professional_exhibit_design"],
-        "slide": ["slide_layouts", "template_catalog", "typography", "color_theory", "professional_exhibit_design"],
+        "slide": [
+            "slide_layouts",
+            "template_catalog",
+            "full_slide_archetypes",
+            "storyboard_and_message_design",
+            "typography",
+            "color_theory",
+            "professional_exhibit_design",
+        ],
         "document": ["document_design", "typography", "color_theory"],
-        "infographic": ["infographic_styles", "template_catalog", "color_theory", "typography", "professional_exhibit_design"],
+        "infographic": [
+            "infographic_styles",
+            "template_catalog",
+            "full_slide_archetypes",
+            "color_theory",
+            "typography",
+            "professional_exhibit_design",
+        ],
         "full": PLAYBOOK_NAMES,
     }
 
@@ -212,6 +230,9 @@ def get_playbook_summary() -> str:
         "visual_libraries": "Reference catalogue of open-source chart libraries and design systems",
         "template_catalog": "16 named slide archetype recipes (iceberg, pinwheel, hexagonal, ladder, waffle, etc.) with structural coordinates, plus a queryable index of 771 curated templates",
         "professional_exhibit_design": "Institutional-grade exhibit design patterns: axis elimination, legend embedding, 3-color discipline, insight headlines, Marimekko/entity-flow/divergent-bar, and 11 density techniques",
+        "full_slide_archetypes": "Functional full-slide archetypes for investor, board, and consulting decks mapped to roles, message shapes, and preferred slide structures",
+        "storyboard_and_message_design": "Storyboard-first message design rules covering deck objective, slide intent, slide headlines, narrative flow, and authoring-to-audit metadata contracts",
+        "reference_deck_ingestion": "Reference-family ingestion workflow for benchmark PPTX decks, including schema extraction, style tokens, confidentiality, curation, and validation rules",
         "design_md_styles": "27 curated design systems (Stripe, Vercel, Apple, Spotify, etc.) — color palettes, typography, style tags for matching company aesthetics",
     }
 

@@ -93,6 +93,33 @@ def test_inkline_render_spec_emits_docx(tmp_path):
     assert mock_docx.called
 
 
+def test_inkline_render_spec_yaml_forwards_execution_contract(tmp_path):
+    spec = tmp_path / "deck.json"
+    spec.write_text('{"title": "Deck", "slides": []}', encoding="utf-8")
+
+    with patch("inkline.app.institutional.render_spec_file") as mock_render:
+        mock_render.return_value = types.SimpleNamespace(
+            pdf_path=tmp_path / "out" / "deck.pdf",
+            pptx_path=tmp_path / "out" / "deck.pptx",
+            export_metadata_path=tmp_path / "out" / "deck.export_metadata.json",
+        )
+        result = inkline_render_spec(
+            str(spec),
+            outputs=["pdf", "pptx"],
+            execution_mode="explicit_spec",
+            design_locked=True,
+            use_design_advisor=False,
+            authoring_mode="external_llm",
+        )
+
+    assert result["success"] is True
+    _, kwargs = mock_render.call_args
+    assert kwargs["execution_mode"] == "explicit_spec"
+    assert kwargs["design_locked"] is True
+    assert kwargs["use_design_advisor"] is False
+    assert kwargs["authoring_mode"] == "external_llm"
+
+
 def test_mcp_server_registers_knowledge_resources(monkeypatch):
     fake_fastmcp = types.ModuleType("fastmcp")
     fake_fastmcp.FastMCP = _FakeFastMCP

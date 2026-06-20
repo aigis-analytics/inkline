@@ -20,6 +20,55 @@ from pathlib import Path
 from inkline.app.llm_backends import available_backend_names, resolve_backend
 
 
+KNOWN_EXECUTION_MODES = {"draft", "explicit_spec"}
+
+
+def _resolve_execution_contract(args: argparse.Namespace, deck_meta: dict | None = None) -> dict[str, object]:
+    deck_meta = deck_meta or {}
+    execution_mode = str(
+        getattr(args, "execution_mode", "") or deck_meta.get("execution_mode", "") or "explicit_spec"
+    ).strip()
+    if execution_mode not in KNOWN_EXECUTION_MODES:
+        allowed = ", ".join(sorted(KNOWN_EXECUTION_MODES))
+        raise ValueError(f"Unknown execution_mode '{execution_mode}'. Allowed values: {allowed}")
+    design_locked = getattr(args, "design_locked", None)
+    if design_locked is None:
+        design_locked = deck_meta.get("design_locked")
+    if design_locked is None:
+        design_locked = execution_mode == "explicit_spec"
+    use_design_advisor = getattr(args, "use_design_advisor", None)
+    if use_design_advisor is None:
+        use_design_advisor = deck_meta.get("use_design_advisor")
+    if use_design_advisor is None:
+        use_design_advisor = execution_mode == "draft"
+    authoring_mode = str(
+        getattr(args, "authoring_mode", "") or deck_meta.get("authoring_mode", "")
+        or ("external_llm" if execution_mode == "explicit_spec" else "inkline_draft")
+    ).strip()
+    return {
+        "execution_mode": execution_mode,
+        "design_locked": bool(design_locked),
+        "use_design_advisor": bool(use_design_advisor),
+        "authoring_mode": authoring_mode,
+    }
+
+
+def _enforce_explicit_spec_sections(sections: list[dict], *, source_name: str) -> None:
+    offenders: list[str] = []
+    for idx, section in enumerate(sections, start=1):
+        slide_mode = str(section.get("slide_mode", "") or "").strip() or "auto"
+        slide_type = str(section.get("slide_type", "") or "").strip()
+        if slide_mode != "exact" or not slide_type:
+            title = str(section.get("title", "") or f"Section {idx}")
+            offenders.append(f"{idx}:{title} (slide_mode={slide_mode}, slide_type={slide_type or 'missing'})")
+    if offenders:
+        joined = "; ".join(offenders[:6])
+        raise ValueError(
+            f"execution_mode=explicit_spec requires every section in {source_name} "
+            f"to declare _layout and resolve to slide_mode=exact. Offenders: {joined}"
+        )
+
+
 def _check_backend(backend_name: str) -> None:
     backend = resolve_backend(backend_name)
     if backend.available():
@@ -240,6 +289,10 @@ def cmd_render(args: argparse.Namespace) -> None:
             editable_institutional=bool(getattr(args, "editable_institutional", False)),
             brand_override=args.brand,
             template_override=args.template,
+            execution_mode=str(getattr(args, "execution_mode", "") or ""),
+            design_locked=getattr(args, "design_locked", None),
+            use_design_advisor=getattr(args, "use_design_advisor", None),
+            authoring_mode=str(getattr(args, "authoring_mode", "") or ""),
         )
         if artifacts.pdf_path:
             print(f"PDF ready: {artifacts.pdf_path}")
@@ -278,13 +331,20 @@ def cmd_render(args: argparse.Namespace) -> None:
         strict_directives=args.strict_directives,
         source_path=str(source_path),
     )
+    execution_contract = _resolve_execution_contract(args, deck_meta)
 
     # CLI flags override front-matter
     brand    = args.brand    or deck_meta.get("brand", "minimal")
     template = args.template or deck_meta.get("template", "consulting")
     mode     = deck_meta.get("mode", "rules")  # default rules for non-agentic
+    if execution_contract["execution_mode"] == "explicit_spec":
+        _enforce_explicit_spec_sections(sections, source_name=source_path.name)
+        mode = "rules"
 
-    print(f"[inkline render] Designing deck (brand={brand}, template={template}, mode={mode})...")
+    print(
+        "[inkline render] Designing deck "
+        f"(brand={brand}, template={template}, mode={mode}, execution_mode={execution_contract['execution_mode']})..."
+    )
 
     advisor = DesignAdvisor(brand=brand, template=template, mode=mode)
     slides = advisor.design_deck(
@@ -302,6 +362,7 @@ def cmd_render(args: argparse.Namespace) -> None:
             "title": deck_meta.get("title", source_path.stem),
             "audience": deck_meta.get("audience", ""),
             "reference_family": deck_meta.get("reference_family", ""),
+            **execution_contract,
             "storyboard": deck_meta.get("storyboard", {}),
             "slides": slides,
         },
@@ -783,6 +844,19 @@ def main(argv: list[str] | None = None) -> None:
                           help="Override brand from front-matter")
     render_p.add_argument("--template", default="", metavar="TEMPLATE",
                           help="Override template from front-matter")
+    render_p.add_argument("--execution-mode", default="", choices=["draft", "explicit_spec"],
+                          help="Execution contract: explicit_spec executes a locked spec; draft allows Inkline to invent structure")
+    render_p.add_argument("--authoring-mode", default="", metavar="MODE",
+                          help="Metadata only: upstream authoring source, e.g. external_llm")
+    render_p.add_argument("--design-locked", dest="design_locked", action="store_true",
+                          help="Metadata/contract: slide design was chosen upstream and must not be reinvented")
+    render_p.add_argument("--no-design-locked", dest="design_locked", action="store_false",
+                          help="Metadata/contract: slide design is not locked upstream")
+    render_p.add_argument("--use-design-advisor", dest="use_design_advisor", action="store_true",
+                          help="Allow Inkline authoring intelligence to invent/recommend structure")
+    render_p.add_argument("--no-design-advisor", dest="use_design_advisor", action="store_false",
+                          help="Disallow autonomous DesignAdvisor invention; execute the supplied structure only")
+    render_p.set_defaults(design_locked=None, use_design_advisor=None)
     render_p.add_argument("--watch", action="store_true",
                           help="Watch for file changes and re-render")
     render_p.add_argument("--serve", action="store_true",
@@ -799,6 +873,13 @@ def main(argv: list[str] | None = None) -> None:
     watch_p.add_argument("file", metavar="FILE.md", help="Markdown source file")
     watch_p.add_argument("--brand", default="", metavar="BRAND")
     watch_p.add_argument("--template", default="", metavar="TEMPLATE")
+    watch_p.add_argument("--execution-mode", default="", choices=["draft", "explicit_spec"])
+    watch_p.add_argument("--authoring-mode", default="", metavar="MODE")
+    watch_p.add_argument("--design-locked", dest="design_locked", action="store_true")
+    watch_p.add_argument("--no-design-locked", dest="design_locked", action="store_false")
+    watch_p.add_argument("--use-design-advisor", dest="use_design_advisor", action="store_true")
+    watch_p.add_argument("--no-design-advisor", dest="use_design_advisor", action="store_false")
+    watch_p.set_defaults(design_locked=None, use_design_advisor=None)
     watch_p.add_argument("--strict-directives", action="store_true")
     watch_p.set_defaults(func=lambda a: cmd_render(
         type("_Args", (), {**vars(a), "watch": True, "serve": True, "output": "pdf"})()

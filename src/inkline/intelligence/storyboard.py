@@ -29,6 +29,11 @@ DEFAULT_AUDIT_SETTINGS = {
     "reference_family_advisory_threshold": 0.55,
 }
 
+KNOWN_EXECUTION_MODES = {
+    "draft",
+    "explicit_spec",
+}
+
 
 def generate_slide_id(index: int, title: str, role: str) -> str:
     stem = re.sub(r"[^a-z0-9]+", "_", f"{role}_{title}".lower()).strip("_")
@@ -108,6 +113,30 @@ def _validate_reference_family(reference_family: Any, *, source: str) -> str:
     return value
 
 
+def _resolve_execution_contract(spec: dict[str, Any]) -> dict[str, Any]:
+    execution_mode = str(spec.get("execution_mode") or "").strip() or "explicit_spec"
+    if execution_mode not in KNOWN_EXECUTION_MODES:
+        allowed = ", ".join(sorted(KNOWN_EXECUTION_MODES))
+        raise ValueError(
+            f"Unknown execution_mode '{execution_mode}'. Allowed values: {allowed}"
+        )
+    design_locked = spec.get("design_locked")
+    if design_locked is None:
+        design_locked = execution_mode == "explicit_spec"
+    use_design_advisor = spec.get("use_design_advisor")
+    if use_design_advisor is None:
+        use_design_advisor = execution_mode == "draft"
+    authoring_mode = str(spec.get("authoring_mode") or "").strip() or (
+        "external_llm" if execution_mode == "explicit_spec" else "inkline_draft"
+    )
+    return {
+        "execution_mode": execution_mode,
+        "design_locked": bool(design_locked),
+        "use_design_advisor": bool(use_design_advisor),
+        "authoring_mode": authoring_mode,
+    }
+
+
 def resolve_storyboard_spec(
     spec: dict[str, Any],
     *,
@@ -125,6 +154,7 @@ def resolve_storyboard_spec(
     storyboard_root = resolved.get("storyboard", {}) or {}
     deck_storyboard = dict(storyboard_root.get("deck", {})) if isinstance(storyboard_root, dict) else {}
     embedded_storyboard_slides = _normalize_storyboard_slides(storyboard_root.get("slides") if isinstance(storyboard_root, dict) else {})
+    execution_contract = _resolve_execution_contract(resolved)
     reference_family = (
         resolved.get("reference_family")
         or deck_storyboard.get("reference_family")
@@ -140,6 +170,7 @@ def resolve_storyboard_spec(
             "objective": deck_storyboard.get("objective", ""),
             "thesis": deck_storyboard.get("thesis", ""),
             "reference_family": reference_family,
+            "execution_contract": deepcopy(execution_contract),
             "source_name": source_name,
         },
         "slides": [],
@@ -150,6 +181,7 @@ def resolve_storyboard_spec(
         "run_id": f"{Path(source_name).stem if source_name else 'memory'}::resolved",
         "deck_ref": source_name or resolved.get("title", ""),
         "defaults": deepcopy(DEFAULT_AUDIT_SETTINGS),
+        "execution_contract": deepcopy(execution_contract),
         "slides": [],
     }
 

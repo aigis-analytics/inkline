@@ -123,11 +123,16 @@ def inkline_render_spec(
     brand: str = "minimal",
     template: str = "consulting",
     output_filename: str = "deck",
+    execution_mode: str = "explicit_spec",
+    design_locked: bool = True,
+    use_design_advisor: bool = False,
+    authoring_mode: str = "external_llm",
 ) -> dict:
     """Render a markdown spec file to PDF and/or PPTX (execute-mode, no LLM).
 
-    This is the primary tool in execute mode. The spec must have explicit
-    ``_layout:`` directives; sections without a layout use rules-mode.
+    This is the primary tool in execute mode. The spec should already embody
+    the chosen storyboard/layout decisions. ``execution_mode=explicit_spec``
+    records that contract and keeps Inkline in locked-spec execution.
 
     Args:
         spec_path: Absolute path to the .md spec file.
@@ -135,27 +140,71 @@ def inkline_render_spec(
         brand: Brand name. Default "minimal".
         template: Template name. Default "consulting".
         output_filename: Base filename for output (without extension).
+        execution_mode: "explicit_spec" or "draft". Defaults to "explicit_spec".
+        design_locked: Whether design decisions were made upstream. Defaults True.
+        use_design_advisor: Whether Inkline may invent structure. Defaults False.
+        authoring_mode: Metadata for the upstream authoring source.
     """
     if outputs is None:
         outputs = ["pdf"]
 
     try:
         from pathlib import Path as _Path
-        from inkline.authoring.preprocessor import preprocess
-        from inkline.intelligence import DesignAdvisor
+        from inkline.app.institutional import render_spec_file
         from inkline.docx import export_docx
-        from inkline.typst import export_typst_slides
 
         md_path = _Path(spec_path)
         if not md_path.exists():
             return {"success": False, "error": f"File not found: {spec_path}"}
 
         md_text = md_path.read_text(encoding="utf-8")
-        deck_meta, sections = preprocess(md_text, source_path=str(md_path))
+        if md_path.suffix.lower() in {".yaml", ".yml", ".json"}:
+            artifacts = render_spec_file(
+                md_path,
+                formats=outputs,
+                output_dir=OUTPUT_DIR / output_filename,
+                editable_institutional="pptx" in outputs,
+                brand_override=brand,
+                template_override=template,
+                execution_mode=execution_mode,
+                design_locked=design_locked,
+                use_design_advisor=use_design_advisor,
+                authoring_mode=authoring_mode,
+            )
+            result: dict[str, Any] = {"success": True, "outputs": outputs}
+            if artifacts.pdf_path:
+                result["pdf_path"] = str(artifacts.pdf_path)
+            if artifacts.pptx_path:
+                result["pptx_path"] = str(artifacts.pptx_path)
+            if artifacts.export_metadata_path:
+                result["export_metadata_path"] = str(artifacts.export_metadata_path)
+            return result
 
+        from inkline.authoring.preprocessor import preprocess
+        from inkline.intelligence import DesignAdvisor
+        from inkline.typst import export_typst_slides
+        from inkline.app.cli import _resolve_execution_contract, _enforce_explicit_spec_sections
+
+        deck_meta, sections = preprocess(md_text, source_path=str(md_path))
+        contract = _resolve_execution_contract(
+            type(
+                "_RenderArgs",
+                (),
+                {
+                    "execution_mode": execution_mode,
+                    "design_locked": design_locked,
+                    "use_design_advisor": use_design_advisor,
+                    "authoring_mode": authoring_mode,
+                },
+            )(),
+            deck_meta,
+        )
         brand_eff = brand or deck_meta.get("brand", "minimal")
         template_eff = template or deck_meta.get("template", "consulting")
         mode = deck_meta.get("mode", "rules")
+        if contract["execution_mode"] == "explicit_spec":
+            _enforce_explicit_spec_sections(sections, source_name=md_path.name)
+            mode = "rules"
 
         advisor = DesignAdvisor(brand=brand_eff, template=template_eff, mode=mode)
         slides = advisor.design_deck(

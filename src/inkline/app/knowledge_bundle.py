@@ -28,7 +28,13 @@ KNOWLEDGE_ALLOWLIST: tuple[str, ...] = (
     "inkline://playbooks/one_pager_design",
     "inkline://playbooks/professional_exhibit_design",
     "inkline://playbooks/slide_layouts",
+    "inkline://playbooks/full_slide_archetypes",
+    "inkline://playbooks/storyboard_and_message_design",
+    "inkline://playbooks/reference_deck_ingestion",
     "inkline://playbooks/typography",
+    "inkline://slide_roles",
+    "inkline://archetypes/full_slide",
+    "inkline://storyboard_rules",
 )
 
 

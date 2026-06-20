@@ -200,6 +200,10 @@ def test_cmd_render_markdown_hard_fails_storyboard_validation(tmp_path: Path, mo
         strict_directives=False,
         brand="",
         template="",
+        execution_mode="draft",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     )
     with pytest.raises(ValueError, match="Unknown archetype"):
         cli_module.cmd_render(args)
@@ -229,8 +233,16 @@ def test_cmd_render_markdown_forwards_editable_institutional_to_pptx(tmp_path: P
         lambda spec, **_kwargs: {
             **spec,
             "slides": spec["slides"],
-            "_resolved_storyboard": {"schema_version": 1, "slides": []},
-            "_authoring_trace": {"schema_name": "authoring_trace", "slides": []},
+            "_resolved_storyboard": {
+                "schema_version": 1,
+                "deck": {"execution_contract": {"execution_mode": spec["execution_mode"]}},
+                "slides": [],
+            },
+            "_authoring_trace": {
+                "schema_name": "authoring_trace",
+                "execution_contract": {"authoring_mode": spec["authoring_mode"]},
+                "slides": [],
+            },
         },
     )
     monkeypatch.setattr("inkline.intelligence.storyboard.write_storyboard_artifacts", lambda *_args, **_kwargs: {})
@@ -253,9 +265,51 @@ def test_cmd_render_markdown_forwards_editable_institutional_to_pptx(tmp_path: P
         strict_directives=False,
         brand="",
         template="",
+        execution_mode="draft",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="external_llm",
     )
     cli_module.cmd_render(args)
     assert calls["editable_institutional"] is True
+    assert calls["deck_metadata"]["storyboard"]["deck"]["execution_contract"]["execution_mode"] == "draft"
+    assert calls["deck_metadata"]["authoring_trace"]["execution_contract"]["authoring_mode"] == "external_llm"
+
+
+def test_cmd_render_markdown_explicit_spec_requires_exact_sections(tmp_path: Path, monkeypatch):
+    md_path = tmp_path / "deck.md"
+    md_path.write_text("## Slide\nBody\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "inkline.authoring.preprocessor.preprocess",
+        lambda *_args, **_kwargs: (
+            {"title": "Deck", "audience": "IC"},
+            [{"title": "Slide", "narrative": "Body", "slide_mode": "guided", "slide_type": "content"}],
+        ),
+    )
+
+    class FakeAdvisor:
+        def __init__(self, **_kwargs):
+            raise AssertionError("DesignAdvisor should not be reached for invalid explicit_spec input")
+
+    monkeypatch.setattr("inkline.intelligence.DesignAdvisor", FakeAdvisor)
+
+    args = Namespace(
+        file=str(md_path),
+        output="pdf",
+        output_dir=str(tmp_path / "out"),
+        editable_institutional=False,
+        watch=False,
+        serve=False,
+        strict_directives=False,
+        brand="",
+        template="",
+        execution_mode="explicit_spec",
+        design_locked=True,
+        use_design_advisor=False,
+        authoring_mode="external_llm",
+    )
+    with pytest.raises(ValueError, match="execution_mode=explicit_spec requires every section"):
+        cli_module.cmd_render(args)
 
 
 def test_cmd_critique_uses_pdf_storyboard_audit(capsys, tmp_path: Path, monkeypatch):
@@ -308,6 +362,10 @@ def test_cmd_render_fails_when_storyboard_artifact_write_fails(tmp_path: Path, m
         strict_directives=False,
         brand="",
         template="",
+        execution_mode="draft",
+        design_locked=None,
+        use_design_advisor=None,
+        authoring_mode="",
     )
     with pytest.raises(RuntimeError, match="disk full"):
         cli_module.cmd_render(args)
