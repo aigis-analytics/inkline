@@ -258,6 +258,57 @@ These are exhibit types used in professional decks that Inkline should support
   - Left-to-right or top-to-bottom directionality; no diagonal connections
 
 ### 7.3 Label-Positioned Scatter
+
+---
+
+## 8. Institutional page-finish techniques
+
+These patterns are not chart types, but they are repeatedly present in
+publishable investor decks and strongly affect whether a slide feels finished.
+
+### 8.1 Synthesis strip
+
+Use a full-width or near-full-width strip near the bottom of the page when the
+slide needs to resolve multiple visual components into one point.
+
+Rules:
+- one sentence only
+- darker text on a pale coloured band is preferred for institutional decks
+- the strip should be clearly secondary to the title but stronger than a footnote
+- best used on proposition, triage, programme, and process pages
+
+### 8.2 Methodology / caveat strip
+
+For dense evidence slides, move methodology and caveat language into a single
+band below the main table rather than scattering notes across cells.
+
+Rules:
+- one strip only
+- italics or a leading label such as `Methodology` are acceptable
+- the strip should clarify the evidence, not undermine it
+
+### 8.3 Header-band + badge system
+
+Professional card pages often become stronger when each card has:
+- a dark or coloured header band
+- one circular number or icon badge overlapping the band
+- a calmer white body below
+
+This is superior to unstructured cards because it creates a repeated reading
+entry point and makes the page feel designed rather than merely boxed.
+
+### 8.4 Dense-table zoning
+
+A dense pipeline or appendix table should still feel zoned.
+
+Preferred zoning order:
+- anchor object or rank column
+- core metric block
+- access / route block
+- note / implication block
+
+Avoid equal visual weight across all columns. The reader needs to know where to
+start and what to skim.
 - **Use case**: Pricing/positioning analysis (e.g., competitors plotted by spread vs. maturity)
 - **When to choose**: Any "where does X sit vs. Y" question on 2 continuous axes
 - **Key rules**:

@@ -258,6 +258,78 @@ slide-relative coordinates** (so you can drop it into Inkline's `pptx.builder` o
 - **When**: N-item taxonomies, framework introductions, "the X principles of Y"
   slides.
 - **Companion — spotlight drill-down**: Same diagram, all segments greyed except
+
+---
+
+## 3. Institutional benchmark archetypes to replicate
+
+These are the page families that repeatedly appear in professional advisory /
+investor decks and should be treated as first-class retrieval targets.
+
+### 3.1 Three-route opportunity triage
+
+- **Why it works**: cleanly separates public, bilateral, and mechanism-driven
+  routes without turning the slide into prose.
+- **Recipe**:
+  - 3 equal white cards across the page with strong coloured header bands
+  - circular number badge inset or overlapping each band
+  - 4–6 bullets per card maximum
+  - one full-width takeaway strip below all 3 cards
+- **When**: opportunity sets, route-to-entry framing, market segmentation with
+  parallel buckets
+
+### 3.2 Pipeline evidence table with anchor objects
+
+- **Why it works**: preserves institutional density while keeping a clear place
+  to start reading.
+- **Recipe**:
+  - first column uses shaded project anchor boxes rather than plain text rows
+  - header row uses dark bands
+  - metric columns stay tight and centered
+  - rightmost note column is the narrative zone
+  - methodology strip below the table
+- **When**: M&A pipeline, opportunity ranking, diligence pipeline, live targets
+
+### 3.3 Programme day-cards
+
+- **Why it works**: converts a schedule into a designed journey.
+- **Recipe**:
+  - 3 or more ticket-like day tabs across the top half
+  - card label floating over each day body
+  - numbered bullets inside each day body
+  - directional arrows between day cards
+  - objective strip at the bottom
+- **When**: reverse roadshows, workplans, multi-day visits, engagement programs
+
+### 3.4 Executive biographies with shared support strip
+
+- **Why it works**: makes the team page feel premium and calm.
+- **Recipe**:
+  - 2 to 4 evenly spaced portrait cards
+  - portrait circle dominates the top half
+  - one name line, one role line, one credibility statement
+  - shared support / access bar at the bottom
+- **When**: team, advisory bench, local access, execution support
+
+### 3.5 Critical-path spine
+
+- **Why it works**: turns timing into choreography rather than a flat timeline.
+- **Recipe**:
+  - strong vertical or horizontal spine
+  - milestone nodes on the spine
+  - alternating phase cards attached to the spine
+  - one persistent-workstream strip below
+- **When**: transaction process, approvals path, implementation timeline
+
+### 3.6 Workstream icon-card appendix
+
+- **Why it works**: keeps support slides within the same visual language as the
+  main deck.
+- **Recipe**:
+  - 4 to 6 labelled headers with circular icons
+  - white body cards below each header band
+  - one bottom critical-path or implication strip
+- **When**: diligence workstreams, execution workstreams, operating model support
   the one being discussed, which keeps its colour. Re-use this pattern for every
   detail slide that follows.
 

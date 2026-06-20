@@ -258,6 +258,76 @@ Similar to SCR but inserts an explicit question before the answer:
 **Rules**:
 - Each card must have the same structure (icon, heading, body).
 - Limit body text to 2-3 lines per card.
+
+---
+
+## 4. Institutional investor-deck page patterns
+
+These patterns are derived from strong PE / advisory style decks where the
+layout has to look publishable, not merely organized.
+
+### 4.1 Proposition cards with bottom takeaway
+
+Use when:
+- 3 strategic reasons or routes need to be shown in parallel
+
+Rules:
+- use 3 strong cards with large top bands
+- if possible, overlap the band with a circular number badge
+- keep the cards visually equal, but let one bottom synthesis strip carry the
+  page-level implication
+- this is the preferred replacement for generic three_box pages
+
+### 4.2 Numbered rail / stepped list
+
+Use when:
+- the page is a sequence of strategic moves, not 6 unrelated bullet points
+
+Rules:
+- the connecting path or spine must be visible
+- each item should be a raised card or pill, not plain text on a line
+- numbers should do real visual work by controlling order and rhythm
+
+### 4.3 Executive bio cards
+
+Use when:
+- a team / access / credibility page needs to feel calm and premium
+
+Rules:
+- use 2 to 4 centered portrait cards
+- keep biographies to one credibility statement
+- role line should be stylistically subordinate
+- end with a shared access/support strip rather than extra text blocks
+
+### 4.4 Two-zone economics page
+
+Use when:
+- assumptions and quantified outcome both matter
+
+Rules:
+- left = assumptions / phased deal logic
+- right = capital bridge / outcome panel
+- the page should have one bottom interpretation strip
+- avoid splitting the right side into too many small widgets
+
+### 4.5 Banker critical-path timeline
+
+Use when:
+- the point is that approvals, partner choreography, and sequencing drive timing
+
+Rules:
+- one strong central axis or spine
+- phase cards alternating left and right usually read best
+- each card should contain one short bold phase label and one short explanation
+- one bottom strip can show workstreams running throughout
+
+### 4.6 Appendix pages should still look like main-deck relatives
+
+Rules:
+- maintain the same title scale and top chrome
+- add rank badges, coloured priority chips, or icon headers so appendix pages
+  still have a designed entry point
+- dense support pages should not collapse into plain spreadsheet aesthetics
 - Works with 2, 3, or 4 columns (never more than 4 on one slide).
 
 ---

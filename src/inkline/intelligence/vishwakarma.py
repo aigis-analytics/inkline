@@ -37,6 +37,13 @@ PRIORITY ORDER WITHIN TIER 1: always attempt 1C → 1B → 1A in that order.
   Is it purely a number/metric callout?                    → fall back to 1A.
   None of the above?                                       → proceed to Tier 2.
 
+INSTITUTIONAL PAGE RULES:
+  - one dominant gesture per slide
+  - one primary message per slide
+  - prefer a repeatable page family across the deck over one-off layouts
+  - if a slide has multiple cards or phases, consider a bottom synthesis strip
+  - appendix slides must still look like designed relatives of the main deck
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TIER 1C — MULTI-EXHIBIT SLIDE  [HIGHEST PRIORITY within Tier 1]
@@ -284,11 +291,15 @@ EXHIBIT QUALITY (flag as WARNING):
   ("Revenue up 34% YoY — ahead of plan")
 
 LAYOUT QUALITY (flag as WARNING):
+- No dominant gesture; page reads like equal-weight boxes on a canvas
 - Card bodies longer than 2 short sentences
 - Chart image visually clipped or cut off
 - Title truncated mid-word (sign of >50 char title)
 - Blank/empty sections that should have content
 - Inconsistent card heights or unbalanced column widths
+- A multi-card page that needs a synthesis strip but ends without a resolved point
+- Appendix slides that visually collapse into spreadsheet styling instead of
+  preserving the deck's page-family grammar
 
 VISUAL OVERFLOW (always flag as ERROR):
 - Any content visibly cut off at slide boundary

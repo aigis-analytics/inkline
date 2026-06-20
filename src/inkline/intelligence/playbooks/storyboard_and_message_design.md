@@ -230,3 +230,67 @@ storyboard:
 
 The storyboard layer exists to stop the deck from being merely well-rendered and
 instead make it intentionally argued.
+
+## 12. Institutional deck sequencing benchmark
+
+For investor and advisory decks, the story should normally progress through a
+deliberate page family rather than jumping between arbitrary layouts.
+
+Common sequence:
+
+1. `cover` — frame the deck
+2. `proposition` — why this matters
+3. `proposition / strategy rail` — how the idea works
+4. `team` — why we can execute
+5. `economics` — what the firepower can become
+6. `opportunity_set` — what routes exist
+7. `pipeline` — what is actionable now
+8. `reference_exhibit / market_map` — where the assets or market sit
+9. `programme / roadshow` — how access gets operationalised
+10. `critical_path / timeline` — how execution really runs
+11. `execution_plan / next_steps` — how the platform build advances
+12. `appendix` — evidence, rankings, and workstreams
+
+This is not a rigid formula, but it is a strong default. If a deck deviates,
+there should be a reason grounded in audience or objective.
+
+## 13. Main-body compression rule
+
+Main-body slides should carry the argument, not all supporting facts.
+
+Promote to appendix when content is:
+- important, but not essential for the 5-second read
+- mainly evidentiary rather than persuasive
+- too detailed to preserve the dominant gesture of the page
+
+Keep in the main body when content is:
+- essential to the argument
+- needed for credibility transfer
+- the primary reason the page exists
+
+## 14. Synthesis-strip rule
+
+If a slide contains multiple cards, buckets, or phases, ask whether it needs a
+bottom synthesis strip to resolve the page into one point.
+
+Good use cases:
+- proposition cards
+- opportunity triage
+- programme / roadshow pages
+- process pages with multiple milestones
+- appendix workstream pages where one practical takeaway matters
+
+Avoid:
+- repeating the title in the bar
+- using the bar as a dumping ground for caveats
+- stacking multiple bars
+
+## 15. Benchmark questions for authoring and audit
+
+Before sign-off, ask:
+
+- does each slide have one dominant gesture?
+- does the page family feel consistent across the deck?
+- does the slide need fewer words and a stronger archetype?
+- does the page end on a message or merely on content?
+- would a human analyst keep the slide as-is, or immediately rebuild it?
