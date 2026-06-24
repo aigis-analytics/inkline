@@ -140,6 +140,13 @@ MULTI_CHART_SLOT_SIZES: dict[str, list[tuple[float, float]]] = {
         ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [1] right top
         ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - _MC_G10) / 2 - _MC_TOH),  # [2] right bottom
     ],
+    # hero_left_stack3: wide chart left (3fr) + 3 stacked charts right (2fr).
+    "hero_left_stack3": [
+        ((_MC_W - _MC_G12) * 3 / 5, _MC_BH - _MC_TOH),                           # [0] left hero
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - 2 * _MC_G10) / 3 - _MC_TOH),      # [1] right top
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - 2 * _MC_G10) / 3 - _MC_TOH),      # [2] right mid
+        ((_MC_W - _MC_G12) * 2 / 5, (_MC_BH - 2 * _MC_G10) / 3 - _MC_TOH),      # [3] right bot
+    ],
     # right_stack: 2 stacked charts left (2fr) + wide chart right (3fr).
     # Index 0 = left-top; 1 = left-bottom; 2 = right hero.
     "right_stack": [
@@ -567,7 +574,7 @@ class TypstSlideRenderer:
         align: horizon,
         text(size: 8pt, fill: {_rgb(muted)})[{_esc(footer_tagline)}],
         h(1fr),
-        text(size: 8pt, weight: "bold", fill: {_rgb(accent)})[Page],
+        text(size: 8pt, weight: "bold", fill: {_rgb(accent)})[#counter(page).display() / #counter(page).final().first()],
       )
     }}
   }},
@@ -831,10 +838,13 @@ class TypstSlideRenderer:
 
         card_markups = []
         for c in cards[:4]:
+            highlight = bool(c.get("highlight"))
+            fill = t["card_fill"] if not highlight else "#F4FAFD"
+            border = t["border"]
             cm = card(
-                f'{card_title(c.get("title", ""), t["text"])}\n      #v(6pt)\n      #text(size: 10.5pt, fill: {_rgb(t["muted"])})[{_esc(c.get("body", ""))}]',
-                fill=t["card_fill"],
-                border=t["border"],
+                f'{card_title(c.get("title", ""), t["text"])}\n      #v(6pt)\n      #text(size: 10.75pt, fill: {_rgb(t["text"])})[{_esc(c.get("body", ""))}]',
+                fill=fill,
+                border=border,
                 text_color=t["text"],
                 height="100%",
             )
@@ -843,14 +853,14 @@ class TypstSlideRenderer:
         cards_str = ",\n    ".join(card_markups)
 
         # Two-row 2×2 grid, vertically centered between header and footer.
-        # Two equal v(1fr) bracket the grid: one above, one below (before the footer).
-        # rows: (4.0cm, 4.0cm) is content-sized — comfortable for 2–3 line bodies.
-        # Footer is inlined with a fixed gap (no extra v(1fr) from footer_bar).
+        # This opener benefits from denser placement than a fully centered card grid.
+        # Use fixed spacers so the cards sit closer to the title and the lower page
+        # does not feel abandoned when the slide carries no footnote.
         footnote_block = (
-            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})\n  '
-            f'v(4pt)\n  text(size: 7pt, fill: {_rgb(t["muted"])})[{footnote}]'
+            f'v(8pt)\n  block(fill: {_rgb(t["card_fill"])}, stroke: (left: 3pt + {_rgb(t["accent"])}), inset: 8pt, width: 100%)[\n'
+            f'    #text(size: 8.8pt, fill: {_rgb(t["text"])})[{footnote}]\n  ]'
             if footnote else
-            f'v(6pt)\n  line(length: 100%, stroke: 0.5pt + {_rgb(t["border"])})'
+            ""
         )
         return f"""#{{
   set page(fill: {_rgb(t['bg'])})
@@ -862,16 +872,16 @@ class TypstSlideRenderer:
   v(6pt)
   {slide_title(title, t['text'])}
 
-  v(1fr)
+  v(12pt)
 
   grid(
     columns: (1fr, 1fr),
-    rows: (3.2cm, 3.2cm),
-    gutter: 14pt,
+    rows: (2.55cm, 2.55cm),
+    gutter: 12pt,
     {cards_str}
   )
 
-  v(1fr)
+  v(6pt)
 
   {footnote_block}
 }}"""
@@ -1970,6 +1980,7 @@ class TypstSlideRenderer:
             "top_bottom"     — 1 wide chart top + up to 3 charts below
             "three_top_wide" — 3 equal charts top (45%) + 1 wide chart bottom (55%)
             "left_stack"     — 1 wide hero left (3fr) + 2 stacked charts right (2fr)
+            "hero_left_stack3" — 1 wide hero left (3fr) + 3 stacked charts right (2fr)
             "right_stack"    — 2 stacked charts left (2fr) + 1 wide hero right (3fr)
             "mosaic_5"       — 2 charts top row (50%) + 3 charts bottom row (50%)
             "six_grid"       — 3×2 grid of 6 equal charts
@@ -2102,6 +2113,28 @@ class TypstSlideRenderer:
     ),
   )"""
 
+        elif layout == "hero_left_stack3":
+            charts = charts[:4]
+            while len(charts) < 4:
+                charts.append({})
+            left_h = _slot_h(0)
+            right_h = _slot_h(1)
+            left_cell = _chart_cell(charts[0], height=left_h)
+            right_top = _chart_cell(charts[1], height=right_h)
+            right_mid = _chart_cell(charts[2], height=right_h)
+            right_bot = _chart_cell(charts[3], height=right_h)
+            grid_body = f"""grid(
+    columns: (3fr, 2fr),
+    gutter: 12pt,
+    {left_cell},
+    stack(
+      spacing: 10pt,
+      {right_top},
+      {right_mid},
+      {right_bot},
+    ),
+  )"""
+
         elif layout == "right_stack":
             # 2 stacked left charts (2fr) + wide right chart (3fr)
             charts = charts[:3]
@@ -2181,8 +2214,8 @@ class TypstSlideRenderer:
 
   {section_badge(section, t['muted'])}
   v(6pt)
-  text(weight: "bold", size: 18pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
-  v(8pt)
+  text(weight: "bold", size: 17pt, fill: {_rgb(t['text'])})[{_esc_content(title)}]
+  v(6pt)
 
   {grid_body}
 
@@ -2217,28 +2250,28 @@ class TypstSlideRenderer:
   {section_badge(section, t['muted'])}
   v(6pt)
   {slide_title(title, t['text'])}
-  v(10pt)
+  v(8pt)
 
   grid(
     columns: (2.2fr, 1fr),
-    rows: (8.6cm,),
-    gutter: 12pt,
+    rows: (8.1cm,),
+    gutter: 10pt,
     block(width: 100%, height: 100%)[
       #align(center + horizon, {self._image_markup(image_path, height="100%", width="100%", fit='"contain"')})
     ],
     block(
       fill: {_rgb(t['card_fill'])},
       stroke: (left: 4pt + {_rgb(t['accent'])}),
-      inset: 10pt,
+      inset: 9pt,
       width: 100%,
       height: 100%,
     )[
       #text(weight: "bold", size: 9pt, tracking: 1pt, fill: {_rgb(t['accent'])})[#upper[Key takeaways]]
-      #v(6pt)
-      #text(size: 8.5pt, fill: {_rgb(t['text'])})[
+      #v(5pt)
+      #text(size: 8.8pt, fill: {_rgb(t['text'])})[
         {bullets_str}
       ]
-      {f'#v(4pt)#text(size: 7pt, style: "italic", fill: {_rgb(t["muted"])})[{caption}]' if caption else ''}
+      {f'#v(4pt)#text(size: 7.4pt, style: "italic", fill: {_rgb(t["muted"])})[{caption}]' if caption else ''}
     ],
   )
 
